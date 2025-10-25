@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+
     <style>
         .dashboard-header {
             background: linear-gradient(120deg, rgba(37, 99, 235, 0.93) 0%, rgba(139, 92, 246, 0.93) 100%);
@@ -25,6 +25,42 @@
             margin-bottom: var(--space-5);
             box-shadow: var(--shadow-lg);
             color: #f8fafc;
+        }
+
+        .connection-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-3);
+            padding: var(--space-3) var(--space-5);
+            background: rgba(239, 68, 68, 0.95);
+            color: #ffffff;
+            font-weight: 600;
+            z-index: 4000;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .connection-banner.active {
+            display: flex;
+        }
+
+        .connection-banner .banner-action {
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .connection-banner .banner-action:hover {
+            background: rgba(255, 255, 255, 0.32);
         }
         
         .header-content {
@@ -246,7 +282,11 @@
         }
     </style>
 </head>
-<body>
+<body class="dashboard-page">
+    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
+        <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
+        <button type="button" id="connection-banner-action" class="banner-action">Reload</button>
+    </div>
     <!-- Header -->
     <header class="dashboard-header">
         <div class="container">
@@ -472,6 +512,14 @@
             }
         });
 
+        const HEALTH_ENDPOINT = '/healthz';
+        const HEALTH_TIMEOUT = 4000;
+        const HEALTH_INTERVAL_OK = 15000;
+        const HEALTH_INTERVAL_LOST = 5000;
+
+        let healthTimer = null;
+        let healthLost = false;
+
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -497,6 +545,75 @@
             };
         }
         
+        function setDashboardConnectionBanner(active, text) {
+            const banner = document.getElementById('connection-banner');
+            const bannerText = document.getElementById('connection-banner-text');
+            if (!banner) {
+                return;
+            }
+            if (active) {
+                banner.classList.add('active');
+                if (bannerText && text) {
+                    bannerText.textContent = text;
+                }
+                document.body.style.paddingTop = '3.5rem';
+            } else {
+                banner.classList.remove('active');
+                document.body.style.paddingTop = '';
+            }
+        }
+
+        function scheduleHealthCheck(delay) {
+            if (healthTimer) {
+                clearTimeout(healthTimer);
+            }
+            healthTimer = setTimeout(runHealthCheck, delay);
+        }
+
+        function runHealthCheck() {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
+            fetch(HEALTH_ENDPOINT, {
+                cache: 'no-store',
+                credentials: 'same-origin',
+                signal: controller.signal
+            })
+                .then(response => {
+                    clearTimeout(timeoutId);
+                    if (!response.ok) {
+                        throw new Error('Health check failed');
+                    }
+                    if (healthLost) {
+                        healthLost = false;
+                        setDashboardConnectionBanner(true, 'Connection restored. Reloading...');
+                        setTimeout(() => {
+                            setDashboardConnectionBanner(false);
+                            window.location.reload();
+                        }, 1200);
+                        return;
+                    }
+                    setDashboardConnectionBanner(false);
+                })
+                .catch(() => {
+                    clearTimeout(timeoutId);
+                    if (!healthLost) {
+                        healthLost = true;
+                        setDashboardConnectionBanner(true, 'Connection lost. Attempting to reconnect...');
+                    }
+                })
+                .finally(() => {
+                    scheduleHealthCheck(healthLost ? HEALTH_INTERVAL_LOST : HEALTH_INTERVAL_OK);
+                });
+        }
+
+        function startHealthMonitor() {
+            const reloadBtn = document.getElementById('connection-banner-action');
+            if (reloadBtn) {
+                reloadBtn.addEventListener('click', () => window.location.reload());
+            }
+            runHealthCheck();
+        }
+
         function handleRealtimeUpdate(data) {
             switch(data.type) {
                 case 'server_status':
@@ -553,24 +670,25 @@
             // This would typically open a modal or navigate to a server creation page
             window.location.href = '/server/new';
         }
-        
+
         // Initialize WebSocket connection
         document.addEventListener('DOMContentLoaded', function() {
             connectWebSocket();
-            
+            startHealthMonitor();
+
             // HTMX event handling
             document.body.addEventListener('htmx:beforeRequest', function(e) {
                 if (e.detail.elt.id === 'refresh-indicator') {
                     e.detail.elt.classList.remove('hidden');
                 }
             });
-            
+
             document.body.addEventListener('htmx:afterRequest', function(e) {
                 if (e.detail.elt.id === 'refresh-indicator') {
                     e.detail.elt.classList.add('hidden');
                 }
             });
-            
+
             // Auto-refresh page data periodically
             setInterval(function() {
                 htmx.trigger('#server-grid', 'refresh');

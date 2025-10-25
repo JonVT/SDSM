@@ -405,6 +405,43 @@ body.login-page {
 }
 
 /* --- frame.html styles --- */
+.connection-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    background: var(--danger-color);
+    color: #ffffff;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    font-weight: 600;
+    z-index: 2000;
+    box-shadow: var(--shadow-md);
+}
+
+.connection-banner.active {
+    display: flex;
+}
+
+.connection-banner .banner-action {
+    padding: var(--spacing-xs) var(--spacing-md);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.connection-banner .banner-action:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+
 body.frame-page {
     font-family: Arial, sans-serif;
 }

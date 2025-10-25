@@ -15,7 +15,7 @@ import (
 	"runtime"
 	"strings"
 
-	"sdsm/utils"
+	"sdsm/internal/utils"
 )
 
 const (

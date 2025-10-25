@@ -173,6 +173,12 @@ func setupRouter() *gin.Engine {
 	r.Static("/static", "./static")
 	r.StaticFile("/sdsm.png", "./sdsm.png")
 
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+		})
+	})
+
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager)
 	managerHandlers := handlers.NewManagerHandlers(app.manager)

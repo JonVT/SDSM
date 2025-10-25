@@ -31,7 +31,7 @@
       "auto_pause": true,
       "mods": [],
       "restart_delay_seconds": 10,
-      "server_started": "2025-10-25T12:49:33.940922878-07:00",
+      "server_started": "2025-10-25T14:54:42.718523863-07:00",
       "clients": [
         {
           "steam_id": "76561197998972563",
@@ -62,6 +62,108 @@
           "name": "jvt",
           "connect_datetime": "2025-10-25T12:50:47-07:00",
           "disconnect_datetime": "2025-10-25T12:51:12-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:50:47-07:00",
+          "disconnect_datetime": "2025-10-25T12:51:12-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:50:47-07:00",
+          "disconnect_datetime": "2025-10-25T12:51:12-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:50:47-07:00",
+          "disconnect_datetime": "2025-10-25T12:51:12-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T14:56:30-07:00",
+          "disconnect_datetime": "2025-10-25T15:07:55.418854416-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T14:56:30-07:00",
+          "disconnect_datetime": "2025-10-25T15:07:55-07:00"
         }
       ],
       "chat": []

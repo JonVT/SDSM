@@ -7,6 +7,14 @@
     <title>SDSM</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script>
+        const HEALTH_ENDPOINT = '/healthz';
+        const HEALTH_POLL_OK = 15000;
+        const HEALTH_POLL_LOST = 5000;
+        const HEALTH_TIMEOUT = 4000;
+
+        let connectionTimer = null;
+        let connectionLost = false;
+
         function showTab(tabName) {
             var tabs = document.querySelectorAll('.tab');
             tabs.forEach(function (tab) {
@@ -18,18 +26,100 @@
 
         function updateDateTime() {
             var now = new Date();
-            document.getElementById('datetime').innerText = now.toLocaleString();
+            var element = document.getElementById('datetime');
+            if (element) {
+                element.innerText = now.toLocaleString();
+            }
         }
 
-        window.onload = function () {
+        function setFrameConnectionBanner(active, message) {
+            var banner = document.getElementById('connection-banner');
+            var text = document.getElementById('connection-banner-text');
+            if (!banner) {
+                return;
+            }
+            if (active) {
+                banner.classList.add('active');
+                if (text && message) {
+                    text.textContent = message;
+                }
+                document.body.style.paddingTop = '3.5rem';
+            } else {
+                banner.classList.remove('active');
+                document.body.style.paddingTop = '';
+            }
+        }
+
+        function scheduleConnectionCheck(delay) {
+            if (connectionTimer) {
+                clearTimeout(connectionTimer);
+            }
+            connectionTimer = setTimeout(runConnectionCheck, delay);
+        }
+
+        function runConnectionCheck() {
+            var controller = new AbortController();
+            var timeoutId = setTimeout(function () {
+                controller.abort();
+            }, HEALTH_TIMEOUT);
+
+            fetch(HEALTH_ENDPOINT, {
+                cache: 'no-store',
+                credentials: 'same-origin',
+                signal: controller.signal
+            })
+                .then(function (response) {
+                    clearTimeout(timeoutId);
+                    if (!response.ok) {
+                        throw new Error('Health check failed');
+                    }
+                    if (connectionLost) {
+                        connectionLost = false;
+                        setFrameConnectionBanner(true, 'Connection restored. Reloading...');
+                        setTimeout(function () {
+                            setFrameConnectionBanner(false);
+                            window.location.reload();
+                        }, 1200);
+                        return;
+                    }
+                    setFrameConnectionBanner(false);
+                })
+                .catch(function () {
+                    clearTimeout(timeoutId);
+                    if (!connectionLost) {
+                        connectionLost = true;
+                        setFrameConnectionBanner(true, 'Connection lost. Attempting to reconnect...');
+                    }
+                })
+                .finally(function () {
+                    scheduleConnectionCheck(connectionLost ? HEALTH_POLL_LOST : HEALTH_POLL_OK);
+                });
+        }
+
+        function startConnectionMonitor() {
+            var reloadButton = document.getElementById('connection-banner-action');
+            if (reloadButton) {
+                reloadButton.addEventListener('click', function () {
+                    window.location.reload();
+                });
+            }
+            runConnectionCheck();
+        }
+
+        window.addEventListener('load', function () {
             updateDateTime();
             setInterval(updateDateTime, 1000);
             showTab('manager');
-        }
+            startConnectionMonitor();
+        });
     </script>
 </head>
 
 <body class="frame-page">
+    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
+        <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
+        <button type="button" id="connection-banner-action" class="banner-action">Reload</button>
+    </div>
     <div class="header">
         <div class="header-brand">
             <img src="/sdsm.png" alt="SDSM logo" class="header-logo" width="64" height="64">

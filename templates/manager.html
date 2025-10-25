@@ -26,6 +26,42 @@
             box-shadow: var(--shadow-lg);
             color: #f8fafc;
         }
+
+        .connection-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-3);
+            padding: var(--space-3) var(--space-5);
+            background: rgba(239, 68, 68, 0.95);
+            color: #ffffff;
+            font-weight: 600;
+            z-index: 4000;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .connection-banner.active {
+            display: flex;
+        }
+
+        .connection-banner button {
+            padding: var(--space-1) var(--space-3);
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.18);
+            color: #ffffff;
+            font-size: var(--text-sm);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .connection-banner button:hover {
+            background: rgba(255, 255, 255, 0.32);
+        }
         
         .header-content {
             display: flex;
@@ -544,6 +580,10 @@
 </head>
 
 <body>
+    <div id="connectionBanner" class="connection-banner" role="status" aria-live="polite">
+        <span id="connectionBannerText">Connection lost. Attempting to reconnect...</span>
+        <button type="button" id="connectionBannerAction">Reload</button>
+    </div>
     <!-- Header -->
     <header class="manager-header">
         <div class="container">
@@ -745,11 +785,11 @@
             <p>There are <strong>{{.server_count_active}}</strong> servers currently running.</p>
             <div class="button-group">
                 <form action="/update" method="POST" style="display: contents;">
-                    <button type="submit" name="shutdown" class="btn btn-danger" {{if .updating}}disabled{{end}}
+                    <button type="submit" name="shutdown" value="1" class="btn btn-danger" {{if .updating}}disabled{{end}}
                             onclick="return confirm('Are you sure you want to shutdown SDSM? All servers will be stopped.');">
                         Shutdown SDSM
                     </button>
-                    <button type="submit" name="restart" class="btn btn-primary" {{if .updating}}disabled{{end}}
+                    <button type="submit" name="restart" value="1" class="btn btn-primary" {{if .updating}}disabled{{end}}
                             onclick="return confirm('Are you sure you want to restart SDSM? All servers will be temporarily stopped.');">
                         Restart SDSM
                     </button>
@@ -942,6 +982,88 @@
             // Initial progress fetch
             fetchProgress();
             ensurePolling();
+        })();
+    </script>
+
+    <script>
+        (function () {
+            const HEALTH_ENDPOINT = '/healthz';
+            const HEALTH_TIMEOUT = 4000;
+            const INTERVAL_OK = 15000;
+            const INTERVAL_LOST = 5000;
+
+            let healthTimer = null;
+            let connectionLost = false;
+
+            function setBanner(active, message) {
+                const banner = document.getElementById('connectionBanner');
+                const text = document.getElementById('connectionBannerText');
+                if (!banner) {
+                    return;
+                }
+                if (active) {
+                    banner.classList.add('active');
+                    if (text && message) {
+                        text.textContent = message;
+                    }
+                    document.body.style.paddingTop = '4rem';
+                } else {
+                    banner.classList.remove('active');
+                    document.body.style.paddingTop = '';
+                }
+            }
+
+            function scheduleNext(delay) {
+                if (healthTimer) {
+                    clearTimeout(healthTimer);
+                }
+                healthTimer = setTimeout(runHealthCheck, delay);
+            }
+
+            function runHealthCheck() {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
+
+                fetch(HEALTH_ENDPOINT, {
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                    signal: controller.signal
+                })
+                    .then((response) => {
+                        clearTimeout(timeoutId);
+                        if (!response.ok) {
+                            throw new Error('Health check failed');
+                        }
+                        if (connectionLost) {
+                            connectionLost = false;
+                            setBanner(true, 'Connection restored. Reloading...');
+                            setTimeout(() => {
+                                setBanner(false);
+                                window.location.reload();
+                            }, 1200);
+                            return;
+                        }
+                        setBanner(false);
+                    })
+                    .catch(() => {
+                        clearTimeout(timeoutId);
+                        if (!connectionLost) {
+                            connectionLost = true;
+                            setBanner(true, 'Connection lost. Attempting to reconnect...');
+                        }
+                    })
+                    .finally(() => {
+                        scheduleNext(connectionLost ? INTERVAL_LOST : INTERVAL_OK);
+                    });
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const reloadButton = document.getElementById('connectionBannerAction');
+                if (reloadButton) {
+                    reloadButton.addEventListener('click', () => window.location.reload());
+                }
+                runHealthCheck();
+            });
         })();
     </script>
 
