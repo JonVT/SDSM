@@ -1,0 +1,72 @@
+{
+  "active": true,
+  "updating": false,
+  "setup_in_progress": false,
+  "steam_id": "600760",
+  "saved_path": "",
+  "paths": {
+    "root_path": "/tmp/sdsm"
+  },
+  "port": 5000,
+  "language": "english",
+  "servers": [
+    {
+      "id": 1,
+      "name": "My Stationeers Server",
+      "world": "'Mars2'",
+      "world_id": "Mars2",
+      "start_location": "MarsSpawnCanyonOverlook",
+      "start_condition": "DefaultStart",
+      "difficulty": "Normal",
+      "port": 27016,
+      "save_interval": 300,
+      "auth_secret": "jvt",
+      "password": "",
+      "max_clients": 10,
+      "visible": false,
+      "beta": true,
+      "auto_start": false,
+      "auto_update": false,
+      "auto_save": true,
+      "auto_pause": true,
+      "mods": [],
+      "restart_delay_seconds": 10,
+      "server_started": "2025-10-25T12:49:33.940922878-07:00",
+      "clients": [
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:29:27-07:00",
+          "disconnect_datetime": "2025-10-25T12:32:22-07:00"
+        },
+        {
+          "steam_id": "76561197998972563",
+          "name": "jvt",
+          "connect_datetime": "2025-10-25T12:50:47-07:00",
+          "disconnect_datetime": "2025-10-25T12:51:12-07:00"
+        }
+      ],
+      "chat": []
+    }
+  ],
+  "update_time": "2023-01-01T00:00:00Z",
+  "startup_update": false
+}

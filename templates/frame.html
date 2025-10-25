@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en" class="frame-page">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDSM</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script>
+        function showTab(tabName) {
+            var tabs = document.querySelectorAll('.tab');
+            tabs.forEach(function (tab) {
+                tab.classList.remove('active');
+            });
+            document.getElementById(tabName).classList.add('active');
+            document.getElementById('frame').src = tabName;
+        }
+
+        function updateDateTime() {
+            var now = new Date();
+            document.getElementById('datetime').innerText = now.toLocaleString();
+        }
+
+        window.onload = function () {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            showTab('manager');
+        }
+    </script>
+</head>
+
+<body class="frame-page">
+    <div class="header">
+        <div class="header-brand">
+            <img src="/sdsm.png" alt="SDSM logo" class="header-logo" width="64" height="64">
+            <div class="header-title">
+                <h1>STATIONEERS DEDICATED SERVER MANAGER (SDSM)</h1>
+                <span>Manage every server from one place</span>
+            </div>
+        </div>
+        <p id="datetime"></p>
+    </div>
+    <div class="tabs">
+        <div id="manager" class="tab" onclick="showTab('manager')">Manage SDSM</div>
+        {{if .active}}
+        <div id="dashboard" class="tab" onclick="showTab('dashboard')">Dashboard</div>
+        {{if .servers}}
+        {{range .servers}}
+        <div id="server{{.ID}}" class="tab" onclick="showTab('server{{.ID}}')">{{.Name}}</div>
+        {{end}}
+        {{end}}
+        {{end}}
+    </div>
+    <iframe id="frame" class="frame" src=""></iframe>
+    <footer>
+        <p>&copy; 2025 Stationeers Dedicated Server Manager (SDSM)</p>
+    </footer>
+</body>
+
+</html>

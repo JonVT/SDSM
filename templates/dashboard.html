@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Stationeers Server Dashboard - Monitor and manage your servers">
+    <title>Dashboard - Stationeers Server Manager</title>
+    
+    <!-- Modern CSS Framework -->
+    <link rel="stylesheet" href="/static/modern.css">
+    
+    <!-- HTMX for dynamic interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        .dashboard-header {
+            background: linear-gradient(120deg, rgba(37, 99, 235, 0.93) 0%, rgba(139, 92, 246, 0.93) 100%);
+            border-radius: var(--radius-xl);
+            padding: var(--space-4) var(--space-5);
+            margin-bottom: var(--space-5);
+            box-shadow: var(--shadow-lg);
+            color: #f8fafc;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: var(--space-4);
+        }
+
+        .branding {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .branding-logo {
+            width: 56px;
+            height: 56px;
+            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.1);
+            padding: var(--space-2);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+            object-fit: contain;
+        }
+
+        .dashboard-header h1,
+        .dashboard-header p {
+            color: rgba(248, 250, 252, 0.95);
+            margin: 0;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+        }
+        
+        .server-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: var(--space-5);
+        }
+        
+        .server-card {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(99, 102, 241, 0.18);
+            border-radius: var(--radius-lg);
+            padding: var(--space-5);
+            transition: all var(--transition-default);
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            box-shadow: var(--shadow-md);
+        }
+        
+        .server-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: linear-gradient(120deg, rgba(37, 99, 235, 0.85), rgba(236, 72, 153, 0.85));
+        }
+        
+        .server-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+        
+        .server-status-indicator {
+            position: absolute;
+            top: var(--space-4);
+            right: var(--space-4);
+            width: 12px;
+            height: 12px;
+            border-radius: var(--radius-full);
+            background: var(--danger-500);
+            animation: pulse 2s infinite;
+        }
+        
+        .server-status-indicator.running {
+            background: var(--success-500);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .server-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+        
+        .server-name {
+            font-size: var(--text-lg);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .server-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-2);
+            margin-bottom: var(--space-3);
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .info-label {
+            font-size: var(--text-xs);
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            font-weight: 500;
+            margin-bottom: var(--space-1);
+        }
+        
+        .info-value {
+            font-size: var(--text-sm);
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .server-actions {
+            display: flex;
+            gap: var(--space-2);
+            margin-top: var(--space-3);
+        }
+        
+        .action-button {
+            flex: 1;
+            padding: var(--space-2);
+            font-size: var(--text-sm);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-4);
+            margin-bottom: var(--space-5);
+        }
+        
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid rgba(99, 102, 241, 0.18);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            text-align: center;
+            box-shadow: var(--shadow-sm);
+            position: relative;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(120deg, rgba(16, 185, 129, 0.8), rgba(59, 130, 246, 0.8));
+        }
+        
+        .stat-value {
+            font-size: var(--text-3xl);
+            font-weight: 700;
+            color: var(--primary-600);
+            margin-bottom: var(--space-1);
+        }
+        
+        .stat-label {
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: var(--space-16);
+            color: var(--text-secondary);
+        }
+        
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: var(--space-4);
+            opacity: 0.5;
+        }
+        
+        .theme-toggle {
+            background: rgba(248, 250, 252, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: var(--radius-md);
+            padding: var(--space-2);
+            cursor: pointer;
+            transition: all var(--transition-default);
+            color: #f8fafc;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(248, 250, 252, 0.25);
+            border-color: rgba(255, 255, 255, 0.45);
+        }
+        
+        .refresh-indicator {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--primary-600);
+            border-radius: var(--radius-full);
+            animation: spin 1s linear infinite;
+            margin-right: var(--space-2);
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="dashboard-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="branding">
+                    <img src="/sdsm.png" alt="SDSM logo" class="branding-logo" width="64" height="64">
+                    <div>
+                        <h1>Server Dashboard</h1>
+                        <p class="text-secondary">Monitor and manage your Stationeers servers</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                        <span id="theme-icon">🌙</span>
+                    </button>
+                    <button 
+                        class="btn btn-primary"
+                        hx-get="/api/refresh"
+                        hx-trigger="click"
+                        hx-indicator="#refresh-indicator"
+                        hx-swap="none"
+                    >
+                        <span id="refresh-indicator" class="refresh-indicator hidden"></span>
+                        Refresh
+                    </button>
+                    <a href="/manager" class="btn btn-secondary">Manager</a>
+                    <a href="/logout" class="btn btn-secondary">Logout</a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="container">
+        <!-- Stats Overview -->
+        <div class="stats-grid" 
+             hx-get="/api/stats" 
+             hx-trigger="load, every 30s"
+             hx-swap="innerHTML">
+            <div class="stat-card">
+                <div class="stat-value" id="total-servers">{{ len .servers }}</div>
+                <div class="stat-label">Total Servers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-servers">
+                    {{ $active := 0 }}
+                    {{ range .servers }}
+                        {{ if .IsRunning }}{{ $active = add $active 1 }}{{ end }}
+                    {{ end }}
+                    {{ $active }}
+                </div>
+                <div class="stat-label">Active Servers</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-players">
+                    {{ $players := 0 }}
+                    {{ range .servers }}
+                        {{ if .IsRunning }}{{ $players = add $players .ClientCount }}{{ end }}
+                    {{ end }}
+                    {{ $players }}
+                </div>
+                <div class="stat-label">Total Players</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">System Health</div>
+            </div>
+        </div>
+        
+        <!-- Server Grid -->
+        <div id="server-grid" 
+             class="server-grid"
+             hx-get="/api/servers"
+             hx-trigger="load, every 10s"
+             hx-swap="innerHTML">
+            
+            {{ if .servers }}
+                {{ range .servers }}
+                <div class="server-card" data-server-id="{{ .ID }}" data-target-url="/server/{{ .ID }}">
+                    <div class="server-status-indicator {{ if .IsRunning }}running{{ end }}"></div>
+                    
+                    <div class="server-header">
+                        <div class="server-name">{{ .Name }}</div>
+                        <div class="status {{ if .IsRunning }}status-success{{ else }}status-danger{{ end }}">
+                            {{ if .IsRunning }}Running{{ else }}Stopped{{ end }}
+                        </div>
+                    </div>
+                    
+                    <div class="server-info">
+                        <div class="info-item">
+                            <div class="info-label">World</div>
+                            <div class="info-value">{{ .World }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Port</div>
+                            <div class="info-value">{{ .Port }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Players</div>
+                            <div class="info-value">{{ .ClientCount }}/{{ .MaxClients }}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Password</div>
+                            <div class="info-value">{{ if .Password }}Yes{{ else }}No{{ end }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="server-actions">
+                        {{ if .IsRunning }}
+                            <button 
+                                class="btn btn-danger action-button"
+                                hx-post="/api/servers/{{ .ID }}/stop"
+                                hx-trigger="click"
+                                hx-confirm="Are you sure you want to stop this server?"
+                                hx-target="closest .server-card"
+                                hx-swap="outerHTML"
+                                data-stop-navigation="true"
+                            >
+                                Stop
+                            </button>
+                        {{ else }}
+                            <button 
+                                class="btn btn-success action-button"
+                                hx-post="/api/servers/{{ .ID }}/start"
+                                hx-trigger="click"
+                                hx-target="closest .server-card"
+                                hx-swap="outerHTML"
+                                data-stop-navigation="true"
+                            >
+                                Start
+                            </button>
+                        {{ end }}
+                        <button
+                            class="btn btn-danger action-button"
+                            hx-post="/server/{{ .ID }}"
+                            hx-trigger="click"
+                            hx-confirm="Are you sure you want to delete {{ .Name }}? This cannot be undone."
+                            hx-vals='{"delete":"1"}'
+                            hx-target="body"
+                            hx-swap="none"
+                            data-stop-navigation="true"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                </div>
+                {{ end }}
+            {{ else }}
+                <div class="empty-state col-span-full">
+                    <div class="empty-state-icon">🖥️</div>
+                    <h3>No Servers Found</h3>
+                    <p>Get started by creating your first server.</p>
+                    <button class="btn btn-primary mt-4" onclick="createNewServer()">
+                        Create New Server
+                    </button>
+                </div>
+            {{ end }}
+        </div>
+        
+        <!-- Add Server Button (floating) -->
+        {{ if .servers }}
+        <button 
+            class="btn btn-primary"
+            style="position: fixed; bottom: var(--space-6); right: var(--space-6); border-radius: var(--radius-full); width: 56px; height: 56px; font-size: var(--text-xl);"
+            onclick="createNewServer()"
+            aria-label="Add new server"
+        >
+            +
+        </button>
+        {{ end }}
+    </main>
+    
+    <!-- WebSocket connection for real-time updates -->
+    <script>
+        let ws;
+        
+        // Theme management
+        function getStoredTheme() {
+            return localStorage.getItem('theme') || 'light';
+        }
+        
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('theme-icon');
+            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        
+        function toggleTheme() {
+            const currentTheme = getStoredTheme();
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        }
+        
+        // Initialize theme
+        setTheme(getStoredTheme());
+        
+        // WebSocket connection for real-time updates
+        function bindServerCardNavigation(root) {
+            const cards = (root || document).querySelectorAll('.server-card');
+            cards.forEach(card => {
+                if (card.dataset.navigationBound === 'true') {
+                    return;
+                }
+                card.dataset.navigationBound = 'true';
+
+                card.addEventListener('click', event => {
+                    if (event.target.closest('[data-stop-navigation="true"]')) {
+                        return;
+                    }
+                    const url = card.getAttribute('data-target-url');
+                    if (url) {
+                        window.location.href = url;
+                    }
+                });
+            });
+        }
+
+        bindServerCardNavigation();
+
+        document.addEventListener('htmx:afterSwap', event => {
+            if (event.target && event.target.closest('#server-grid')) {
+                bindServerCardNavigation(event.target.closest('#server-grid'));
+            }
+        });
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('WebSocket connected');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleRealtimeUpdate(data);
+            };
+            
+            ws.onclose = function() {
+                console.log('WebSocket disconnected, attempting to reconnect...');
+                setTimeout(connectWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        function handleRealtimeUpdate(data) {
+            switch(data.type) {
+                case 'server_status':
+                    updateServerStatus(data.serverId, data.status);
+                    break;
+                case 'stats_update':
+                    updateStats(data.stats);
+                    break;
+                default:
+                    console.log('Unknown update type:', data.type);
+            }
+        }
+        
+        function updateServerStatus(serverId, status) {
+            const serverCard = document.querySelector(`[data-server-id="${serverId}"]`);
+            if (serverCard) {
+                // Update status indicator
+                const indicator = serverCard.querySelector('.server-status-indicator');
+                indicator.classList.toggle('running', status.running);
+                
+                // Update status badge
+                const statusBadge = serverCard.querySelector('.status');
+                statusBadge.textContent = status.running ? 'Running' : 'Stopped';
+                statusBadge.className = `status ${status.running ? 'status-success' : 'status-danger'}`;
+                
+                // Update player count if provided
+                if (status.playerCount !== undefined) {
+                    const playerInfo = serverCard.querySelector('.info-item .info-value');
+                    if (playerInfo) {
+                        playerInfo.textContent = `${status.playerCount}/${status.maxPlayers || '?'}`;
+                    }
+                }
+            }
+        }
+        
+        function updateStats(stats) {
+            if (stats.totalServers) {
+                const totalElement = document.getElementById('total-servers');
+                if (totalElement) totalElement.textContent = stats.totalServers;
+            }
+            
+            if (stats.activeServers) {
+                const activeElement = document.getElementById('active-servers');
+                if (activeElement) activeElement.textContent = stats.activeServers;
+            }
+            
+            if (stats.totalPlayers !== undefined) {
+                const playersElement = document.getElementById('total-players');
+                if (playersElement) playersElement.textContent = stats.totalPlayers;
+            }
+        }
+        
+        function createNewServer() {
+            // This would typically open a modal or navigate to a server creation page
+            window.location.href = '/server/new';
+        }
+        
+        // Initialize WebSocket connection
+        document.addEventListener('DOMContentLoaded', function() {
+            connectWebSocket();
+            
+            // HTMX event handling
+            document.body.addEventListener('htmx:beforeRequest', function(e) {
+                if (e.detail.elt.id === 'refresh-indicator') {
+                    e.detail.elt.classList.remove('hidden');
+                }
+            });
+            
+            document.body.addEventListener('htmx:afterRequest', function(e) {
+                if (e.detail.elt.id === 'refresh-indicator') {
+                    e.detail.elt.classList.add('hidden');
+                }
+            });
+            
+            // Auto-refresh page data periodically
+            setInterval(function() {
+                htmx.trigger('#server-grid', 'refresh');
+            }, 30000); // 30 seconds
+        });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
+                toggleTheme();
+            }
+            
+            if (e.ctrlKey && e.key === 'r') {
+                e.preventDefault();
+                htmx.trigger('#server-grid', 'refresh');
+            }
+        });
+        
+        // Cleanup WebSocket on page unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>

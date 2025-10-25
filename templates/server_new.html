@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Create New Server - Stationeers Server Manager">
+    <title>Create New Server - Stationeers Server Manager</title>
+    
+    <!-- Modern CSS Framework -->
+    <link rel="stylesheet" href="/static/modern.css">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: var(--space-4) 0;
+            margin-bottom: var(--space-6);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .form-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--space-6);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .form-section {
+            margin-bottom: var(--space-6);
+        }
+        
+        .form-section h3 {
+            margin-top: 0;
+            margin-bottom: var(--space-4);
+            color: var(--text-primary);
+            font-size: var(--text-lg);
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: var(--space-2);
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-4);
+        }
+        
+        .form-grid-full {
+            grid-column: 1 / -1;
+        }
+        
+        .form-group {
+            margin-bottom: var(--space-4);
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: var(--space-2);
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            font-weight: 500;
+        }
+        
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            width: 100%;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            font-size: var(--text-sm);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+        
+        .form-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            margin-right: var(--space-2);
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: var(--space-3);
+            justify-content: flex-end;
+            margin-top: var(--space-6);
+            padding-top: var(--space-4);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .help-text {
+            font-size: var(--text-xs);
+            color: var(--text-tertiary);
+            margin-top: var(--space-1);
+        }
+        
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div>
+                    <h1>Create New Server</h1>
+                    <p class="text-secondary">Configure and deploy a new Stationeers server</p>
+                </div>
+                <div>
+                    <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="container">
+        <form method="POST" action="/server/new">
+            <div class="form-card">
+                <!-- Basic Settings -->
+                <div class="form-section">
+                    <h3>Basic Settings</h3>
+                    <div class="form-grid">
+                        <div class="form-group form-grid-full">
+                            <label for="name">Server Name *</label>
+                            <input type="text" id="name" name="name" required 
+                                   value="My Stationeers Server"
+                                   placeholder="Enter server name">
+                            <p class="help-text">The name that will appear in the server list</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">World</label>
+                            <select name="world" id="world" class="form-select" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Start Location</label>
+                            <select name="start_location" id="start_location" class="form-select">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Start Condition</label>
+                            <select name="start_condition" id="start_condition" class="form-select">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>                        <div class="form-group">
+                            <label for="difficulty">Difficulty *</label>
+                            <select id="difficulty" name="difficulty" required>
+                                {{ range .difficulties }}
+                                <option value="{{ . }}" {{ if eq . "Normal" }}selected{{ end }}>{{ . }}</option>
+                                {{ end }}
+                            </select>
+                            <p class="help-text">Game difficulty level</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Network Settings -->
+                <div class="form-section">
+                    <h3>Network Settings</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="port">Port *</label>
+                            <input type="number" id="port" name="port" required 
+                                   value="27016" min="1024" max="65535"
+                                   placeholder="27016">
+                            <p class="help-text">Server port (1024-65535)</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="max_clients">Max Players *</label>
+                            <input type="number" id="max_clients" name="max_clients" required 
+                                   value="10" min="1" max="100"
+                                   placeholder="10">
+                            <p class="help-text">Maximum number of players</p>
+                        </div>
+                        
+                        <div class="form-group form-grid-full">
+                            <label for="password">Server Password</label>
+                            <input type="text" id="password" name="password" 
+                                   placeholder="Leave empty for no password">
+                            <p class="help-text">Optional password to join the server</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="server_visible" name="server_visible" checked>
+                                Server Visible
+                            </label>
+                            <p class="help-text">Make server visible in server browser</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Advanced Settings -->
+                <div class="form-section">
+                    <h3>Advanced Settings</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="save_interval">Save Interval (seconds) *</label>
+                            <input type="number" id="save_interval" name="save_interval" required 
+                                   value="300" min="60" max="3600"
+                                   placeholder="300">
+                            <p class="help-text">How often to save the world (60-3600)</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="restart_delay_seconds">Restart Delay (seconds)</label>
+                            <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" min="0" max="3600"
+                                   value="10" placeholder="10">
+                            <p class="help-text">Wait time between stop and restart (0-3600)</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="auth_secret">Auth Secret</label>
+                            <input type="text" id="auth_secret" name="auth_secret" 
+                                   placeholder="Optional authentication secret">
+                            <p class="help-text">Steam authentication secret (optional)</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="beta">Game Version *</label>
+                            <select id="beta" name="beta" required>
+                                <option value="false" selected>Release</option>
+                                <option value="true">Beta</option>
+                            </select>
+                            <p class="help-text">Which version to use</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Startup Options -->
+                <div class="form-section">
+                    <h3>Startup Options</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="auto_save" name="auto_save" checked>
+                                <span>Auto Save</span>
+                            </label>
+                            <p class="help-text">Toggle the dedicated server's autosave feature</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="auto_pause" name="auto_pause" checked>
+                                <span>Auto Pause</span>
+                            </label>
+                            <p class="help-text">Pause server simulation when no players are connected</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="auto_start" name="auto_start">
+                                <span>Auto Start</span>
+                            </label>
+                            <p class="help-text">Start server automatically when SDSM starts</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="auto_update" name="auto_update">
+                                <span>Auto Update</span>
+                            </label>
+                            <p class="help-text">Update server files before starting</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Create Server</button>
+                </div>
+            </div>
+        </form>
+    </main>
+
+    <script>
+        let worldLists = {"release": [], "beta": []};
+        let worldDataByVersion = {"release": {}, "beta": {}};
+
+        {{- if and .worldLists .worldData }}
+        {{- $worldLists := .worldLists -}}
+        {{- $worldData := .worldData -}}
+        worldLists = {
+            "release": [
+                {{- $release := index $worldLists "release" -}}
+                {{- range $idx, $world := $release -}}
+                {{- if $idx}}, {{- end -}}
+                "{{js $world}}"
+                {{- end -}}
+            ],
+            "beta": [
+                {{- $beta := index $worldLists "beta" -}}
+                {{- range $idx, $world := $beta -}}
+                {{- if $idx}}, {{- end -}}
+                "{{js $world}}"
+                {{- end -}}
+            ]
+        };
+
+        worldDataByVersion = {
+            "release": {
+                {{- $releaseData := index $worldData "release" -}}
+                {{- $releaseList := index $worldLists "release" -}}
+                {{- range $idx, $world := $releaseList -}}
+                {{- if $idx}}, {{- end -}}
+                "{{js $world}}": {
+                    "locations": [
+                        {{- with index $releaseData $world -}}
+                        {{- range $locIdx, $loc := index . "locations" -}}
+                        {{- if $locIdx}}, {{- end -}}
+                        {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
+                        {{- end -}}
+                        {{- end -}}
+                    ],
+                    "conditions": [
+                        {{- with index $releaseData $world -}}
+                        {{- range $condIdx, $cond := index . "conditions" -}}
+                        {{- if $condIdx}}, {{- end -}}
+                        {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
+                        {{- end -}}
+                        {{- end -}}
+                    ]
+                }
+                {{- end -}}
+            },
+            "beta": {
+                {{- $betaData := index $worldData "beta" -}}
+                {{- $betaList := index $worldLists "beta" -}}
+                {{- range $idx, $world := $betaList -}}
+                {{- if $idx}}, {{- end -}}
+                "{{js $world}}": {
+                    "locations": [
+                        {{- with index $betaData $world -}}
+                        {{- range $locIdx, $loc := index . "locations" -}}
+                        {{- if $locIdx}}, {{- end -}}
+                        {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
+                        {{- end -}}
+                        {{- end -}}
+                    ],
+                    "conditions": [
+                        {{- with index $betaData $world -}}
+                        {{- range $condIdx, $cond := index . "conditions" -}}
+                        {{- if $condIdx}}, {{- end -}}
+                        {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
+                        {{- end -}}
+                        {{- end -}}
+                    ]
+                }
+                {{- end -}}
+            }
+        };
+        {{- end }}
+
+        let selectedStartLocation = "";
+        let selectedStartCondition = "";
+
+        function currentVersionKey() {
+            const betaSelect = document.getElementById("beta");
+            return betaSelect && betaSelect.value === "true" ? "beta" : "release";
+        }
+
+        function populateWorldOptions() {
+            const worldSelect = document.getElementById("world");
+            const versionKey = currentVersionKey();
+            const worlds = worldLists[versionKey] || [];
+            const previousSelection = worldSelect.value;
+
+            worldSelect.innerHTML = "";
+
+            if (!worlds.length) {
+                worldSelect.innerHTML = '<option value="">No worlds available</option>';
+                updateWorldOptions();
+                return;
+            }
+
+            worlds.forEach(world => {
+                const option = document.createElement("option");
+                option.value = world;
+                option.textContent = world;
+                worldSelect.appendChild(option);
+            });
+
+            if (previousSelection && worlds.includes(previousSelection)) {
+                worldSelect.value = previousSelection;
+            } else {
+                worldSelect.value = worlds[0];
+            }
+
+            updateWorldOptions();
+        }
+
+        function updateWorldOptions() {
+            const worldSelect = document.getElementById("world");
+            const locSelect = document.getElementById("start_location");
+            const condSelect = document.getElementById("start_condition");
+            const versionKey = currentVersionKey();
+            const world = worldSelect.value;
+
+            const worldData = (worldDataByVersion[versionKey] || {})[world];
+
+            locSelect.innerHTML = '<option value="">-- Select Start Location --</option>';
+            condSelect.innerHTML = '<option value="">-- Select Start Condition --</option>';
+
+            if (!worldData) {
+                return;
+            }
+
+            let hasSelectedLocation = false;
+            (worldData.locations || []).forEach(loc => {
+                const option = document.createElement("option");
+                option.value = loc.ID;
+                option.textContent = loc.Name || loc.ID;
+                if (loc.Description) {
+                    option.title = loc.Description;
+                }
+                if (loc.ID === selectedStartLocation) {
+                    option.selected = true;
+                    hasSelectedLocation = true;
+                }
+                locSelect.appendChild(option);
+            });
+
+            let hasSelectedCondition = false;
+            (worldData.conditions || []).forEach(cond => {
+                const option = document.createElement("option");
+                option.value = cond.ID;
+                option.textContent = cond.Name || cond.ID;
+                if (cond.Description) {
+                    option.title = cond.Description;
+                }
+                if (cond.ID === selectedStartCondition) {
+                    option.selected = true;
+                    hasSelectedCondition = true;
+                }
+                condSelect.appendChild(option);
+            });
+
+            if (!hasSelectedLocation) {
+                selectedStartLocation = "";
+            }
+
+            if (!hasSelectedCondition) {
+                selectedStartCondition = "";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const worldSelect = document.getElementById("world");
+            const locSelect = document.getElementById("start_location");
+            const condSelect = document.getElementById("start_condition");
+            const versionSelect = document.getElementById("beta");
+
+            populateWorldOptions();
+
+            worldSelect.addEventListener("change", () => {
+                updateWorldOptions();
+            });
+
+            versionSelect.addEventListener("change", () => {
+                populateWorldOptions();
+            });
+
+            locSelect.addEventListener("change", () => {
+                selectedStartLocation = locSelect.value;
+            });
+
+            condSelect.addEventListener("change", () => {
+                selectedStartCondition = condSelect.value;
+            });
+        });
+    </script>
+</body>
+</html>
