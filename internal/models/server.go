@@ -678,7 +678,33 @@ func (s *Server) ClientCount() int {
 }
 
 func (s *Server) IsRunning() bool {
-	return s.Running
+	if s == nil {
+		return false
+	}
+
+	if s.Proc != nil {
+		// Proc.ProcessState remains nil while the process is alive. Prefer that signal.
+		if s.Proc.ProcessState == nil {
+			s.Running = true
+			return true
+		}
+
+		// Once the process has exited, ensure our in-memory flags reflect that reality.
+		if s.Proc.ProcessState.Exited() {
+			s.Running = false
+			s.Starting = false
+			s.Paused = false
+			return false
+		}
+	}
+
+	if s.Running || s.Starting || s.Paused {
+		s.Running = false
+		s.Starting = false
+		s.Paused = false
+	}
+
+	return false
 }
 
 func (s *Server) SetProgressReporter(fn func(stage string, processed, total int64)) {

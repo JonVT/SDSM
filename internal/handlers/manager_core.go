@@ -50,6 +50,9 @@ func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[st
 }
 
 func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models.Server, username interface{}, errMsg string) {
+	// Refresh runtime flags so the template does not show stale state after restarts.
+	s.IsRunning()
+
 	worldLists, worldData := h.buildWorldSelectionData()
 	worldInfo := h.manager.GetWorldInfo(s.World, s.Beta)
 

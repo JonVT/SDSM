@@ -90,6 +90,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"starting":       s.Starting,
 		"port":           s.Port,
 		"player_count":   len(liveClients),
+		"players":        players,
 		"last_log_line":  lastLine,
 		"server_started": started,
 		"server_saved":   saved,

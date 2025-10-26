@@ -1338,49 +1338,6 @@
                 return;
             }
 
-            function renderChatMessages(messages) {
-                if (!chatMessagesContainer || !chatEmptyState) {
-                    return;
-                }
-
-                chatMessagesContainer.textContent = '';
-
-                if (!Array.isArray(messages) || messages.length === 0) {
-                    chatEmptyState.style.removeProperty('display');
-                    return;
-                }
-
-                chatEmptyState.style.display = 'none';
-
-                messages.forEach((entry) => {
-                    if (!entry) {
-                        return;
-                    }
-                    const row = document.createElement('div');
-                    row.className = 'chat-message';
-
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'chat-time';
-                    timeSpan.textContent = formatTimeDisplay(entry.time, '--:--');
-
-                    const playerSpan = document.createElement('span');
-                    playerSpan.className = 'chat-player';
-                    playerSpan.textContent = `${entry.player || 'Unknown'}:`;
-
-                    const messageSpan = document.createElement('span');
-                    messageSpan.className = 'chat-text';
-                    messageSpan.textContent = entry.message || '';
-
-                    row.appendChild(timeSpan);
-                    row.appendChild(playerSpan);
-                    row.appendChild(messageSpan);
-
-                    chatMessagesContainer.appendChild(row);
-                });
-
-                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-            }
-
             showElement(playersHistoryTable, true, 'table');
             showElement(playersHistoryEmpty, false);
 
@@ -1393,6 +1350,49 @@
                 row.appendChild(createTextCell(entry.session_length || '—'));
                 playersHistoryBody.appendChild(row);
             });
+        }
+
+        function renderChatMessages(messages) {
+            if (!chatMessagesContainer || !chatEmptyState) {
+                return;
+            }
+
+            chatMessagesContainer.textContent = '';
+
+            if (!Array.isArray(messages) || messages.length === 0) {
+                chatEmptyState.style.removeProperty('display');
+                return;
+            }
+
+            chatEmptyState.style.display = 'none';
+
+            messages.forEach((entry) => {
+                if (!entry) {
+                    return;
+                }
+                const row = document.createElement('div');
+                row.className = 'chat-message';
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'chat-time';
+                timeSpan.textContent = formatTimeDisplay(entry.time, '--:--');
+
+                const playerSpan = document.createElement('span');
+                playerSpan.className = 'chat-player';
+                playerSpan.textContent = `${entry.player || 'Unknown'}:`;
+
+                const messageSpan = document.createElement('span');
+                messageSpan.className = 'chat-text';
+                messageSpan.textContent = entry.message || '';
+
+                row.appendChild(timeSpan);
+                row.appendChild(playerSpan);
+                row.appendChild(messageSpan);
+
+                chatMessagesContainer.appendChild(row);
+            });
+
+            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
         }
 
         function setConnectionBanner(active, message) {
