@@ -186,9 +186,23 @@ func NewManager() *Manager {
 	} else if fileExists("sdsm.config") {
 		config = "sdsm.config"
 	} else {
-		// No config file found, start with default paths and logs
-		m.safeLog("No configuration file found. Please specify a configuration file on the command line or set the SDSM_CONFIG environment variable.")
-		return m
+		executable, err := os.Executable()
+		if err != nil {
+			m.safeLog(fmt.Sprintf("No configuration file found and failed to locate executable directory: %v", err))
+			return m
+		}
+		if resolved, err := filepath.EvalSymlinks(executable); err == nil && resolved != "" {
+			executable = resolved
+		}
+		execDir := filepath.Dir(executable)
+		config = filepath.Join(execDir, "sdsm.config")
+		if !fileExists(config) {
+			if err := m.bootstrapDefaultConfig(config, execDir); err != nil {
+				m.safeLog(fmt.Sprintf("Unable to create default configuration at %s: %v", config, err))
+				return m
+			}
+			m.safeLog(fmt.Sprintf("Created default configuration at %s", config))
+		}
 	}
 
 	m.ConfigFile = config
@@ -530,6 +544,33 @@ func (m *Manager) initializeServers() {
 		}
 		srv.EnsureLogger(m.Paths)
 	}
+}
+
+func (m *Manager) bootstrapDefaultConfig(configPath, rootPath string) error {
+	if strings.TrimSpace(configPath) == "" {
+		return fmt.Errorf("config path cannot be empty")
+	}
+	if strings.TrimSpace(rootPath) == "" {
+		return fmt.Errorf("root path cannot be empty")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		return fmt.Errorf("failed to ensure config directory: %w", err)
+	}
+
+	m.ConfigFile = configPath
+	m.Paths = utils.NewPaths(rootPath)
+
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal default configuration: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write default configuration: %w", err)
+	}
+
+	return nil
 }
 
 // load reads configuration from disk and rebuilds in-memory state.

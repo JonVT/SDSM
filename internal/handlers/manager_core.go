@@ -76,11 +76,47 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, username interface{}, overrides gin.H) {
 	worldLists, worldData := h.buildWorldSelectionData()
 
+	const defaultServerPort = 27016
+	suggestedName := "My Stationeers Server"
+	if count := h.manager.ServerCount(); count > 0 {
+		suggestedName = fmt.Sprintf("My Stationeers Server %d", count+1)
+	}
+
+	formDefaults := gin.H{
+		"name":                  suggestedName,
+		"world":                 "",
+		"start_location":        "",
+		"start_condition":       "",
+		"difficulty":            "Normal",
+		"port":                  fmt.Sprintf("%d", h.manager.GetNextAvailablePort(defaultServerPort)),
+		"max_clients":           "10",
+		"password":              "",
+		"auth_secret":           "",
+		"save_interval":         "300",
+		"restart_delay_seconds": fmt.Sprintf("%d", models.DefaultRestartDelaySeconds),
+		"beta":                  "false",
+		"auto_start":            false,
+		"auto_update":           false,
+		"auto_save":             true,
+		"auto_pause":            true,
+		"server_visible":        true,
+	}
+
+	if overrides != nil {
+		if existingForm, ok := overrides["form"].(gin.H); ok {
+			for key, val := range existingForm {
+				formDefaults[key] = val
+			}
+			delete(overrides, "form")
+		}
+	}
+
 	payload := gin.H{
 		"username":     username,
 		"worldLists":   worldLists,
 		"worldData":    worldData,
 		"difficulties": h.manager.GetDifficulties(),
+		"form":         formDefaults,
 	}
 
 	for k, v := range overrides {

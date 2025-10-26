@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#27364d" />
+      <stop offset="100%" stop-color="#1d293a" />
+    </linearGradient>
+    <style>
+      .title { font: 700 42px 'Segoe UI', sans-serif; fill: #f9fafb; }
+      .subtitle { font: 400 20px 'Segoe UI', sans-serif; fill: #cbd5f5; }
+      .label { font: 600 16px 'Segoe UI', sans-serif; fill: #9ca3af; }
+      .value { font: 600 32px 'Segoe UI', sans-serif; fill: #e5e7eb; }
+      .pill { font: 600 14px 'Segoe UI', sans-serif; fill: #e0f2fe; }
+      .pill-bg { fill: #0369a1; rx: 10; }
+      .chip { font: 600 12px 'Segoe UI', sans-serif; fill: #d1fae5; }
+      .chip-bg { fill: #047857; rx: 8; }
+      .series { font: 500 14px 'Segoe UI', sans-serif; fill: #f3f4f6; }
+      .table-head { font: 600 14px 'Segoe UI', sans-serif; fill: #a5b4fc; }
+      .table-cell { font: 500 13px 'Segoe UI', sans-serif; fill: #e5e5f5; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)" rx="32" />
+
+  <g transform="translate(72 72)">
+    <text class="title">SDSM Dashboard</text>
+    <text class="subtitle" y="48">Live overview of Stationeers dedicated servers</text>
+  </g>
+
+  <g transform="translate(72 140)">
+    <rect width="340" height="160" fill="url(#card)" rx="24" />
+    <text class="label" x="28" y="46">Active Servers</text>
+    <text class="value" x="28" y="108">3 / 4</text>
+    <rect class="pill-bg" x="28" y="118" width="138" height="30" />
+    <text class="pill" x="45" y="139">Beta branch online</text>
+  </g>
+
+  <g transform="translate(432 140)">
+    <rect width="340" height="160" fill="url(#card)" rx="24" />
+    <text class="label" x="28" y="46">Players Online</text>
+    <text class="value" x="28" y="108">12</text>
+    <rect class="chip-bg" x="28" y="118" width="120" height="26" />
+    <text class="chip" x="44" y="136">Saved 2 min ago</text>
+  </g>
+
+  <g transform="translate(792 140)">
+    <rect width="416" height="160" fill="url(#card)" rx="24" />
+    <text class="label" x="32" y="46">Deployment Status</text>
+    <rect fill="#0f172a" x="32" y="68" width="352" height="12" rx="6" opacity="0.55" />
+    <rect fill="#60a5fa" x="32" y="68" width="272" height="12" rx="6" />
+    <text class="series" x="32" y="112">Release update 78% complete</text>
+    <text class="series" x="32" y="138">Latest activity 1m ago</text>
+  </g>
+
+  <g transform="translate(72 332)">
+    <rect width="540" height="316" fill="url(#card)" rx="28" />
+    <text class="label" x="32" y="52">Live Servers</text>
+    <g transform="translate(32 84)">
+      <text class="table-head" x="0" y="0">Server</text>
+      <text class="table-head" x="180" y="0">World</text>
+      <text class="table-head" x="310" y="0">Players</text>
+      <text class="table-head" x="402" y="0">Status</text>
+    </g>
+    <g transform="translate(32 120)">
+      <text class="table-cell" x="0" y="0">Europa Automation</text>
+      <text class="table-cell" x="180" y="0">Europa</text>
+      <text class="table-cell" x="310" y="0">5 / 10</text>
+      <text class="table-cell" x="402" y="0">Running</text>
+    </g>
+    <g transform="translate(32 156)">
+      <text class="table-cell" x="0" y="0">Lunar Training</text>
+      <text class="table-cell" x="180" y="0">Moon</text>
+      <text class="table-cell" x="310" y="0">3 / 8</text>
+      <text class="table-cell" x="402" y="0">Paused</text>
+    </g>
+    <g transform="translate(32 192)">
+      <text class="table-cell" x="0" y="0">Mars Survival</text>
+      <text class="table-cell" x="180" y="0">Mars</text>
+      <text class="table-cell" x="310" y="0">4 / 12</text>
+      <text class="table-cell" x="402" y="0">Starting</text>
+    </g>
+  </g>
+
+  <g transform="translate(644 332)">
+    <rect width="564" height="316" fill="url(#card)" rx="28" />
+    <text class="label" x="32" y="52">Log Feed</text>
+    <g transform="translate(32 92)">
+      <rect fill="#0f172a" width="500" height="64" rx="18" opacity="0.6" />
+      <text class="table-cell" x="24" y="24">[12:04:33] Mars Survival saved world state</text>
+      <text class="table-cell" x="24" y="48">[12:02:10] Beta update queued</text>
+    </g>
+    <g transform="translate(32 180)">
+      <rect fill="#0f172a" width="500" height="96" rx="18" opacity="0.6" />
+      <text class="table-cell" x="24" y="28">[12:00:02] Europa Automation started on build 0.2.544</text>
+      <text class="table-cell" x="24" y="56">[11:57:48] LaunchPad assets synced</text>
+    </g>
+  </g>
+</svg>

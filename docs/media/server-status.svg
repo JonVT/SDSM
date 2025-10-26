@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" width="1280" height="720">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <linearGradient id="control" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <style>
+      .heading { font: 700 40px 'Segoe UI', sans-serif; fill: #f8fafc; }
+      .section { font: 600 20px 'Segoe UI', sans-serif; fill: #a5b4fc; }
+      .label { font: 600 14px 'Segoe UI', sans-serif; fill: #94a3b8; }
+      .value { font: 600 18px 'Segoe UI', sans-serif; fill: #e2e8f0; }
+      .badge { font: 600 12px 'Segoe UI', sans-serif; fill: #dbeafe; }
+      .badge-bg { fill: #1d4ed8; rx: 10; }
+      .mono { font: 500 13px 'Fira Mono', monospace; fill: #e2e8f0; }
+      .log { font: 500 12px 'Fira Mono', monospace; fill: #94a3b8; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#background)" rx="36" />
+
+  <g transform="translate(64 72)">
+    <text class="heading">Server Status · Mars Survival</text>
+  </g>
+
+  <g transform="translate(64 140)">
+    <rect width="360" height="460" fill="url(#panel)" rx="28" />
+    <text class="section" x="32" y="60">Server Control</text>
+    <rect fill="#0f172a" x="32" y="92" width="296" height="52" rx="18" opacity="0.8" />
+    <text class="label" x="52" y="125">Status</text>
+    <text class="value" x="200" y="125">Running</text>
+
+    <rect fill="url(#control)" x="32" y="164" width="136" height="44" rx="14" />
+    <text class="value" x="66" y="193">Stop</text>
+    <rect fill="#1f2937" x="188" y="164" width="140" height="44" rx="14" />
+    <text class="value" x="218" y="193">Restart</text>
+
+    <text class="label" x="32" y="236">Started</text>
+    <text class="value" x="32" y="260">2025-10-25 11:52 UTC</text>
+    <text class="label" x="32" y="296">Last Saved</text>
+    <text class="value" x="32" y="320">2025-10-25 12:04 UTC</text>
+
+    <text class="label" x="32" y="356">Log Tail</text>
+    <rect fill="#0f172a" x="32" y="372" width="296" height="104" rx="18" opacity="0.8" />
+    <text class="log" x="48" y="404">[12:03] players.log updated (Europa)</text>
+    <text class="log" x="48" y="430">[12:02] Saved world snapshot (Mars Survival)</text>
+    <text class="log" x="48" y="456">[12:01] Admin SteelSky connected</text>
+  </g>
+
+  <g transform="translate(452 140)">
+    <rect width="320" height="220" fill="url(#panel)" rx="24" />
+    <text class="section" x="28" y="56">Players Online</text>
+    <rect class="badge-bg" x="28" y="74" width="128" height="26" />
+    <text class="badge" x="46" y="92">4 admins online</text>
+    <g transform="translate(28 122)">
+      <text class="value" y="0">SteelSky</text>
+      <text class="mono" x="0" y="26">steam: 76561198000000000</text>
+      <text class="value" x="0" y="62">Nova</text>
+      <text class="mono" x="0" y="88">steam: 76561198012345678</text>
+    </g>
+  </g>
+
+  <g transform="translate(452 384)">
+    <rect width="320" height="216" fill="url(#panel)" rx="24" />
+    <text class="section" x="28" y="56">Recent Sessions</text>
+    <g transform="translate(28 92)">
+      <text class="label" y="0">Europa Automation</text>
+      <text class="mono" x="0" y="22">00:48 online · disconnected 11:40</text>
+    </g>
+    <g transform="translate(28 152)">
+      <text class="label" y="0">Moon Training</text>
+      <text class="mono" x="0" y="22">01:14 online · active</text>
+    </g>
+  </g>
+
+  <g transform="translate(800 140)">
+    <rect width="416" height="220" fill="url(#panel)" rx="24" />
+    <text class="section" x="32" y="56">Chat Stream</text>
+    <g transform="translate(32 90)">
+      <text class="mono" y="0">[12:04] SteelSky: Reactor holding steady.</text>
+      <text class="mono" y="28">[12:03] Nova: Copy, handing off to AI.</text>
+      <text class="mono" y="56">[12:01] Lumen: EVA crew at rover bay.</text>
+    </g>
+  </g>
+
+  <g transform="translate(800 384)">
+    <rect width="416" height="216" fill="url(#panel)" rx="24" />
+    <text class="section" x="32" y="56">Deployment Checklist</text>
+    <g transform="translate(32 96)">
+      <circle cx="14" cy="-6" r="10" fill="#10b981" />
+      <text class="label" x="36" y="0">SteamCMD synced · 5 min ago</text>
+    </g>
+    <g transform="translate(32 140)">
+      <circle cx="14" cy="-6" r="10" fill="#3b82f6" />
+      <text class="label" x="36" y="0">Release build queued</text>
+    </g>
+    <g transform="translate(32 184)">
+      <circle cx="14" cy="-6" r="10" fill="#f59e0b" />
+      <text class="label" x="36" y="0">LaunchPad update waiting</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" width="1024" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#0b1120" />
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+    <style>
+      .bg { fill: url(#bgGrad); }
+      .box { fill: url(#boxGrad); stroke: #1e3a8a; stroke-width: 1.6; rx: 18; }
+      .title { font: 700 28px 'Segoe UI', sans-serif; fill: #f9fafb; }
+      .label { font: 600 18px 'Segoe UI', sans-serif; fill: #cbd5f5; }
+      .item { font: 500 16px 'Segoe UI', sans-serif; fill: #e5e7eb; }
+      .arrow { stroke: #60a5fa; stroke-width: 4; marker-end: url(#arrowHead); }
+      .arrow-lt { stroke: #c4b5fd; stroke-width: 3; marker-end: url(#arrowHeadLt); stroke-dasharray: 12 10; }
+    </style>
+    <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#60a5fa" />
+    </marker>
+    <marker id="arrowHeadLt" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#c4b5fd" />
+    </marker>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.75" />
+    </filter>
+  </defs>
+
+  <rect width="1024" height="512" class="bg" rx="32" />
+  <text x="64" y="68" class="title">SDSM Runtime Architecture</text>
+
+  <g filter="url(#shadow)">
+    <rect class="box" x="64" y="112" width="240" height="320" />
+    <text class="label" x="88" y="152">Web Client</text>
+    <text class="item" x="88" y="190">• Dashboard &amp; status views</text>
+    <text class="item" x="88" y="222">• Live polling &amp; banners</text>
+    <text class="item" x="88" y="254">• Chat + players panes</text>
+    <text class="item" x="88" y="286">• Log viewer modal</text>
+    <text class="item" x="88" y="318">• Authenticated sessions</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect class="box" x="392" y="112" width="264" height="320" />
+    <text class="label" x="416" y="152">Gin HTTP Layer</text>
+    <text class="item" x="416" y="190">• Routing &amp; auth middleware</text>
+    <text class="item" x="416" y="222">• HTML template rendering</text>
+    <text class="item" x="416" y="254">• JSON status endpoints</text>
+    <text class="item" x="416" y="286">• Log/asset streaming</text>
+    <text class="item" x="416" y="318">• Manager API surface</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect class="box" x="704" y="112" width="256" height="320" />
+    <text class="label" x="728" y="152">Manager &amp; Models</text>
+    <text class="item" x="728" y="190">• Persistent config (JSON)</text>
+    <text class="item" x="728" y="222">• Server lifecycle orchestration</text>
+    <text class="item" x="728" y="254">• Log parsing &amp; player history</text>
+    <text class="item" x="728" y="286">• Deployments &amp; SteamCMD</text>
+    <text class="item" x="728" y="318">• Chat buffer &amp; analytics</text>
+    <text class="item" x="728" y="350">• File system abstraction</text>
+  </g>
+
+  <line class="arrow" x1="304" y1="224" x2="392" y2="224" />
+  <line class="arrow" x1="656" y1="224" x2="704" y2="224" />
+  <line class="arrow-lt" x1="304" y1="288" x2="392" y2="288" />
+  <line class="arrow-lt" x1="656" y1="288" x2="704" y2="288" />
+
+  <text class="item" x="320" y="212">HTTPS / JSON API</text>
+  <text class="item" x="320" y="276">Templates &amp; assets</text>
+  <text class="item" x="672" y="212">RPC / method calls</text>
+  <text class="item" x="672" y="276">Events &amp; state snapshots</text>
+</svg>

@@ -13,14 +13,14 @@
     {
       "id": 1,
       "name": "My Stationeers Server",
-      "world": "'Mars2'",
-      "world_id": "'Mars2'",
+      "world": "Mars: The Canyon",
+      "world_id": "Mars2",
       "start_location": "MarsSpawnCanyonOverlook",
       "start_condition": "DefaultStart",
       "difficulty": "Normal",
       "port": 27016,
       "save_interval": 300,
-      "auth_secret": "jvt",
+      "auth_secret": "",
       "password": "",
       "max_clients": 10,
       "visible": false,
@@ -30,9 +30,7 @@
       "auto_save": true,
       "auto_pause": true,
       "mods": [],
-      "restart_delay_seconds": 10,
-      "server_started": "2025-10-25T18:35:08.249025166-07:00",
-      "server_saved": "2025-10-25T18:45:54-07:00"
+      "restart_delay_seconds": 10
     }
   ],
   "update_time": "2023-01-01T00:00:00Z",

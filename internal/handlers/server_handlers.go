@@ -229,52 +229,95 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	difficulty := middleware.SanitizeString(c.PostForm("difficulty"))
 	password := c.PostForm("password")
 	authSecret := c.PostForm("auth_secret")
+	betaRaw := c.PostForm("beta")
+	beta := betaRaw == "true"
+	autoStart := c.PostForm("auto_start") == "on"
+	autoUpdate := c.PostForm("auto_update") == "on"
+	autoSave := c.PostForm("auto_save") == "on"
+	autoPause := c.PostForm("auto_pause") == "on"
+	serverVisible := c.PostForm("server_visible") == "on"
+
+	formState := gin.H{
+		"name":                  name,
+		"world":                 world,
+		"start_location":        startLocation,
+		"start_condition":       startCondition,
+		"difficulty":            difficulty,
+		"port":                  c.PostForm("port"),
+		"max_clients":           c.PostForm("max_clients"),
+		"password":              password,
+		"auth_secret":           authSecret,
+		"save_interval":         c.PostForm("save_interval"),
+		"restart_delay_seconds": c.PostForm("restart_delay_seconds"),
+		"beta":                  betaRaw,
+		"auto_start":            autoStart,
+		"auto_update":           autoUpdate,
+		"auto_save":             autoSave,
+		"auto_pause":            autoPause,
+		"server_visible":        serverVisible,
+	}
 
 	if !h.manager.IsServerNameAvailable(name, -1) {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Server name already exists. Please choose a unique name."})
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": fmt.Sprintf("Server name '%s' already exists. Please choose a unique name.", name),
+			"form":  formState,
+		})
 		return
 	}
 
 	port, err := middleware.ValidatePort(c.PostForm("port"))
 	if err != nil {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Invalid port number"})
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": fmt.Sprintf("Invalid port number: %s", c.PostForm("port")),
+			"form":  formState,
+		})
 		return
 	}
+	formState["port"] = fmt.Sprintf("%d", port)
 
 	if !h.manager.IsPortAvailable(port, -1) {
 		suggestedPort := h.manager.GetNextAvailablePort(port)
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": fmt.Sprintf("Port %d is not available. Ports must be unique and at least 3 apart. Try port %d.", port, suggestedPort)})
+		formState["port"] = fmt.Sprintf("%d", suggestedPort)
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": fmt.Sprintf("Port %d is not available. Ports must be unique and at least 3 apart. Try port %d.", port, suggestedPort),
+			"form":  formState,
+		})
 		return
 	}
 
 	maxClients, err := strconv.Atoi(c.PostForm("max_clients"))
 	if err != nil || maxClients < 1 || maxClients > 100 {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Invalid max players (1-100)"})
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Invalid max players (1-100)",
+			"form":  formState,
+		})
 		return
 	}
+	formState["max_clients"] = fmt.Sprintf("%d", maxClients)
 
 	saveInterval, err := strconv.Atoi(c.PostForm("save_interval"))
 	if err != nil || saveInterval < 60 || saveInterval > 3600 {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Invalid save interval (60-3600)"})
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Invalid save interval (60-3600)",
+			"form":  formState,
+		})
 		return
 	}
+	formState["save_interval"] = fmt.Sprintf("%d", saveInterval)
 
 	restartDelay := models.DefaultRestartDelaySeconds
 	if restartDelayStr := c.PostForm("restart_delay_seconds"); restartDelayStr != "" {
 		if val, convErr := strconv.Atoi(restartDelayStr); convErr == nil && val >= 0 && val <= 3600 {
 			restartDelay = val
 		} else {
-			h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Invalid restart delay (0-3600)"})
+			h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+				"error": "Invalid restart delay (0-3600)",
+				"form":  formState,
+			})
 			return
 		}
 	}
-
-	beta := c.PostForm("beta") == "true"
-	autoStart := c.PostForm("auto_start") == "on"
-	autoUpdate := c.PostForm("auto_update") == "on"
-	autoSave := c.PostForm("auto_save") == "on"
-	autoPause := c.PostForm("auto_pause") == "on"
-	serverVisible := c.PostForm("server_visible") == "on"
+	formState["restart_delay_seconds"] = fmt.Sprintf("%d", restartDelay)
 	worldID := h.manager.ResolveWorldID(world, beta)
 	if worldID == "" {
 		worldID = world
@@ -303,7 +346,10 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 
 	newServer, err := h.manager.AddServer(cfg)
 	if err != nil {
-		h.renderNewServerForm(c, http.StatusInternalServerError, username, gin.H{"error": "Failed to create server"})
+		h.renderNewServerForm(c, http.StatusInternalServerError, username, gin.H{
+			"error": "Failed to create server",
+			"form":  formState,
+		})
 		return
 	}
 

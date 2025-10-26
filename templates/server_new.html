@@ -112,6 +112,20 @@
             color: var(--text-tertiary);
             margin-top: var(--space-1);
         }
+
+        .alert {
+            border-radius: var(--radius-md);
+            padding: var(--space-3) var(--space-4);
+            margin-bottom: var(--space-4);
+            font-size: var(--text-sm);
+            border: 1px solid transparent;
+        }
+
+        .alert-error {
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.35);
+            color: #991b1b;
+        }
         
         @media (max-width: 768px) {
             .form-grid {
@@ -122,6 +136,7 @@
 </head>
 
 <body>
+    {{ $form := .form }}
     <!-- Header -->
     <header class="header">
         <div class="container">
@@ -138,6 +153,9 @@
     </header>
     
     <main class="container">
+        {{ if .error }}
+        <div class="alert alert-error" role="alert">{{ .error }}</div>
+        {{ end }}
         <form method="POST" action="/server/new">
             <div class="form-card">
                 <!-- Basic Settings -->
@@ -146,8 +164,9 @@
                     <div class="form-grid">
                         <div class="form-group form-grid-full">
                             <label for="name">Server Name *</label>
-                            <input type="text" id="name" name="name" required 
-                                   value="My Stationeers Server"
+                                {{ $selectedDifficulty := index $form "difficulty" }}
+                                {{ range .difficulties }}
+                                <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
                                    placeholder="Enter server name">
                             <p class="help-text">The name that will appear in the server list</p>
                         </div>
@@ -190,7 +209,7 @@
                         <div class="form-group">
                             <label for="port">Port *</label>
                             <input type="number" id="port" name="port" required 
-                                   value="27016" min="1024" max="65535"
+                                   value="{{ index $form "port" }}" min="1024" max="65535"
                                    placeholder="27016">
                             <p class="help-text">Server port (1024-65535)</p>
                         </div>
@@ -198,7 +217,7 @@
                         <div class="form-group">
                             <label for="max_clients">Max Players *</label>
                             <input type="number" id="max_clients" name="max_clients" required 
-                                   value="10" min="1" max="100"
+                                   value="{{ index $form "max_clients" }}" min="1" max="100"
                                    placeholder="10">
                             <p class="help-text">Maximum number of players</p>
                         </div>
@@ -206,13 +225,14 @@
                         <div class="form-group form-grid-full">
                             <label for="password">Server Password</label>
                             <input type="text" id="password" name="password" 
-                                   placeholder="Leave empty for no password">
+                                value="{{ index $form "password" }}"
+                                placeholder="Leave empty for no password">
                             <p class="help-text">Optional password to join the server</p>
                         </div>
                         
                         <div class="form-group">
                             <label>
-                                <input type="checkbox" id="server_visible" name="server_visible" checked>
+                                <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
                                 Server Visible
                             </label>
                             <p class="help-text">Make server visible in server browser</p>
@@ -227,7 +247,7 @@
                         <div class="form-group">
                             <label for="save_interval">Save Interval (seconds) *</label>
                             <input type="number" id="save_interval" name="save_interval" required 
-                                   value="300" min="60" max="3600"
+                                   value="{{ index $form "save_interval" }}" min="60" max="3600"
                                    placeholder="300">
                             <p class="help-text">How often to save the world (60-3600)</p>
                         </div>
@@ -235,13 +255,14 @@
                         <div class="form-group">
                             <label for="restart_delay_seconds">Restart Delay (seconds)</label>
                             <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" min="0" max="3600"
-                                   value="10" placeholder="10">
+                                   value="{{ index $form "restart_delay_seconds" }}" placeholder="10">
                             <p class="help-text">Wait time between stop and restart (0-3600)</p>
                         </div>
                         
                         <div class="form-group">
                             <label for="auth_secret">Auth Secret</label>
                             <input type="text" id="auth_secret" name="auth_secret" 
+                                   value="{{ index $form "auth_secret" }}"
                                    placeholder="Optional authentication secret">
                             <p class="help-text">Steam authentication secret (optional)</p>
                         </div>
@@ -249,8 +270,8 @@
                         <div class="form-group">
                             <label for="beta">Game Version *</label>
                             <select id="beta" name="beta" required>
-                                <option value="false" selected>Release</option>
-                                <option value="true">Beta</option>
+                                <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
+                                <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
                             </select>
                             <p class="help-text">Which version to use</p>
                         </div>
@@ -263,7 +284,7 @@
                     <div class="form-grid">
                         <div class="form-group">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="auto_save" name="auto_save" checked>
+                                <input type="checkbox" id="auto_save" name="auto_save" {{ if index $form "auto_save" }}checked{{ end }}>
                                 <span>Auto Save</span>
                             </label>
                             <p class="help-text">Toggle the dedicated server's autosave feature</p>
@@ -271,7 +292,7 @@
 
                         <div class="form-group">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="auto_pause" name="auto_pause" checked>
+                                <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index $form "auto_pause" }}checked{{ end }}>
                                 <span>Auto Pause</span>
                             </label>
                             <p class="help-text">Pause server simulation when no players are connected</p>
@@ -279,7 +300,7 @@
                         
                         <div class="form-group">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="auto_start" name="auto_start">
+                                <input type="checkbox" id="auto_start" name="auto_start" {{ if index $form "auto_start" }}checked{{ end }}>
                                 <span>Auto Start</span>
                             </label>
                             <p class="help-text">Start server automatically when SDSM starts</p>
@@ -287,7 +308,7 @@
                         
                         <div class="form-group">
                             <label class="checkbox-label">
-                                <input type="checkbox" id="auto_update" name="auto_update">
+                                <input type="checkbox" id="auto_update" name="auto_update" {{ if index $form "auto_update" }}checked{{ end }}>
                                 <span>Auto Update</span>
                             </label>
                             <p class="help-text">Update server files before starting</p>
@@ -307,6 +328,10 @@
     <script>
         let worldLists = {"release": [], "beta": []};
         let worldDataByVersion = {"release": {}, "beta": {}};
+        let selectedWorld = "{{ js (index $form "world") }}";
+        let selectedStartLocation = "{{ js (index $form "start_location") }}";
+        let selectedStartCondition = "{{ js (index $form "start_condition") }}";
+        const defaultVersion = "{{ index $form "beta" }}";
 
         {{- if and .worldLists .worldData }}
         {{- $worldLists := .worldLists -}}
@@ -382,9 +407,6 @@
         };
         {{- end }}
 
-        let selectedStartLocation = "";
-        let selectedStartCondition = "";
-
         function currentVersionKey() {
             const betaSelect = document.getElementById("beta");
             return betaSelect && betaSelect.value === "true" ? "beta" : "release";
@@ -400,6 +422,7 @@
 
             if (!worlds.length) {
                 worldSelect.innerHTML = '<option value="">No worlds available</option>';
+                selectedWorld = "";
                 updateWorldOptions();
                 return;
             }
@@ -411,10 +434,15 @@
                 worldSelect.appendChild(option);
             });
 
-            if (previousSelection && worlds.includes(previousSelection)) {
-                worldSelect.value = previousSelection;
-            } else {
-                worldSelect.value = worlds[0];
+            const desiredWorld = (selectedWorld && worlds.includes(selectedWorld))
+                ? selectedWorld
+                : (previousSelection && worlds.includes(previousSelection))
+                    ? previousSelection
+                    : worlds[0];
+
+            if (desiredWorld) {
+                worldSelect.value = desiredWorld;
+                selectedWorld = desiredWorld;
             }
 
             updateWorldOptions();
@@ -481,9 +509,11 @@
             const condSelect = document.getElementById("start_condition");
             const versionSelect = document.getElementById("beta");
 
+            versionSelect.value = defaultVersion === "true" ? "true" : "false";
             populateWorldOptions();
 
             worldSelect.addEventListener("change", () => {
+                selectedWorld = worldSelect.value;
                 updateWorldOptions();
             });
 
