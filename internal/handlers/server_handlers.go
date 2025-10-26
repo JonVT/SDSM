@@ -62,21 +62,48 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	case c.PostForm("start") != "":
 		s.Start()
 		if isAsync {
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Server Started")
+			c.Header("X-Toast-Message", s.Name+" is starting…")
 			c.JSON(http.StatusOK, gin.H{"status": "started"})
 			return
 		}
 	case c.PostForm("restart") != "":
 		go s.Restart()
+		if isAsync {
+			c.Header("X-Toast-Type", "info")
+			c.Header("X-Toast-Title", "Server Restarting")
+			c.Header("X-Toast-Message", s.Name+" is restarting…")
+			c.JSON(http.StatusOK, gin.H{"status": "restarting"})
+			return
+		}
 	case c.PostForm("stop") != "":
 		s.Stop()
+		if isAsync {
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Server Stopped")
+			c.Header("X-Toast-Message", s.Name+" has been stopped.")
+			c.JSON(http.StatusOK, gin.H{"status": "stopped"})
+			return
+		}
 	case c.PostForm("deploy") != "":
 		if err := s.Deploy(); err != nil {
 			errMsg := fmt.Sprintf("Deploy failed: %v", err)
 			if isAsync {
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Deploy Failed")
+				c.Header("X-Toast-Message", errMsg)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 			} else {
 				h.renderServerPage(c, http.StatusInternalServerError, s, username, errMsg)
 			}
+			return
+		}
+		if isAsync {
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Deploy Started")
+			c.Header("X-Toast-Message", s.Name+" deployment started.")
+			c.JSON(http.StatusOK, gin.H{"status": "deploying"})
 			return
 		}
 	case c.PostForm("update_server") != "":
@@ -85,10 +112,16 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		}
 		if isAsync {
 			if h.manager.IsServerUpdateRunning(s.ID) {
+				c.Header("X-Toast-Type", "info")
+				c.Header("X-Toast-Title", "Update Running")
+				c.Header("X-Toast-Message", s.Name+" update already running.")
 				c.JSON(http.StatusOK, gin.H{"status": "running"})
 				return
 			}
 			h.startServerUpdateAsync(s)
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Update Started")
+			c.Header("X-Toast-Message", s.Name+" update started.")
 			c.JSON(http.StatusOK, gin.H{"status": "started"})
 			return
 		}

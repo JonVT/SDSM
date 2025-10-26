@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,14 +92,20 @@ func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Prevent XSS attacks
 		c.Header("X-Content-Type-Options", "nosniff")
-		c.Header("X-Frame-Options", "DENY")
 		c.Header("X-XSS-Protection", "1; mode=block")
 
 		// HSTS header for HTTPS
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-		// Content Security Policy
-		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net;")
+		// Allow embedding in iframe when explicitly enabled (useful for preview environments)
+		allowIFrame := strings.EqualFold(os.Getenv("SDSM_ALLOW_IFRAME"), "true")
+		if allowIFrame {
+			// Use CSP frame-ancestors to allow any parent; omit X-Frame-Options
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors *;")
+		} else {
+			c.Header("X-Frame-Options", "DENY")
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net;")
+		}
 
 		// Prevent MIME type sniffing
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -109,7 +117,12 @@ func SecurityHeaders() gin.HandlerFunc {
 // CORS middleware
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://localhost:5173") // For development
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Header("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Header("Access-Control-Allow-Origin", "*")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Header("Access-Control-Allow-Credentials", "true")

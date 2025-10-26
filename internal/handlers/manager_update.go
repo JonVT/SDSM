@@ -24,9 +24,11 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 	var deployType manager.DeployType
 	var deployErr error
 	actionHandled := false
+	actionName := ""
 
 	if c.PostForm("update_config") != "" {
 		actionHandled = true
+		actionName = "update_config"
 		steamID := middleware.SanitizeString(c.PostForm("steam_id"))
 		rootPath := middleware.SanitizeFilename(c.PostForm("root_path"))
 		portStr := c.PostForm("port")
@@ -74,20 +76,28 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		deployErr = h.startDeployAsync(deployType)
 	} else if c.PostForm("shutdown") != "" {
 		actionHandled = true
+		actionName = "shutdown"
 		go h.manager.Shutdown()
 	} else if c.PostForm("restart") != "" {
 		actionHandled = true
+		actionName = "restart"
 		go h.manager.Restart()
 	}
 
 	if isAsync {
 		if deployType != "" {
 			if deployErr != nil {
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Update Failed")
+				c.Header("X-Toast-Message", deployErr.Error())
 				c.JSON(http.StatusConflict, gin.H{
 					"error": deployErr.Error(),
 				})
 				return
 			}
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Update Started")
+			c.Header("X-Toast-Message", string(deployType)+" update started.")
 			c.JSON(http.StatusAccepted, gin.H{
 				"status":      "started",
 				"deploy_type": deployType,
@@ -96,10 +106,33 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		}
 
 		if actionHandled {
+			// Specific toasts for non-deploy actions
+			switch actionName {
+			case "update_config":
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Configuration Saved")
+				c.Header("X-Toast-Message", "Settings updated.")
+			case "shutdown":
+				c.Header("X-Toast-Type", "warning")
+				c.Header("X-Toast-Title", "Shutdown Initiated")
+				c.Header("X-Toast-Message", "SDSM is shutting down…")
+			case "restart":
+				c.Header("X-Toast-Type", "info")
+				c.Header("X-Toast-Title", "Restarting")
+				c.Header("X-Toast-Message", "SDSM is restarting…")
+			default:
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Action Queued")
+				c.Header("X-Toast-Message", "Your request has been processed.")
+			}
+
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			return
 		}
 
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Invalid Request")
+		c.Header("X-Toast-Message", "No action specified.")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no action specified"})
 		return
 	}

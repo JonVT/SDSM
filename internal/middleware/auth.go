@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,82 @@ func (a *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	return nil, fmt.Errorf("invalid token")
 }
 
+// Helper to detect if current request is effectively HTTPS (behind proxy or direct)
+func requestIsSecure(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	if proto := c.GetHeader("X-Forwarded-Proto"); strings.EqualFold(proto, "https") {
+		return true
+	}
+	return false
+}
+
+func forceSecureCookies() bool {
+	return strings.EqualFold(os.Getenv("SDSM_COOKIE_FORCE_SECURE"), "true")
+}
+
+func cookieShouldBeSecure(c *gin.Context) bool {
+	if forceSecureCookies() {
+		return true
+	}
+	return requestIsSecure(c)
+}
+
+// Resolve SameSite setting based on env; defaults to SameSiteNone for iframe compatibility
+func resolveSameSite() http.SameSite {
+	switch strings.ToLower(os.Getenv("SDSM_COOKIE_SAMESITE")) {
+	case "lax":
+		return http.SameSiteLaxMode
+	case "strict":
+		return http.SameSiteStrictMode
+	case "default":
+		return http.SameSiteDefaultMode
+	default:
+		// default to None to support embedding in preview if served over HTTPS
+		return http.SameSiteNoneMode
+	}
+}
+
+// Sets the auth cookie with appropriate flags for iframe environments
+func SetAuthCookie(c *gin.Context, token string) {
+	sameSite := resolveSameSite()
+	secure := cookieShouldBeSecure(c)
+	// SameSite=None requires Secure=true; fallback to Lax if connection isn't secure
+	if sameSite == http.SameSiteNoneMode && !secure {
+		sameSite = http.SameSiteLaxMode
+	}
+
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   int(TokenExpiry.Seconds()),
+	})
+}
+
+// Clears the auth cookie using the same attributes
+func ClearAuthCookie(c *gin.Context) {
+	sameSite := resolveSameSite()
+	secure := cookieShouldBeSecure(c)
+	if sameSite == http.SameSiteNoneMode && !secure {
+		sameSite = http.SameSiteLaxMode
+	}
+
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     CookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+		MaxAge:   -1,
+	})
+}
+
 // Middleware to require authentication
 func (a *AuthService) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -129,7 +206,14 @@ func (a *AuthService) RequireAPIAuth() gin.HandlerFunc {
 			return
 		}
 
+		// Prefer Authorization header but fall back to cookie for browser requests
 		tokenString := c.GetHeader("Authorization")
+		if tokenString == "" {
+			if cookieToken, err := c.Cookie(CookieName); err == nil {
+				tokenString = cookieToken
+			}
+		}
+
 		if tokenString == "" {
 			retryAfter, locked := a.recordAPIFailure(key)
 			if locked {
@@ -140,7 +224,7 @@ func (a *AuthService) RequireAPIAuth() gin.HandlerFunc {
 				})
 				return
 			}
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header or cookie required"})
 			return
 		}
 

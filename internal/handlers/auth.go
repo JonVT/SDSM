@@ -111,16 +111,8 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 		return
 	}
 
-	// Set secure cookie
-	c.SetCookie(
-		middleware.CookieName,
-		token,
-		int(middleware.TokenExpiry.Seconds()),
-		"/",
-		"",    // domain
-		false, // secure (set to true in production with HTTPS)
-		true,  // httpOnly
-	)
+	// Set auth cookie with proper SameSite/Secure flags (supports iframe/preview)
+	middleware.SetAuthCookie(c, token)
 
 	if redirect == "" || redirect == "/login" || redirect == "/setup" {
 		redirect = "/manager"
@@ -131,7 +123,7 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 }
 
 func (h *AuthHandlers) Logout(c *gin.Context) {
-	c.SetCookie(middleware.CookieName, "", -1, "/", "", false, true)
+	middleware.ClearAuthCookie(c)
 	c.Redirect(http.StatusFound, "/login")
 }
 

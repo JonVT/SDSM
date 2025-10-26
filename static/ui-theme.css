@@ -22,6 +22,9 @@
     --shadow-md: 0 18px 38px rgba(15, 23, 42, 0.28);
     --shadow-lg: 0 32px 60px rgba(15, 23, 42, 0.35);
     --transition-fast: 140ms ease;
+    /* Dashboard server card sizing */
+    --server-card-width: 400px;
+    --server-card-height: 280px;
 }
 
 [data-theme="light"] {
@@ -102,11 +105,15 @@ body {
     flex-direction: column;
     gap: var(--space-5);
     min-height: 100vh;
+    /* Ensure child flex items (containers) stretch full available width */
+    align-items: stretch;
 }
 
 .container {
     max-width: 1280px;
     margin: 0 auto;
+    /* Prevent incidental shrink-to-fit; always occupy full row width up to max */
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
@@ -117,6 +124,8 @@ body {
     grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
     gap: var(--space-4);
     align-items: center;
+    /* Make header fill its container width for consistent measurements */
+    width: 100%;
     padding: var(--space-5) var(--space-6);
     background: linear-gradient(135deg, rgba(37, 99, 235, 0.96) 0%, rgba(124, 58, 237, 0.92) 56%, rgba(236, 72, 153, 0.9) 100%);
     border-radius: var(--radius-xl);
@@ -125,6 +134,8 @@ body {
     color: rgba(248, 250, 252, 0.95);
     position: relative;
     overflow: hidden;
+    /* Ensure consistent height across pages regardless of minor content differences */
+    min-height: 160px;
 }
 
 .hero-card::after {
@@ -265,6 +276,19 @@ body {
     color: inherit;
 }
 
+/* Ensure inline SVG icons in buttons inherit color and render consistently */
+.btn svg,
+.icon-inline {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.btn svg {
+    stroke: currentColor;
+    fill: none;
+}
+
 .btn-pill {
     padding-inline: var(--space-3);
     min-width: 104px;
@@ -330,14 +354,56 @@ body {
 
 .grid-split {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    /* Flexible tracks: keep a sensible minimum, allow growth to fill row */
+    grid-template-columns: repeat(auto-fill, minmax(var(--server-card-width), 1fr));
     gap: var(--space-4);
+    align-items: stretch;
+}
+
+/* Server card: keep a consistent footprint */
+.server-card {
+    height: var(--server-card-height);
+    overflow: hidden;
+}
+
+/* Inline label/value layout inside server cards */
+.server-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.server-card .server-info { flex: 1; }
+
+.info-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+}
+
+.info-label {
+    flex: 0 0 auto;
+    color: var(--text-tertiary);
+    font-size: var(--text-sm);
+}
+
+.info-value {
+    flex: 1 1 auto;
+    text-align: right;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: var(--space-4);
+    /* Add breathing room before the server cards grid */
+    margin-bottom: var(--space-5);
 }
 
 .stat-card {
@@ -650,6 +716,27 @@ input[type="email"]:focus {
 
 .hidden {
     display: none !important;
+}
+
+/* HTMX indicator helper: show indicators during requests */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: inline-flex !important;
+}
+
+.dashboard-content {
+    display: block;
+}
+
+/* Ensure inner content gutters align with hero-card padding across pages */
+.dashboard-content,
+.manager-content,
+.server-content {
+    padding-left: var(--space-6);
+    padding-right: var(--space-6);
 }
 
 @media (max-width: 1200px) {

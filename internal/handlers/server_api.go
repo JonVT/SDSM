@@ -114,6 +114,19 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	}
 
 	s.Start()
+	// If requested via HTMX for HTML swap, return a single server card fragment
+	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
+		c.Header("HX-Trigger", "refresh")
+		c.Header("X-Toast-Type", "success")
+		c.Header("X-Toast-Title", "Server Started")
+		c.Header("X-Toast-Message", s.Name+" is starting…")
+		c.HTML(http.StatusOK, "server_card.html", s)
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Server Started")
+	c.Header("X-Toast-Message", s.Name+" is starting…")
 	c.JSON(http.StatusOK, gin.H{"status": "started"})
 }
 
@@ -131,7 +144,77 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	}
 
 	s.Stop()
+	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
+		c.Header("HX-Trigger", "refresh")
+		c.Header("X-Toast-Type", "success")
+		c.Header("X-Toast-Title", "Server Stopped")
+		c.Header("X-Toast-Message", s.Name+" has been stopped.")
+		c.HTML(http.StatusOK, "server_card.html", s)
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Server Stopped")
+	c.Header("X-Toast-Message", s.Name+" has been stopped.")
 	c.JSON(http.StatusOK, gin.H{"status": "stopped"})
+}
+
+func (h *ManagerHandlers) APIServerDelete(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Stop if running
+	if s.IsRunning() {
+		s.Stop()
+	}
+
+	// Delete server directory if paths available
+	if s.Paths != nil {
+		if err := s.Paths.DeleteServerDirectory(s.ID, s.Logger); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write("Failed to delete server directory: " + err.Error())
+			}
+		}
+	} else if h.manager.Paths != nil {
+		if err := h.manager.Paths.DeleteServerDirectory(s.ID, s.Logger); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write("Failed to delete server directory: " + err.Error())
+			}
+		}
+	}
+
+	// Remove from manager list
+	for i, srv := range h.manager.Servers {
+		if srv.ID == serverID {
+			h.manager.Servers = append(h.manager.Servers[:i], h.manager.Servers[i+1:]...)
+			break
+		}
+	}
+	h.manager.Save()
+
+	// If requested via HTMX for HTML swap, return empty body and trigger stats refresh + toast
+	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		c.Header("HX-Trigger", "refresh")
+		c.Header("X-Toast-Type", "success")
+		c.Header("X-Toast-Title", "Server Deleted")
+		c.Header("X-Toast-Message", s.Name+" has been deleted.")
+		c.Status(http.StatusOK)
+		return
+	}
+
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Server Deleted")
+	c.Header("X-Toast-Message", s.Name+" has been deleted.")
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
 func (h *ManagerHandlers) APIServerLog(c *gin.Context) {
@@ -190,15 +273,35 @@ func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {
 }
 
 func (h *ManagerHandlers) APIStats(c *gin.Context) {
+	totalServers := h.manager.ServerCount()
+	activeServers := h.manager.ServerCountActive()
+	totalPlayers := h.manager.GetTotalPlayers()
+
+	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		c.HTML(http.StatusOK, "stats.html", gin.H{
+			"totalServers":  totalServers,
+			"activeServers": activeServers,
+			"totalPlayers":  totalPlayers,
+			"systemHealth":  "100%",
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"totalServers":  h.manager.ServerCount(),
-		"activeServers": h.manager.ServerCountActive(),
-		"totalPlayers":  h.manager.GetTotalPlayers(),
+		"totalServers":  totalServers,
+		"activeServers": activeServers,
+		"totalPlayers":  totalPlayers,
 		"systemHealth":  "100%",
 	})
 }
 
 func (h *ManagerHandlers) APIServers(c *gin.Context) {
+	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		c.HTML(http.StatusOK, "server_cards.html", gin.H{
+			"servers": h.manager.Servers,
+		})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"servers": h.manager.Servers,
 	})

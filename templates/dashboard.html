@@ -28,12 +28,16 @@
             </div>
             <div class="hero-meta">
                 <div class="hero-meta-title">Fleet Overview</div>
-                <p class="hero-meta-text">{{ len .servers }} server{{ if ne (len .servers) 1 }}s{{ end }} tracked • stay in sync with live status, players, and health.</p>
+                <p class="hero-meta-text">
+                    <span id="header-total-servers">--</span> server<span id="header-total-servers-suffix">s</span> tracked •
+                    <span id="header-active-servers">--</span> active •
+                    <span id="header-total-players">--</span> players
+                </p>
                 <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
             </div>
             <div class="hero-actions">
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                    <span id="theme-icon">�</span>
+                    <span id="theme-icon">🌙</span>
                 </button>
                 <button
                     class="btn btn-primary"
@@ -42,18 +46,41 @@
                     hx-indicator="#refresh-indicator"
                     hx-swap="none"
                 >
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                        <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
                     <span id="refresh-indicator" class="hidden">⟳</span>
                     Refresh
                 </button>
-                <a href="/manager" class="btn btn-secondary">Manager</a>
-                <a href="/logout" class="btn btn-secondary">Logout</a>
+                <a href="/manager" class="btn btn-secondary">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 8.62 4.6 1.65 1.65 0 0 0 10.13 3H10a2 2 0 1 1 4 0v.09c0 .66.38 1.26.98 1.54.2.1.41.17.63.2.53.08 1.06-.07 1.46-.47l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.4.4-.55.93-.47 1.46.03.22.1.43.2.63.28.6.88.98 1.54.98H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    Manager
+                </a>
+                <a href="/logout" class="btn btn-secondary">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                    Logout
+                </a>
             </div>
         </header>
+    </div>
 
-        <section class="stats-grid"
-             hx-get="/api/stats"
-             hx-trigger="load, every 30s, refresh"
-                 hx-swap="innerHTML">
+    <main class="container dashboard-content">
+           <section class="stats-grid"
+               hx-get="/api/stats"
+               hx-trigger="load, every 30s, refresh"
+               hx-headers='{"Accept":"text/html"}'
+               hx-swap="innerHTML">
+            <span class="htmx-indicator pill" aria-hidden="true">Refreshing…</span>
             <div class="stat-card">
                 <div class="stat-value" id="total-servers">{{ len .servers }}</div>
                 <div class="stat-label">Total Servers</div>
@@ -87,88 +114,13 @@
         <section id="server-grid"
                  class="grid-split"
                  hx-get="/api/servers"
-             hx-trigger="load, every 10s, refresh"
+                 hx-trigger="load, every 10s, refresh"
+                 hx-headers='{"Accept":"text/html"}'
                  hx-swap="innerHTML">
-            {{ if .servers }}
-                {{ range .servers }}
-                <article class="glass-card server-card" data-server-id="{{ .ID }}" data-target-url="/server/{{ .ID }}">
-                    <div class="card-header">
-                        <div class="server-name card-title">{{ .Name }}</div>
-                        <span class="status-pill {{ if .IsRunning }}is-running{{ else }}is-stopped{{ end }}" data-status>
-                            {{ if .IsRunning }}Running{{ else }}Stopped{{ end }}
-                        </span>
-                    </div>
-                    <div class="server-info">
-                        <div class="info-item">
-                            <div class="info-label">World</div>
-                            <div class="info-value">{{ .World }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Port</div>
-                            <div class="info-value">{{ .Port }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Players</div>
-                            <div class="info-value" data-player-count>{{ .ClientCount }}/{{ .MaxClients }}</div>
-                        </div>
-                        <div class="info-item">
-                            <div class="info-label">Password</div>
-                            <div class="info-value">{{ if .Password }}Yes{{ else }}No{{ end }}</div>
-                        </div>
-                    </div>
-                    <div class="server-actions">
-                        {{ if .IsRunning }}
-                            <button
-                                class="btn btn-danger btn-pill"
-                                hx-post="/api/servers/{{ .ID }}/stop"
-                                hx-trigger="click"
-                                hx-confirm="Are you sure you want to stop this server?"
-                                hx-target="closest .server-card"
-                                hx-swap="outerHTML"
-                                data-stop-navigation="true"
-                            >
-                                Stop
-                            </button>
-                        {{ else }}
-                            <button
-                                class="btn btn-success btn-pill"
-                                hx-post="/server/{{ .ID }}"
-                                hx-trigger="click"
-                                hx-vals='{"start":"1"}'
-                                hx-target="closest .server-card"
-                                hx-swap="none"
-                                data-stop-navigation="true"
-                            >
-                                Start
-                            </button>
-                        {{ end }}
-                        <button
-                            class="btn btn-danger btn-pill"
-                            hx-post="/server/{{ .ID }}"
-                            hx-trigger="click"
-                            hx-confirm="Are you sure you want to delete {{ .Name }}? This cannot be undone."
-                            hx-vals='{"delete":"1"}'
-                            hx-target="body"
-                            hx-swap="none"
-                            data-stop-navigation="true"
-                        >
-                            Delete
-                        </button>
-                    </div>
-                </article>
-                {{ end }}
-            {{ else }}
-                <div class="glass-card empty-state">
-                    <div class="empty-state-icon" aria-hidden="true">�️</div>
-                    <h3 class="card-title">No Servers Found</h3>
-                    <p class="hero-subtitle">Get started by creating your first dedicated server configuration.</p>
-                    <button class="btn btn-primary" onclick="createNewServer()">
-                        Create New Server
-                    </button>
-                </div>
-            {{ end }}
+            <span class="htmx-indicator pill" aria-hidden="true">Refreshing…</span>
+            {{ template "server_cards.html" . }}
         </section>
-    </div>
+    </main>
 
     {{ if .servers }}
     <button class="floating-action" onclick="createNewServer()" aria-label="Add new server">+</button>
@@ -349,20 +301,36 @@
             if (stats.totalServers !== undefined) {
                 const total = document.getElementById('total-servers');
                 if (total) total.textContent = stats.totalServers;
+                const hTotal = document.getElementById('header-total-servers');
+                if (hTotal) hTotal.textContent = stats.totalServers;
+                const hSuffix = document.getElementById('header-total-servers-suffix');
+                if (hSuffix) hSuffix.textContent = stats.totalServers === 1 ? '' : 's';
             }
             if (stats.activeServers !== undefined) {
                 const active = document.getElementById('active-servers');
                 if (active) active.textContent = stats.activeServers;
+                const hActive = document.getElementById('header-active-servers');
+                if (hActive) hActive.textContent = stats.activeServers;
             }
             if (stats.totalPlayers !== undefined) {
                 const players = document.getElementById('total-players');
                 if (players) players.textContent = stats.totalPlayers;
+                const hPlayers = document.getElementById('header-total-players');
+                if (hPlayers) hPlayers.textContent = stats.totalPlayers;
             }
             const refresh = document.getElementById('last-refresh');
             if (refresh) {
                 const now = new Date();
                 refresh.textContent = now.toLocaleTimeString();
             }
+        }
+
+        // Lightweight header poll to ensure header stats stay in sync even without websocket
+        function pollHeaderStats() {
+            fetch('/api/stats', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' })
+                .then(r => r.ok ? r.json() : null)
+                .then(data => { if (data) updateStats(data); })
+                .catch(() => {});
         }
 
         function createNewServer() {
@@ -372,6 +340,9 @@
         document.addEventListener('DOMContentLoaded', () => {
             connectWebSocket();
             startHealthMonitor();
+            // Initial header stats + interval
+            pollHeaderStats();
+            setInterval(pollHeaderStats, 30000);
 
             document.body.addEventListener('htmx:beforeRequest', event => {
                 if (event.detail.elt?.getAttribute('hx-indicator') === '#refresh-indicator') {
@@ -408,5 +379,7 @@
             }
         });
     </script>
+    
+    {{ template "toast.html" . }}
 </body>
 </html>

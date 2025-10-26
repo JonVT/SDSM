@@ -15,11 +15,141 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        .header {
-            background: var(--bg-secondary);
+        body {
+            display: flex;
+            min-height: 100vh;
+            margin: 0;
+            background: var(--page-background);
+        }
+
+        .layout-container {
+            display: flex;
+            width: 100%;
+            gap: var(--space-6);
+            padding: var(--space-6);
+        }
+
+        .progress-sidebar {
+            width: 280px;
+            position: sticky;
+            top: var(--space-6);
+            height: fit-content;
+            background: var(--panel-gradient);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
+            backdrop-filter: blur(24px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .progress-header {
+            margin-bottom: var(--space-4);
+            padding-bottom: var(--space-3);
             border-bottom: 1px solid var(--border-color);
-            padding: var(--space-4) 0;
+        }
+
+        .progress-header h3 {
+            margin: 0;
+            font-size: var(--text-lg);
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .progress-header h3::before {
+            content: '📋';
+            font-size: var(--text-xl);
+        }
+
+        .progress-stats {
+            margin-top: var(--space-2);
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+        }
+
+        .progress-bar-container {
+            margin: var(--space-3) 0;
+            padding: var(--space-3);
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--border-color);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+            margin-top: var(--space-2);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #ec4899);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-label {
+            font-size: var(--text-xs);
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .progress-items {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .progress-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-2) 0;
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+        }
+
+        .progress-item-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: var(--radius-full);
+            border: 2px solid var(--border-color);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+
+        .progress-item.completed .progress-item-icon {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-color: #10b981;
+            color: white;
+        }
+
+        .progress-item.completed {
+            color: var(--text-tertiary);
+            text-decoration: line-through;
+        }
+
+        .form-container {
+            flex: 1;
+            max-width: 900px;
+        }
+
+        .header {
+            background: var(--panel-gradient);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-xl);
+            padding: var(--space-5);
             margin-bottom: var(--space-6);
+            backdrop-filter: blur(24px);
+            box-shadow: var(--shadow-md);
         }
         
         .header-content {
@@ -27,14 +157,26 @@
             justify-content: space-between;
             align-items: center;
         }
+
+        .header h1 {
+            font-size: var(--text-2xl);
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 var(--space-1) 0;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            margin: 0;
+        }
         
         .form-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-lg);
+            background: var(--panel-gradient);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-xl);
             padding: var(--space-6);
-            max-width: 800px;
-            margin: 0 auto;
+            backdrop-filter: blur(24px);
+            box-shadow: var(--shadow-md);
         }
         
         .form-section {
@@ -126,7 +268,81 @@
             border-color: rgba(239, 68, 68, 0.35);
             color: #991b1b;
         }
+
+        .form-section h3 {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+        }
+
+        .help-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .help-toggle:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transform: scale(1.1);
+        }
+
+        .help-box {
+            background: rgba(59, 130, 246, 0.08);
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            margin-bottom: var(--space-4);
+        }
+
+        .help-content h4 {
+            margin: 0 0 var(--space-3) 0;
+            color: var(--text-primary);
+            font-size: var(--text-base);
+            font-weight: 600;
+        }
+
+        .help-content ul {
+            margin: 0;
+            padding-left: var(--space-5);
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            line-height: 1.6;
+        }
+
+        .help-content li {
+            margin-bottom: var(--space-2);
+        }
+
+        .help-content strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
         
+        @media (max-width: 1024px) {
+            .layout-container {
+                flex-direction: column;
+            }
+
+            .progress-sidebar {
+                width: 100%;
+                position: relative;
+                top: 0;
+            }
+
+            .form-container {
+                max-width: 100%;
+            }
+        }
+
         @media (max-width: 768px) {
             .form-grid {
                 grid-template-columns: 1fr;
@@ -137,27 +353,67 @@
 
 <body>
     {{ $form := .form }}
-    <!-- Header -->
-    <header class="header">
-        <div class="container">
-            <div class="header-content">
-                <div>
-                    <h1>Create New Server</h1>
-                    <p class="text-secondary">Configure and deploy a new Stationeers server</p>
-                </div>
-                <div>
-                    <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+    
+    <div class="layout-container">
+        <!-- Progress Sidebar -->
+        <aside class="progress-sidebar">
+            <div class="progress-header">
+                <h3>Form Progress</h3>
+                <div class="progress-stats">
+                    <span id="completedCount">0</span> of <span id="totalCount">5</span> required fields
                 </div>
             </div>
-        </div>
-    </header>
+
+            <div class="progress-bar-container">
+                <div class="progress-label">Completion</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+
+            <ul class="progress-items">
+                <li class="progress-item" data-field="name">
+                    <span class="progress-item-icon"></span>
+                    <span>Server Name</span>
+                </li>
+                <li class="progress-item" data-field="world">
+                    <span class="progress-item-icon"></span>
+                    <span>World</span>
+                </li>
+                <li class="progress-item" data-field="start_location">
+                    <span class="progress-item-icon"></span>
+                    <span>Start Location</span>
+                </li>
+                <li class="progress-item" data-field="start_condition">
+                    <span class="progress-item-icon"></span>
+                    <span>Start Condition</span>
+                </li>
+                <li class="progress-item" data-field="difficulty">
+                    <span class="progress-item-icon"></span>
+                    <span>Difficulty</span>
+                </li>
+            </ul>
+        </aside>
+
+        <div class="form-container">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-content">
+                    <div>
+                        <h1>Create New Server</h1>
+                        <p class="text-secondary">Configure and deploy a new Stationeers server</p>
+                    </div>
+                    <div>
+                        <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+                    </div>
+                </div>
+            </header>
     
-    <main class="container">
-        {{ if .error }}
-        <div class="alert alert-error" role="alert">{{ .error }}</div>
-        {{ end }}
-        <form method="POST" action="/server/new">
-            <div class="form-card">
+            {{ if .error }}
+            <div class="alert alert-error" role="alert">{{ .error }}</div>
+            {{ end }}
+            <form method="POST" action="/server/new" id="serverForm">
+                <div class="form-card">
                 <!-- Basic Settings -->
                 <div class="form-section">
                     <h3>Basic Settings</h3>
@@ -244,7 +500,27 @@
                 
                 <!-- Advanced Settings -->
                 <div class="form-section">
-                    <h3>Advanced Settings</h3>
+                    <h3>
+                        Advanced Settings
+                        <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </button>
+                    </h3>
+                    <div class="help-box" id="advanced-help" style="display: none;">
+                        <div class="help-content">
+                            <h4>Advanced Settings Guide</h4>
+                            <ul>
+                                <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
+                                <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
+                                <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
+                                <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
+                            </ul>
+                        </div>
+                    </div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="save_interval">Save Interval (seconds) *</label>
@@ -325,7 +601,8 @@
                 </div>
             </div>
         </form>
-    </main>
+        </div>
+    </div>
 
     <script>
         let worldLists = {"release": [], "beta": []};
@@ -503,6 +780,52 @@
             if (!hasSelectedCondition) {
                 selectedStartCondition = "";
             }
+
+            updateProgressTracker();
+        }
+
+        function updateProgressTracker() {
+            const requiredFields = [
+                { id: 'name', field: 'name' },
+                { id: 'world', field: 'world' },
+                { id: 'start_location', field: 'start_location' },
+                { id: 'start_condition', field: 'start_condition' },
+                { id: 'difficulty', field: 'difficulty' }
+            ];
+
+            let completedCount = 0;
+
+            requiredFields.forEach(({ id, field }) => {
+                const input = document.getElementById(id);
+                const item = document.querySelector(`.progress-item[data-field="${field}"]`);
+                
+                if (input && item) {
+                    const isComplete = input.value && input.value.trim() !== '';
+                    
+                    if (isComplete) {
+                        item.classList.add('completed');
+                        item.querySelector('.progress-item-icon').textContent = '✓';
+                        completedCount++;
+                    } else {
+                        item.classList.remove('completed');
+                        item.querySelector('.progress-item-icon').textContent = '';
+                    }
+                }
+            });
+
+            const totalCount = requiredFields.length;
+            const percentage = Math.round((completedCount / totalCount) * 100);
+
+            document.getElementById('completedCount').textContent = completedCount;
+            document.getElementById('totalCount').textContent = totalCount;
+            document.getElementById('progressFill').style.width = percentage + '%';
+        }
+
+        function toggleHelp(targetId) {
+            const helpBox = document.getElementById(targetId);
+            if (helpBox) {
+                helpBox.style.display = helpBox.style.display === 'none' ? 'block' : 'none';
+            }
         }
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -510,6 +833,8 @@
             const locSelect = document.getElementById("start_location");
             const condSelect = document.getElementById("start_condition");
             const versionSelect = document.getElementById("beta");
+            const nameInput = document.getElementById("name");
+            const difficultySelect = document.getElementById("difficulty");
 
             versionSelect.value = defaultVersion === "true" ? "true" : "false";
             populateWorldOptions();
@@ -525,12 +850,31 @@
 
             locSelect.addEventListener("change", () => {
                 selectedStartLocation = locSelect.value;
+                updateProgressTracker();
             });
 
             condSelect.addEventListener("change", () => {
                 selectedStartCondition = condSelect.value;
+                updateProgressTracker();
             });
+
+            nameInput.addEventListener("input", updateProgressTracker);
+            difficultySelect.addEventListener("change", updateProgressTracker);
+
+            // Help toggle handlers
+            document.querySelectorAll('.help-toggle').forEach(button => {
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('data-help-target');
+                    toggleHelp(targetId);
+                });
+            });
+
+            // Initial progress update
+            updateProgressTracker();
         });
     </script>
+    
+    {{ template "toast.html" . }}
 </body>
 </html>

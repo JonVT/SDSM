@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	htmltmpl "html/template"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
-	"text/template"
 	"time"
 
 	"sdsm/internal/handlers"
@@ -157,8 +157,8 @@ func setupRouter() *gin.Engine {
 	// Rate limiting - 100 requests per minute per IP
 	r.Use(app.rateLimiter.Middleware())
 
-	// Load templates
-	r.SetFuncMap(template.FuncMap{
+	// Load templates: include root-level and one-level nested (e.g., templates/partials)
+	funcMap := htmltmpl.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"has": func(slice []string, item string) bool {
 			for _, s := range slice {
@@ -168,8 +168,13 @@ func setupRouter() *gin.Engine {
 			}
 			return false
 		},
-	})
-	r.LoadHTMLGlob("templates/*")
+	}
+	r.SetFuncMap(funcMap)
+	// Build a combined template set so both root and subdir files are available by name
+	t := htmltmpl.New("").Funcs(funcMap)
+	t = htmltmpl.Must(t.ParseGlob("templates/*.html"))
+	t = htmltmpl.Must(t.ParseGlob("templates/*/*.html"))
+	r.SetHTMLTemplate(t)
 	r.Static("/static", "./static")
 	r.StaticFile("/sdsm.png", "./sdsm.png")
 
@@ -211,11 +216,13 @@ func setupRouter() *gin.Engine {
 		auth.GET("/logout", authHandlers.Logout)
 	}
 
+	// API login (public - does not require token)
+	r.POST("/api/login", authHandlers.APILogin)
+
 	// API routes (require token authentication)
 	api := r.Group("/api")
 	api.Use(app.authService.RequireAPIAuth())
 	{
-		api.POST("/login", authHandlers.APILogin)
 		api.GET("/stats", managerHandlers.APIStats)
 		api.GET("/servers", managerHandlers.APIServers)
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
@@ -223,6 +230,7 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/log", managerHandlers.APIServerLog)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
+		api.POST("/servers/:server_id/delete", managerHandlers.APIServerDelete)
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)
 	}
