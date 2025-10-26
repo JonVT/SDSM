@@ -63,7 +63,24 @@
             <!-- Server information moved out of the header into a dedicated card -->
             <div class="server-content">
             <div class="glass-card">
-                <h3>{{.server.Name}}</h3>
+                <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}">
+                    {{ if .server.Beta }}
+                    <!-- Beta icon: lab flask (matches dashboard) -->
+                    <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
+                        <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
+                        <path d="M7 14h10"/>
+                    </svg>
+                    {{ else }}
+                    <!-- Release icon: server stack (matches dashboard) -->
+                    <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                        <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                        <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                    </svg>
+                    {{ end }}
+                    {{.server.Name}}
+                </h3>
 
                 <div class="server-info-row">
                     <img 
@@ -92,9 +109,7 @@
                 </div>
             </div>
 
-        <!-- Main grid layout: 2 columns x 2 rows -->
-        <div class="main-grid">
-            <!-- Top Left: Server Control -->
+            <!-- Server Control moved here: full-width under Server Info -->
             <div class="card card-control">
                 <div class="card-header">
                     <h2 class="card-title">Server Control</h2>
@@ -136,25 +151,26 @@
                                     </svg>
                                     Save
                                 </button>
-                            </div>
-                        </div>
-                        <div class="control-row">
-                            <label>Storm:</label>
-                            <div class="button-group">
+                                <span class="control-sep" aria-hidden="true">•</span>
+                                {{/* Storm control moved inline with server controls */}}
                                 {{if .server.Running}}
-                                <button type="button" class="btn btn-control">Start/Stop</button>
+                                <button type="button" class="btn btn-control btn-storm" id="btn-storm">
+                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm">
+                                        <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
+                                        <polyline points="13 11 9 17 15 17 11 23"/>
+                                    </svg>
+                                    Storm Start/Stop
+                                </button>
                                 {{else}}
-                                <button type="button" class="btn btn-control" disabled>Start/Stop</button>
+                                <button type="button" class="btn btn-control btn-storm" id="btn-storm" disabled aria-disabled="true">
+                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm">
+                                        <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
+                                        <polyline points="13 11 9 17 15 17 11 23"/>
+                                    </svg>
+                                    Storm Start/Stop
+                                </button>
                                 {{end}}
                             </div>
-                        </div>
-                        <div class="control-row">
-                            <label>Difficulty:</label>
-                            <select name="difficulty" class="form-select-inline" {{if not .server.Running}}disabled{{end}}>
-                                {{range .manager.GetDifficulties}}
-                                <option value="{{.}}" {{if eq . $.server.Difficulty}}selected{{end}}>{{.}}</option>
-                                {{end}}
-                            </select>
                         </div>
                         <div class="status-info">
                             <div class="status-row">
@@ -211,7 +227,9 @@
                 </form>
             </div>
 
-            <!-- Top Right: Players List -->
+        <!-- Main grid layout: 2 columns x 2 rows -->
+        <div class="main-grid">
+            <!-- Top Left: Players List -->
             {{ $live := .server.LiveClients }}
             {{ $liveCount := len $live }}
             {{ $history := .server.Clients }}
@@ -224,6 +242,7 @@
                 <div class="tab-set">
                     <button type="button" class="tab-btn active" data-target="players-live">Live</button>
                     <button type="button" class="tab-btn" data-target="players-history">History</button>
+                    <button type="button" class="tab-btn" data-target="players-banned">Banned</button>
                 </div>
                 <div class="players-section">
                     <div class="tab-panel active" id="players-live">
@@ -252,12 +271,22 @@
                                     <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                                     <td>
                                         <form method="POST" style="display: inline;">
-                                            <button type="submit" name="kick" value="{{.Name}}" class="btn btn-secondary btn-compact btn-min-xs">Kick</button>
+                                            <button type="submit" name="kick" value="{{.Name}}" class="btn btn-warning btn-icon" aria-label="Kick" title="Kick">
+                                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <circle cx="12" cy="12" r="9"></circle>
+                                                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                                                </svg>
+                                            </button>
                                         </form>
                                     </td>
                                     <td>
                                         <form method="POST" style="display: inline;">
-                                            <button type="submit" name="ban" value="{{.Name}}" class="btn btn-secondary btn-compact btn-min-xs">Ban</button>
+                                            <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban" title="Ban">
+                                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <circle cx="12" cy="12" r="9"></circle>
+                                                    <line x1="5" y1="19" x2="19" y2="5"></line>
+                                                </svg>
+                                            </button>
                                         </form>
                                     </td>
                                 </tr>
@@ -273,8 +302,8 @@
                                     <th>Player Name</th>
                                     <th>Steam ID</th>
                                     <th>Connected At</th>
-                                    <th>Disconnected At</th>
                                     <th>Session Length</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="players-history-body">
@@ -290,18 +319,116 @@
                                     </td>
                                     <td>{{.SteamID}}</td>
                                     <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
-                                    <td>{{if .DisconnectDatetime}}{{.DisconnectDatetime.Format "2006-01-02 15:04:05"}}{{else}}Active{{end}}</td>
                                     <td>{{.SessionDurationString}}</td>
+                                    <td>
+                                        <form method="POST" style="display: inline;">
+                                            <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban" title="Ban">
+                                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <circle cx="12" cy="12" r="9"></circle>
+                                                    <line x1="5" y1="19" x2="19" y2="5"></line>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    </td>
                                 </tr>
                                 {{end}}
                             </tbody>
                         </table>
                         <div class="empty-state" id="players-history-empty" {{if gt $historyCount 0}}style="display:none;"{{end}}>No player sessions recorded</div>
                     </div>
+                    <div class="tab-panel" id="players-banned">
+                        {{ $banned := .banned }}
+                        <table class="players-table" id="players-banned-table" {{if or (not $banned) (eq (len $banned) 0)}}style="display:none;"{{end}}>
+                            <thead>
+                                <tr>
+                                    <th>Player Name</th>
+                                    <th>Steam ID</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="players-banned-body">
+                                {{if $banned}}
+                                    {{range $banned}}
+                                    <tr>
+                                        <td>
+                                            {{if .Name}}{{.Name}}{{else}}—{{end}}
+                                        </td>
+                                        <td>{{.SteamID}}</td>
+                                        <td>
+                                            <form method="POST" style="display: inline;">
+                                                <button type="submit" name="unban" value="{{.SteamID}}" class="btn btn-success btn-icon" aria-label="Unban" title="Unban">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                        <circle cx="12" cy="12" r="9"></circle>
+                                                        <polyline points="9 12 12 15 17 10"></polyline>
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    {{end}}
+                                {{end}}
+                            </tbody>
+                        </table>
+                        <div class="empty-state" id="players-banned-empty" {{if and $banned (gt (len $banned) 0)}}style="display:none;"{{end}}>No banned players</div>
+
+                        <form method="POST" id="banned-add-form" class="form-inline" style="margin-top: var(--space-3);">
+                            <label for="ban_steam_id" class="sr-only">Steam ID</label>
+                            <input type="text" id="ban_steam_id" name="ban_steam_id" placeholder="Enter Steam ID" class="form-input-inline" style="min-width: 240px;">
+                            <button type="submit" name="add_ban" value="true" class="btn btn-primary btn-min-sm">
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="9"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                                </svg>
+                                <span style="margin-left: 6px;">Add</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
-            <!-- Bottom Left: Startup Parameters -->
+            <!-- Top Right: Chat -->
+            <div class="card card-chat">
+                <div class="card-header">
+                    <h2 class="card-title">Chat</h2>
+                    <span class="pill">Live Stream</span>
+                </div>
+                <div class="chat-section">
+                    <div class="chat-messages" id="chat-messages">
+                        {{if gt (len .server.Chat) 0}}
+                            {{range .server.Chat}}
+                            <div class="chat-message">
+                                <span class="chat-time">{{.Datetime.Format "15:04"}}</span>
+                                <span class="chat-player">{{.Name}}:</span>
+                                <span class="chat-text">{{.Message}}</span>
+                            </div>
+                            {{end}}
+                        {{end}}
+                    </div>
+                    <div class="empty-state" id="chat-empty" {{if gt (len .server.Chat) 0}}style="display:none;"{{end}}>No chat messages</div>
+                    <form method="POST" class="chat-input-form" id="chat-send-form">
+                        <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
+                        <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                                <line x1="22" y1="2" x2="11" y2="13"/>
+                            </svg>
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Bottom Left: Backups (placeholder where Control used to be) -->
+            <div class="card card-backups">
+                <div class="card-header">
+                    <h2 class="card-title">Backups</h2>
+                    <span class="pill">Coming Soon</span>
+                </div>
+                <div class="empty-state">Backup management will appear here.</div>
+            </div>
+
+            <!-- Bottom Right: Startup Parameters -->
             <div class="card card-config">
                 <div class="card-header">
                     <h2 class="card-title">Startup Parameters</h2>
@@ -332,14 +459,6 @@
                             <label>Start Condition:</label>
                             <select name="start_condition" id="start_condition" class="form-select-inline">
                                 <option value="">Loading...</option>
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <label>Difficulty:</label>
-                            <select name="difficulty_param" class="form-select-inline">
-                                {{range .manager.GetDifficulties}}
-                                <option value="{{.}}" {{if eq . $.server.Difficulty}}selected{{end}}>{{.}}</option>
-                                {{end}}
                             </select>
                         </div>
                         <div class="form-row">
@@ -426,37 +545,7 @@
                 </form>
             </div>
 
-            <!-- Bottom Right: Chat -->
-            <div class="card card-chat">
-                <div class="card-header">
-                    <h2 class="card-title">Chat</h2>
-                    <span class="pill">Live Stream</span>
-                </div>
-                <div class="chat-section">
-                    <div class="chat-messages" id="chat-messages">
-                        {{if gt (len .server.Chat) 0}}
-                            {{range .server.Chat}}
-                            <div class="chat-message">
-                                <span class="chat-time">{{.Datetime.Format "15:04"}}</span>
-                                <span class="chat-player">{{.Name}}:</span>
-                                <span class="chat-text">{{.Message}}</span>
-                            </div>
-                            {{end}}
-                        {{end}}
-                    </div>
-                    <div class="empty-state" id="chat-empty" {{if gt (len .server.Chat) 0}}style="display:none;"{{end}}>No chat messages</div>
-                    <form method="POST" class="chat-input-form" id="chat-send-form">
-                        <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
-                        <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button">
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                                <line x1="22" y1="2" x2="11" y2="13"/>
-                            </svg>
-                            Send
-                        </button>
-                    </form>
-                </div>
-            </div>
+            
         </div>
     </div>
     </div>
@@ -550,6 +639,10 @@
         const connectionBannerText = document.getElementById('connection-banner-text');
         const chatMessagesContainer = document.getElementById('chat-messages');
         const chatEmptyState = document.getElementById('chat-empty');
+        const playersBannedTable = document.getElementById('players-banned-table');
+        const playersBannedBody = document.getElementById('players-banned-body');
+        const playersBannedEmpty = document.getElementById('players-banned-empty');
+        let bannedSteamSet = new Set();
 
         let serverIsRunning = rootEl.dataset.serverRunning === "true";
         let serverIsPaused = rootEl.dataset.serverPaused === "true";
@@ -636,6 +729,22 @@
             }
         }
 
+            function toggleButtonSpinner(btn, on) {
+                if (!btn) return;
+                btn.setAttribute('aria-busy', on ? 'true' : 'false');
+                let sp = btn.querySelector('.btn-spinner');
+                if (on) {
+                    if (!sp) {
+                        sp = document.createElement('span');
+                        sp.className = 'btn-spinner';
+                        sp.setAttribute('aria-hidden', 'true');
+                        btn.appendChild(sp);
+                    }
+                } else if (sp) {
+                    sp.remove();
+                }
+            }
+
         function updateLiveCount(count) {
             if (!playersLiveCount) {
                 return;
@@ -650,7 +759,7 @@
             return td;
         }
 
-        function createPlayerNameCell(player) {
+        function createPlayerNameCell(player, opts) {
             const td = document.createElement('td');
             const wrapper = document.createElement('span');
             wrapper.className = 'player-name';
@@ -662,6 +771,32 @@
                 badge.setAttribute('aria-label', 'Admin');
                 badge.textContent = '🛡️';
                 wrapper.appendChild(badge);
+            }
+
+            // Optional banned indicator when requested (used on History tab)
+            if (opts && opts.banned) {
+                const bannedIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                bannedIcon.setAttribute('class', 'icon-inline player-banned-icon');
+                bannedIcon.setAttribute('width', '14');
+                bannedIcon.setAttribute('height', '14');
+                bannedIcon.setAttribute('viewBox', '0 0 24 24');
+                bannedIcon.setAttribute('fill', 'none');
+                bannedIcon.setAttribute('stroke', 'currentColor');
+                bannedIcon.setAttribute('stroke-width', '2');
+                bannedIcon.setAttribute('aria-hidden', 'true');
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', '12');
+                circle.setAttribute('cy', '12');
+                circle.setAttribute('r', '9');
+                const slash = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                slash.setAttribute('x1', '5');
+                slash.setAttribute('y1', '19');
+                slash.setAttribute('x2', '19');
+                slash.setAttribute('y2', '5');
+                bannedIcon.appendChild(circle);
+                bannedIcon.appendChild(slash);
+                bannedIcon.setAttribute('title', 'Banned');
+                wrapper.appendChild(bannedIcon);
             }
 
             const nameSpan = document.createElement('span');
@@ -682,8 +817,27 @@
             button.type = 'submit';
             button.name = action;
             button.value = playerName || '';
-            button.className = 'btn btn-secondary btn-compact btn-min-xs';
-            button.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+            // Assign color by action: ban=red, unban=green, kick=amber
+            if (action === 'ban') {
+                button.className = 'btn btn-danger btn-icon';
+            } else if (action === 'unban') {
+                button.className = 'btn btn-success btn-icon';
+            } else if (action === 'kick') {
+                button.className = 'btn btn-warning btn-icon';
+            } else {
+                button.className = 'btn btn-secondary btn-icon';
+            }
+            button.setAttribute('aria-label', action.charAt(0).toUpperCase() + action.slice(1));
+            button.title = action.charAt(0).toUpperCase() + action.slice(1);
+            if (action === 'ban') {
+                button.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><line x1="5" y1="19" x2="19" y2="5"></line></svg>';
+            } else if (action === 'unban') {
+                button.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><polyline points="9 12 12 15 17 10"></polyline></svg>';
+            } else if (action === 'kick') {
+                button.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>';
+            } else {
+                button.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+            }
 
             form.appendChild(button);
             td.appendChild(form);
@@ -712,7 +866,7 @@
                 row.appendChild(createTextCell(player.steam_id || ''));
                 row.appendChild(createTextCell(formatDateTimeDisplay(player.connected_at, '—')));
                 row.appendChild(createActionCell(player.name || '', 'kick'));
-                row.appendChild(createActionCell(player.name || '', 'ban'));
+                row.appendChild(createActionCell(player.steam_id || '', 'ban'));
                 playersLiveBody.appendChild(row);
             });
 
@@ -736,11 +890,15 @@
 
             history.forEach(entry => {
                 const row = document.createElement('tr');
-                row.appendChild(createPlayerNameCell(entry));
+                const isBanned = !!(entry && entry.steam_id && bannedSteamSet && bannedSteamSet.has(entry.steam_id));
+                if (isBanned) {
+                    row.classList.add('row-banned');
+                }
+                row.appendChild(createPlayerNameCell(entry, { banned: isBanned }));
                 row.appendChild(createTextCell(entry.steam_id || ''));
                 row.appendChild(createTextCell(formatDateTimeDisplay(entry.connected_at, '—')));
-                row.appendChild(createTextCell(entry.disconnect_at ? formatDateTimeDisplay(entry.disconnect_at, '—') : 'Active'));
                 row.appendChild(createTextCell(entry.session_length || '—'));
+                row.appendChild(createActionCell(entry.steam_id || '', isBanned ? 'unban' : 'ban'));
                 playersHistoryBody.appendChild(row);
             });
         }
@@ -786,6 +944,48 @@
             });
 
             chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+        }
+
+        function renderBanned(list) {
+            if (!playersBannedBody) {
+                return;
+            }
+            playersBannedBody.textContent = '';
+
+            if (!Array.isArray(list) || list.length === 0) {
+                showElement(playersBannedTable, false);
+                showElement(playersBannedEmpty, true);
+                return;
+            }
+
+            showElement(playersBannedTable, true, 'table');
+            showElement(playersBannedEmpty, false);
+
+            list.forEach(entry => {
+                const row = document.createElement('tr');
+                const nameTd = document.createElement('td');
+                nameTd.textContent = (entry && entry.name) ? entry.name : '—';
+                const idTd = document.createElement('td');
+                idTd.textContent = entry && entry.steam_id ? entry.steam_id : '';
+                const actionTd = document.createElement('td');
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.style.display = 'inline';
+                const btn = document.createElement('button');
+                btn.type = 'submit';
+                btn.name = 'unban';
+                btn.value = (entry && entry.steam_id) ? entry.steam_id : '';
+                btn.className = 'btn btn-success btn-icon';
+                btn.setAttribute('aria-label', 'Unban');
+                btn.title = 'Unban';
+                btn.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><polyline points="9 12 12 15 17 10"></polyline></svg>';
+                form.appendChild(btn);
+                actionTd.appendChild(form);
+                row.appendChild(nameTd);
+                row.appendChild(idTd);
+                row.appendChild(actionTd);
+                playersBannedBody.appendChild(row);
+            });
         }
 
         function setConnectionBanner(active, message) {
@@ -1324,6 +1524,14 @@
                     credentials: 'same-origin'
                 })
                     .then(res => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch (_) {}
                         if (!res.ok) {
                             return res.json().then(data => Promise.reject(data));
                         }
@@ -1389,6 +1597,15 @@
                     renderLivePlayers([]);
                 }
 
+                // Keep banned set updated before rendering History rows so we can annotate
+                if (Array.isArray(data.banned)) {
+                    try {
+                        bannedSteamSet = new Set((data.banned || []).map(b => b && b.steam_id).filter(Boolean));
+                    } catch (_) { bannedSteamSet = new Set(); }
+                } else {
+                    bannedSteamSet = new Set();
+                }
+
                 if (Array.isArray(data.clients)) {
                     renderHistoryPlayers(data.clients);
                 } else {
@@ -1399,6 +1616,12 @@
                     renderChatMessages(data.chat_messages);
                 } else {
                     renderChatMessages([]);
+                }
+
+                if (Array.isArray(data.banned)) {
+                    renderBanned(data.banned);
+                } else {
+                    renderBanned([]);
                 }
 
                 updateControlButtons(data);
@@ -1472,6 +1695,213 @@
             fetchProgress();
             fetchStatus();
             startStatusUpdates();
+
+            // Intercept Banned Add form submit for async update
+            (function(){
+                const addForm = document.getElementById('banned-add-form');
+                const input = document.getElementById('ban_steam_id');
+                const addBtn = addForm ? addForm.querySelector('button[type="submit"]') : null;
+                if (addForm && input) {
+                    addForm.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const id = (input.value || '').trim();
+                        if (!id) return;
+                        if (addBtn && addBtn.disabled) return;
+                        // Disable input and button while request is in flight
+                        if (addBtn) {
+                            setButtonDisabled(addBtn, true);
+                            toggleButtonSpinner(addBtn, true);
+                        }
+                        input.disabled = true;
+                        fetch(window.location.pathname, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            body: 'add_ban=1&ban_steam_id=' + encodeURIComponent(id),
+                            credentials: 'same-origin'
+                        }).then((res) => {
+                            try {
+                                if (typeof window.showToast === 'function') {
+                                    const type = res.headers.get('X-Toast-Type');
+                                    const title = res.headers.get('X-Toast-Title');
+                                    const message = res.headers.get('X-Toast-Message');
+                                    if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                                }
+                            } catch (_) {}
+                            input.value = '';
+                            fetchStatus();
+                        }).catch(() => {
+                            // No-op; status poll will reconcile
+                        }).finally(() => {
+                            if (addBtn) {
+                                toggleButtonSpinner(addBtn, false);
+                                setButtonDisabled(addBtn, false);
+                            }
+                            input.disabled = false;
+                        });
+                    });
+                }
+            })();
+
+            // Intercept Unban button clicks in banned table
+            (function(){
+                if (!playersBannedBody) return;
+                playersBannedBody.addEventListener('click', function(e){
+                    const btn = e.target.closest && e.target.closest('button[name="unban"]');
+                    if (!btn) return;
+                    e.preventDefault();
+                    const id = (btn.value || '').trim();
+                    if (!id) return;
+                    if (btn.disabled) return;
+                    setButtonDisabled(btn, true);
+                    toggleButtonSpinner(btn, true);
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: 'unban=' + encodeURIComponent(id),
+                        credentials: 'same-origin'
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch (_) {}
+                        fetchStatus();
+                    }).catch(() => {
+                        // No-op
+                    }).finally(() => {
+                        toggleButtonSpinner(btn, false);
+                        setButtonDisabled(btn, false);
+                    });
+                });
+            })();
+
+            // Intercept Start/Stop/Restart to use async fetch with toast + disable buttons during request
+            (function(){
+                function postAction(param, btn) {
+                    if (!param) return;
+                    if (btn && btn.disabled) return;
+                    if (btn) { setButtonDisabled(btn, true); toggleButtonSpinner(btn, true); }
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: encodeURIComponent(param) + '=1',
+                        credentials: 'same-origin'
+                    })
+                    .then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch (_) {}
+                        // status refresh to reflect new state
+                        fetchStatus();
+                        return res.ok ? res.json().catch(() => ({})) : Promise.resolve({});
+                    })
+                    .catch(() => { /* ignore, status poll will reconcile */ })
+                    .finally(() => {
+                        if (btn) { toggleButtonSpinner(btn, false); setButtonDisabled(btn, false); }
+                    });
+                }
+
+                if (startButton) {
+                    startButton.addEventListener('click', function(e){ e.preventDefault(); postAction('start', startButton); });
+                }
+                if (stopButton) {
+                    stopButton.addEventListener('click', function(e){ e.preventDefault(); postAction('stop', stopButton); });
+                }
+                if (restartButton) {
+                    restartButton.addEventListener('click', function(e){ e.preventDefault(); postAction('restart', restartButton); });
+                }
+            })();
+
+            // Make Live/History Kick/Ban async as well (with toasts and button disable)
+            (function(){
+                // Local safe wrappers in case shared helpers aren't present
+                function setBtnDisabled(btn, disabled) {
+                    try { if (typeof setButtonDisabled === 'function') return setButtonDisabled(btn, disabled); } catch(_) {}
+                    btn.disabled = !!disabled;
+                }
+                function toggleBtnSpinner(btn, on) {
+                    try { if (typeof toggleButtonSpinner === 'function') return toggleButtonSpinner(btn, on); } catch(_) {}
+                    // Minimal fallback: swap content with a simple spinner dot
+                    if (!btn) return;
+                    if (on) {
+                        if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+                        btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>';
+                    } else {
+                        if (btn.dataset.originalHtml) { btn.innerHTML = btn.dataset.originalHtml; delete btn.dataset.originalHtml; }
+                    }
+                }
+                function showToastFromResponse(res) {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                        }
+                    } catch (_) {}
+                }
+
+                function postPlayerAction(action, value, btn) {
+                    if (!action || !value) return;
+                    if (btn && btn.disabled) return;
+                    if (btn) { setBtnDisabled(btn, true); toggleBtnSpinner(btn, true); }
+                    const body = encodeURIComponent(action) + '=' + encodeURIComponent(value);
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body,
+                        credentials: 'same-origin'
+                    })
+                    .then((res) => { showToastFromResponse(res); fetchStatus(); return res.ok ? res.json().catch(() => ({})) : Promise.resolve({}); })
+                    .catch(() => { /* ignore; polling will reconcile */ })
+                    .finally(() => { if (btn) { toggleBtnSpinner(btn, false); setBtnDisabled(btn, false); } });
+                }
+
+                function delegateAction(container) {
+                    if (!container) return;
+                    container.addEventListener('click', function(e){
+                        const banBtn = e.target.closest && e.target.closest('button[name="ban"]');
+                        const unbanBtn = !banBtn && e.target.closest && e.target.closest('button[name="unban"]');
+                        const kickBtn = !banBtn && !unbanBtn && e.target.closest && e.target.closest('button[name="kick"]');
+                        const btn = banBtn || unbanBtn || kickBtn;
+                        if (!btn) return;
+                        e.preventDefault();
+                        const action = banBtn ? 'ban' : (unbanBtn ? 'unban' : 'kick');
+                        const value = (btn.value || '').trim();
+                        if (!value) return;
+                        postPlayerAction(action, value, btn);
+                    });
+                }
+
+                const liveBody = document.getElementById('players-live-body');
+                const historyBody = document.getElementById('players-history-body');
+                delegateAction(liveBody);
+                delegateAction(historyBody);
+            })();
         });
     </script>
     {{ template "toast.html" . }}

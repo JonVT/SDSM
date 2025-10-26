@@ -59,6 +59,94 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	isAsync := acceptsJSON || isXHR || isHX
 
 	switch {
+	case c.PostForm("unban") != "":
+		steamID := strings.TrimSpace(c.PostForm("unban"))
+		if steamID != "" {
+			_ = s.RemoveBlacklistID(steamID)
+			if isAsync {
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Player Unbanned")
+				c.Header("X-Toast-Message", fmt.Sprintf("%s removed from blacklist", steamID))
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+				return
+			}
+		}
+
+	case c.PostForm("ban") != "":
+		banVal := strings.TrimSpace(c.PostForm("ban"))
+		steamID := ""
+		// Prefer direct SteamID
+		if banVal != "" {
+			steamID = banVal
+		}
+		// If value looks like a name (no digits) or didn't match any known ID, try resolve by name
+		if steamID != "" {
+			// If it's a name, try to resolve to steam id from live or history
+			isProbablyName := true
+			for _, ch := range steamID {
+				if ch >= '0' && ch <= '9' {
+					isProbablyName = false
+					break
+				}
+			}
+			if isProbablyName {
+				candidate := strings.ToLower(steamID)
+				steamID = ""
+				for _, c := range s.LiveClients() {
+					if c != nil && strings.EqualFold(c.Name, candidate) {
+						steamID = c.SteamID
+						break
+					}
+				}
+				if steamID == "" {
+					for _, c := range s.Clients {
+						if c != nil && strings.EqualFold(c.Name, candidate) {
+							steamID = c.SteamID
+							break
+						}
+					}
+				}
+			}
+		}
+		if steamID == "" {
+			if isAsync {
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Ban Failed")
+				c.Header("X-Toast-Message", "Unable to determine Steam ID for ban.")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "steam id not found"})
+				return
+			}
+		} else {
+			_ = s.AddBlacklistID(steamID)
+			if isAsync {
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Player Banned")
+				c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+				return
+			}
+		}
+
+	case c.PostForm("add_ban") != "":
+		steamID := strings.TrimSpace(c.PostForm("ban_steam_id"))
+		if steamID != "" {
+			if err := s.AddBlacklistID(steamID); err != nil {
+				if isAsync {
+					c.Header("X-Toast-Type", "error")
+					c.Header("X-Toast-Title", "Add Failed")
+					c.Header("X-Toast-Message", "Could not add to blacklist: "+err.Error())
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+			} else if isAsync {
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Added to Blacklist")
+				c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+				return
+			}
+		}
+
 	case c.PostForm("start") != "":
 		s.Start()
 		if isAsync {

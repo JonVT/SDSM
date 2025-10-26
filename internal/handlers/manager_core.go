@@ -64,6 +64,7 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		"worldLists": worldLists,
 		"worldData":  worldData,
 		"serverPath": h.manager.Paths.ServerDir(s.ID),
+		"banned":     s.BannedEntries(),
 	}
 
 	if errMsg != "" {

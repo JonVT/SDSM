@@ -153,6 +153,150 @@ func (s *Server) playersLogPath() string {
 	return filepath.Join(s.Paths.ServerLogsDir(s.ID), playersLogFileName)
 }
 
+// blacklistPath returns the canonical path to the server's Blacklist.txt in the deployed game/bin directory.
+func (s *Server) blacklistPath() string {
+	if s.Paths == nil {
+		return ""
+	}
+	return filepath.Join(s.Paths.ServerGameDir(s.ID), "Blacklist.txt")
+}
+
+// ReadBlacklistIDs reads a comma-separated list of Steam IDs from Blacklist.txt and returns a unique, trimmed list.
+func (s *Server) ReadBlacklistIDs() []string {
+	path := s.blacklistPath()
+	if path == "" {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	raw := string(data)
+	// Support commas and newlines as separators just in case
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	raw = strings.ReplaceAll(raw, "\r", ",")
+	parts := strings.Split(raw, ",")
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, p := range parts {
+		id := strings.TrimSpace(p)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// WriteBlacklistIDs writes the provided IDs back to Blacklist.txt as a single comma-separated line.
+func (s *Server) WriteBlacklistIDs(ids []string) error {
+	path := s.blacklistPath()
+	if path == "" {
+		return fmt.Errorf("blacklist path unavailable")
+	}
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	// Normalize and de-dup
+	seen := make(map[string]struct{})
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	content := strings.Join(out, ",")
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// AddBlacklistID appends the id to Blacklist.txt if not already present.
+func (s *Server) AddBlacklistID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("empty steam id")
+	}
+	ids := s.ReadBlacklistIDs()
+	for _, existing := range ids {
+		if existing == id {
+			return nil
+		}
+	}
+	ids = append(ids, id)
+	return s.WriteBlacklistIDs(ids)
+}
+
+// RemoveBlacklistID removes the id from Blacklist.txt if present.
+func (s *Server) RemoveBlacklistID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("empty steam id")
+	}
+	ids := s.ReadBlacklistIDs()
+	if len(ids) == 0 {
+		return nil
+	}
+	filtered := make([]string, 0, len(ids))
+	for _, existing := range ids {
+		if existing == id {
+			continue
+		}
+		filtered = append(filtered, existing)
+	}
+	// Always write back to ensure file exists and duplicates removed
+	return s.WriteBlacklistIDs(filtered)
+}
+
+// ResolveNameForSteamID finds the most recent known player name for the given Steam ID based on history.
+func (s *Server) ResolveNameForSteamID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
+	}
+	// Ensure history is loaded
+	s.loadPlayerHistory()
+	// Scan from end to get most recent
+	for i := len(s.Clients) - 1; i >= 0; i-- {
+		c := s.Clients[i]
+		if c == nil {
+			continue
+		}
+		if c.SteamID == id && strings.TrimSpace(c.Name) != "" {
+			return c.Name
+		}
+	}
+	return ""
+}
+
+type BannedEntry struct {
+	SteamID string `json:"steam_id"`
+	Name    string `json:"name"`
+}
+
+// BannedEntries returns the list of banned Steam IDs with best-effort names from player history.
+func (s *Server) BannedEntries() []BannedEntry {
+	ids := s.ReadBlacklistIDs()
+	if len(ids) == 0 {
+		return nil
+	}
+	result := make([]BannedEntry, 0, len(ids))
+	for _, id := range ids {
+		name := s.ResolveNameForSteamID(id)
+		result = append(result, BannedEntry{SteamID: id, Name: name})
+	}
+	return result
+}
+
 func (s *Server) loadPlayerHistory() {
 	if s.playerHistoryLoaded {
 		return

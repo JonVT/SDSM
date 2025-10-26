@@ -83,6 +83,15 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 
 	lastLine := strings.TrimSpace(s.LastLogLine)
 
+	// Banned list (from Blacklist.txt cross-referenced with players.log for names)
+	banned := make([]gin.H, 0)
+	for _, be := range s.BannedEntries() {
+		banned = append(banned, gin.H{
+			"name":     be.Name,
+			"steam_id": be.SteamID,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":             s.ID,
 		"name":           s.Name,
@@ -97,6 +106,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"paused":         s.Paused,
 		"clients":        history,
 		"chat_messages":  chatMessages,
+		"banned":         banned,
 	})
 }
 
