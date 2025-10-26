@@ -7,12 +7,21 @@
 <article class="glass-card server-card" data-server-id="{{ $srv.ID }}" data-target-url="/server/{{ $srv.ID }}">
   <div class="card-header">
     <div class="server-name card-title">
-      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      {{ if $srv.Beta }}
+      <!-- Beta icon: lab flask -->
+      <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
+        <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
+        <path d="M7 14h10"/>
+      </svg>
+      {{ else }}
+      <!-- Release icon: server stack (default) -->
+      <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
         <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
         <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
         <line x1="6" y1="6" x2="6.01" y2="6"></line>
         <line x1="6" y1="18" x2="6.01" y2="18"></line>
       </svg>
+      {{ end }}
       {{ $srv.Name }}
     </div>
     <span class="status-pill {{ if $srv.IsRunning }}is-running{{ else }}is-stopped{{ end }}" data-status>

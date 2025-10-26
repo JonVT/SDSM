@@ -225,7 +225,7 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-2);
+    gap: 0; /* no gap until expanded */
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-full);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -682,12 +682,51 @@ input[type="email"]:focus {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+    overflow: hidden;
+    white-space: nowrap;
     font-size: var(--text-xl);
     background: linear-gradient(130deg, var(--primary-500) 0%, var(--primary-600) 100%);
     color: white;
     border: none;
     box-shadow: var(--shadow-md);
     cursor: pointer;
+    transition: width var(--transition-fast), padding var(--transition-fast),
+                box-shadow var(--transition-fast), background var(--transition-fast),
+                transform var(--transition-fast);
+}
+
+/* Reveal label on hover/focus by growing into a pill and showing ::after text */
+.floating-action::after {
+    content: "Add Server";
+    display: inline-block;
+    margin-left: 0;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    opacity: 0;
+    transform: translateX(6px);
+    max-width: 0; /* don't take layout space when hidden */
+    overflow: hidden;
+    transition: opacity var(--transition-fast), transform var(--transition-fast), max-width var(--transition-fast), margin var(--transition-fast);
+    pointer-events: none;
+}
+
+.floating-action:hover,
+.floating-action:focus-visible {
+    width: 172px; /* expands into an oval pill */
+    justify-content: flex-start;
+    gap: var(--space-2);
+    box-shadow: var(--shadow-lg);
+}
+
+.floating-action:hover::after,
+.floating-action:focus-visible::after {
+    opacity: 1;
+    transform: translateX(0);
+    max-width: 140px;
+    margin-left: var(--space-2);
 }
 
 .badge-trend {
@@ -975,6 +1014,10 @@ input[type="email"]:focus {
 }
 .chat-input:focus { outline: none; border-color: rgba(59, 130, 246, 0.45); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18); }
 
+/* Dashboard server version icons (next to name) */
+.server-card .server-name .icon-release { color: var(--success-500); }
+.server-card .server-name .icon-beta { color: var(--primary-500); }
+
 .form-grid-compact { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-3); }
 .form-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .form-row label { font-weight: 600; color: var(--text-tertiary); }
@@ -1090,4 +1133,9 @@ input[type="email"]:focus {
     /* Reduce gaps so button groups fit better on narrow screens */
     .button-group { gap: var(--space-1); }
     .chat-input-form { gap: var(--space-1); }
+    /* Keep FAB compact on very small screens */
+    .floating-action:hover,
+    .floating-action:focus-visible { width: 58px; justify-content: center; }
+    .floating-action:hover::after,
+    .floating-action:focus-visible::after { opacity: 0; transform: translateX(6px); }
 }
