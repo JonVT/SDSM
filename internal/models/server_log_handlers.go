@@ -15,6 +15,7 @@ var (
 	clientDisconnectRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Client\s+disconnected:\s*(\S+)\s+\|\s+(.+?)\s+connectTime:.*ClientId:\s*(\d+)`)
 	difficultyRegex       = regexp.MustCompile(`Set difficulty to\s+(\S+)`)
 	worldLoadedRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+loaded\s+(\S+)\s+things in`)
+	adminCommandRegex     = regexp.MustCompile(`(?i)client\s+'(.+?)\s+\(([^)]+)\)'\s+ran\s+command`)
 
 	logLineHandlers = []logLineHandler{
 		{
@@ -102,6 +103,19 @@ var (
 				if len(fields) > 2 {
 					s.World = fields[2]
 				}
+			},
+		},
+		{
+			match: func(line string) []string {
+				return adminCommandRegex.FindStringSubmatch(line)
+			},
+			handle: func(s *Server, _ string, matches []string) {
+				if len(matches) < 3 {
+					return
+				}
+				name := strings.TrimSpace(matches[1])
+				steamID := strings.TrimSpace(matches[2])
+				s.markClientAdmin(name, steamID)
 			},
 		},
 		{

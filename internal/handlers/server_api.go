@@ -42,6 +42,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 			"name":         client.Name,
 			"steam_id":     client.SteamID,
 			"connected_at": client.ConnectDatetime.Format(time.RFC3339),
+			"is_admin":     client.IsAdmin,
 		})
 	}
 
@@ -60,6 +61,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 			"connected_at":   client.ConnectDatetime.Format(time.RFC3339),
 			"disconnect_at":  disconnect,
 			"session_length": client.SessionDurationString(),
+			"is_admin":       client.IsAdmin,
 		})
 	}
 

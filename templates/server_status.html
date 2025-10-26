@@ -573,6 +573,24 @@
             border-collapse: collapse;
         }
 
+        .player-name {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+        }
+
+        .player-admin-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.15rem 0.35rem;
+            border-radius: var(--radius-full);
+            background: rgba(59, 130, 246, 0.16);
+            color: var(--primary-500);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
         .connection-banner {
             position: fixed;
             top: 0;
@@ -857,7 +875,14 @@
                             <tbody id="players-live-body">
                                 {{range $live}}
                                 <tr>
-                                    <td>{{.Name}}</td>
+                                    <td>
+                                        <span class="player-name">
+                                            {{.Name}}
+                                            {{if .IsAdmin}}
+                                            <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
+                                            {{end}}
+                                        </span>
+                                    </td>
                                     <td>{{.SteamID}}</td>
                                     <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                                     <td>
@@ -890,7 +915,14 @@
                             <tbody id="players-history-body">
                                 {{range $history}}
                                 <tr>
-                                    <td>{{.Name}}</td>
+                                    <td>
+                                        <span class="player-name">
+                                            {{.Name}}
+                                            {{if .IsAdmin}}
+                                            <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
+                                            {{end}}
+                                        </span>
+                                    </td>
                                     <td>{{.SteamID}}</td>
                                     <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                                     <td>{{if .DisconnectDatetime}}{{.DisconnectDatetime.Format "2006-01-02 15:04:05"}}{{else}}Active{{end}}</td>
@@ -1210,6 +1242,28 @@
             return td;
         }
 
+        function createPlayerNameCell(player) {
+            const td = document.createElement('td');
+            const wrapper = document.createElement('span');
+            wrapper.className = 'player-name';
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = player && player.name ? player.name : 'Unknown';
+            wrapper.appendChild(nameSpan);
+
+            if (player && player.is_admin) {
+                const badge = document.createElement('span');
+                badge.className = 'player-admin-icon';
+                badge.title = 'Admin';
+                badge.setAttribute('aria-label', 'Admin');
+                badge.textContent = '🛡️';
+                wrapper.appendChild(badge);
+            }
+
+            td.appendChild(wrapper);
+            return td;
+        }
+
         function createActionCell(playerName, action) {
             const td = document.createElement('td');
             const form = document.createElement('form');
@@ -1246,7 +1300,7 @@
 
             players.forEach(player => {
                 const row = document.createElement('tr');
-                row.appendChild(createTextCell(player.name || 'Unknown'));
+                row.appendChild(createPlayerNameCell(player));
                 row.appendChild(createTextCell(player.steam_id || ''));
                 row.appendChild(createTextCell(formatDateTimeDisplay(player.connected_at, '—')));
                 row.appendChild(createActionCell(player.name || '', 'kick'));
@@ -1274,7 +1328,7 @@
 
             history.forEach(entry => {
                 const row = document.createElement('tr');
-                row.appendChild(createTextCell(entry.name || 'Unknown'));
+                row.appendChild(createPlayerNameCell(entry));
                 row.appendChild(createTextCell(entry.steam_id || ''));
                 row.appendChild(createTextCell(formatDateTimeDisplay(entry.connected_at, '—')));
                 row.appendChild(createTextCell(entry.disconnect_at ? formatDateTimeDisplay(entry.disconnect_at, '—') : 'Active'));

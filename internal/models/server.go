@@ -29,6 +29,7 @@ type Client struct {
 	Name               string     `json:"name"`
 	ConnectDatetime    time.Time  `json:"connect_datetime"`
 	DisconnectDatetime *time.Time `json:"disconnect_datetime,omitempty"`
+	IsAdmin            bool       `json:"is_admin"`
 }
 
 func (c *Client) IsOnline() bool {
@@ -187,11 +188,16 @@ func (s *Server) loadPlayerHistory() {
 				disconnect = &t
 			}
 		}
+		isAdmin := false
+		if len(fields) >= 6 {
+			isAdmin = strings.TrimSpace(fields[5]) == "1"
+		}
 		client := &Client{
 			SteamID:            fields[0],
 			Name:               fields[1],
 			ConnectDatetime:    connect,
 			DisconnectDatetime: disconnect,
+			IsAdmin:            isAdmin,
 		}
 		s.Clients = append(s.Clients, client)
 	}
@@ -225,12 +231,17 @@ func (s *Server) appendPlayerLog(c *Client) {
 	if c.DisconnectDatetime != nil {
 		disconnect = c.DisconnectDatetime.Format(time.RFC3339)
 	}
-	entry := fmt.Sprintf("%s,%s,%s,%s,%s\n",
+	adminFlag := "0"
+	if c.IsAdmin {
+		adminFlag = "1"
+	}
+	entry := fmt.Sprintf("%s,%s,%s,%s,%s,%s\n",
 		c.SteamID,
 		strings.ReplaceAll(c.Name, ",", " "),
 		c.ConnectDatetime.Format(time.RFC3339),
 		disconnect,
 		c.SessionDurationString(),
+		adminFlag,
 	)
 	if _, err := file.WriteString(entry); err != nil && s.Logger != nil {
 		s.Logger.Write(fmt.Sprintf("Failed to write players log entry: %v", err))
@@ -252,12 +263,17 @@ func (s *Server) rewritePlayersLog() {
 		if client.DisconnectDatetime != nil {
 			disconnect = client.DisconnectDatetime.Format(time.RFC3339)
 		}
-		entry := fmt.Sprintf("%s,%s,%s,%s,%s",
+		adminFlag := "0"
+		if client.IsAdmin {
+			adminFlag = "1"
+		}
+		entry := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
 			client.SteamID,
 			strings.ReplaceAll(client.Name, ",", " "),
 			client.ConnectDatetime.Format(time.RFC3339),
 			disconnect,
 			client.SessionDurationString(),
+			adminFlag,
 		)
 		entries = append(entries, entry)
 	}
@@ -313,6 +329,36 @@ func (s *Server) LiveClients() []*Client {
 		}
 	}
 	return live
+}
+
+func (s *Server) markClientAdmin(name, steamID string) {
+	if name == "" && steamID == "" {
+		return
+	}
+
+	updated := false
+	for _, client := range s.Clients {
+		if client == nil {
+			continue
+		}
+		if steamID != "" && client.SteamID == steamID {
+			if !client.IsAdmin {
+				client.IsAdmin = true
+				updated = true
+			}
+			continue
+		}
+		if name != "" && strings.EqualFold(client.Name, name) {
+			if !client.IsAdmin {
+				client.IsAdmin = true
+				updated = true
+			}
+		}
+	}
+
+	if updated {
+		s.rewritePlayersLog()
+	}
 }
 
 func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *Server {
