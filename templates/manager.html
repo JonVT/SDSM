@@ -27,41 +27,7 @@
             color: #f8fafc;
         }
 
-        .connection-banner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            gap: var(--space-3);
-            padding: var(--space-3) var(--space-5);
-            background: rgba(239, 68, 68, 0.95);
-            color: #ffffff;
-            font-weight: 600;
-            z-index: 4000;
-            box-shadow: var(--shadow-lg);
-        }
-
-        .connection-banner.active {
-            display: flex;
-        }
-
-        .connection-banner button {
-            padding: var(--space-1) var(--space-3);
-            border: 1px solid rgba(255, 255, 255, 0.55);
-            border-radius: var(--radius-md);
-            background: rgba(255, 255, 255, 0.18);
-            color: #ffffff;
-            font-size: var(--text-sm);
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-
-        .connection-banner button:hover {
-            background: rgba(255, 255, 255, 0.32);
-        }
+        /* Connection banner uses shared styles from ui-theme.css */
         
         
         .button-group {
@@ -87,20 +53,7 @@
             color: var(--text-primary);
         }
         
-        .theme-toggle {
-            background: rgba(248, 250, 252, 0.15);
-            border: 1px solid rgba(255, 255, 255, 0.35);
-            border-radius: var(--radius-md);
-            padding: var(--space-2);
-            cursor: pointer;
-            transition: all var(--transition-default);
-            color: #f8fafc;
-        }
-        
-        .theme-toggle:hover {
-            background: rgba(248, 250, 252, 0.25);
-            border-color: rgba(255, 255, 255, 0.45);
-        }
+        /* Theme toggle uses shared styles from ui-theme.css */
 
         .setup-overlay {
             position: fixed;
