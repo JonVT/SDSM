@@ -164,37 +164,39 @@
                     <div class="form-grid">
                         <div class="form-group form-grid-full">
                             <label for="name">Server Name *</label>
-                                {{ $selectedDifficulty := index $form "difficulty" }}
-                                {{ range .difficulties }}
-                                <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
+                            <input type="text" id="name" name="name" required
+                                   value="{{ index $form "name" }}"
                                    placeholder="Enter server name">
                             <p class="help-text">The name that will appear in the server list</p>
                         </div>
-                        
+
                         <div class="form-group">
-                            <label class="form-label">World</label>
+                            <label class="form-label" for="world">World *</label>
                             <select name="world" id="world" class="form-select" required>
                                 <option value="">Loading...</option>
                             </select>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Start Location</label>
-                            <select name="start_location" id="start_location" class="form-select">
+                            <label class="form-label" for="start_location">Start Location *</label>
+                            <select name="start_location" id="start_location" class="form-select" required>
                                 <option value="">Loading...</option>
                             </select>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Start Condition</label>
-                            <select name="start_condition" id="start_condition" class="form-select">
+                            <label class="form-label" for="start_condition">Start Condition *</label>
+                            <select name="start_condition" id="start_condition" class="form-select" required>
                                 <option value="">Loading...</option>
                             </select>
-                        </div>                        <div class="form-group">
+                        </div>
+
+                        {{ $selectedDifficulty := index $form "difficulty" }}
+                        <div class="form-group">
                             <label for="difficulty">Difficulty *</label>
                             <select id="difficulty" name="difficulty" required>
                                 {{ range .difficulties }}
-                                <option value="{{ . }}" {{ if eq . "Normal" }}selected{{ end }}>{{ . }}</option>
+                                <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
                                 {{ end }}
                             </select>
                             <p class="help-text">Game difficulty level</p>

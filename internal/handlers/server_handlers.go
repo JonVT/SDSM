@@ -216,12 +216,6 @@ func (h *ManagerHandlers) NewServerGET(c *gin.Context) {
 
 func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	username, _ := c.Get("username")
-
-	if !middleware.ValidateFormData(c, []string{"name", "world", "difficulty", "port", "max_clients", "save_interval", "beta"}) {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{"error": "Missing required fields"})
-		return
-	}
-
 	name := middleware.SanitizeString(c.PostForm("name"))
 	world := middleware.SanitizeString(c.PostForm("world"))
 	startLocation := middleware.SanitizeString(c.PostForm("start_location"))
@@ -229,7 +223,7 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	difficulty := middleware.SanitizeString(c.PostForm("difficulty"))
 	password := c.PostForm("password")
 	authSecret := c.PostForm("auth_secret")
-	betaRaw := c.PostForm("beta")
+	betaRaw := strings.TrimSpace(c.PostForm("beta"))
 	beta := betaRaw == "true"
 	autoStart := c.PostForm("auto_start") == "on"
 	autoUpdate := c.PostForm("auto_update") == "on"
@@ -255,6 +249,54 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		"auto_save":             autoSave,
 		"auto_pause":            autoPause,
 		"server_visible":        serverVisible,
+	}
+
+	if name == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Server name is required.",
+			"form":  formState,
+		})
+		return
+	}
+
+	if world == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "World selection is required.",
+			"form":  formState,
+		})
+		return
+	}
+
+	if startLocation == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Start location is required.",
+			"form":  formState,
+		})
+		return
+	}
+
+	if startCondition == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Start condition is required.",
+			"form":  formState,
+		})
+		return
+	}
+
+	if difficulty == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Difficulty selection is required.",
+			"form":  formState,
+		})
+		return
+	}
+
+	if betaRaw == "" {
+		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+			"error": "Game version selection is required.",
+			"form":  formState,
+		})
+		return
 	}
 
 	if !h.manager.IsServerNameAvailable(name, -1) {

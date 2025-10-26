@@ -70,11 +70,7 @@ func ValidateJSON(v interface{}) gin.HandlerFunc {
 // Form validation helper
 func ValidateFormData(c *gin.Context, requiredFields []string) bool {
 	for _, field := range requiredFields {
-		value := c.PostForm(field)
-		if value == "" {
-			c.HTML(http.StatusBadRequest, "error.html", gin.H{
-				"error": "Missing required field: " + field,
-			})
+		if strings.TrimSpace(c.PostForm(field)) == "" {
 			return false
 		}
 	}

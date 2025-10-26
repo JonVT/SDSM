@@ -42,10 +42,10 @@ const (
 )
 
 type Manager struct {
-	Active            bool             `json:"active"`
+	Active            bool             `json:"-"`
 	ConfigFile        string           `json:"-"`
-	Updating          bool             `json:"updating"`
-	SetupInProgress   bool             `json:"setup_in_progress"`
+	Updating          bool             `json:"-"`
+	SetupInProgress   bool             `json:"-"`
 	Log               *utils.Logger    `json:"-"`
 	UpdateLog         *utils.Logger    `json:"-"`
 	SteamID           string           `json:"steam_id"`
@@ -580,10 +580,20 @@ func (m *Manager) load() (bool, error) {
 		return false, fmt.Errorf("configuration file not found: %w", err)
 	}
 
-	// Create a temporary struct to unmarshal into, preserving existing Paths
+	// Preserve previously persisted active state for backward compatibility.
+	var wasActive bool
+	if len(data) > 0 {
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err == nil {
+			if activeRaw, ok := raw["active"]; ok {
+				_ = json.Unmarshal(activeRaw, &wasActive)
+			}
+		}
+	}
+
+	// Create a temporary struct to unmarshal into, preserving existing Paths.
 	temp := &Manager{}
-	err = json.Unmarshal(data, temp)
-	if err != nil {
+	if err := json.Unmarshal(data, temp); err != nil {
 		return false, fmt.Errorf("error parsing configuration: %w", err)
 	}
 
@@ -600,7 +610,6 @@ func (m *Manager) load() (bool, error) {
 		m.Paths = temp.Paths
 	}
 
-	wasActive := temp.Active
 	m.Updating = false
 	m.Active = true
 

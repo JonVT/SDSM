@@ -1,0 +1,10 @@
+2025-10-25 20:57:19: Configuration loaded successfully
+2025-10-25 20:57:19: Missing components detected: [SteamCMD Stationeers Release BepInEx Stationeers LaunchPad]
+2025-10-25 20:57:19: - SteamCMD expected at /home/steam/sdsm/SDSM/go/bin/steamcmd/steamcmd.sh
+2025-10-25 20:57:19: - Stationeers release binary expected at /home/steam/sdsm/SDSM/go/bin/release/rocketstation_DedicatedServer.x86_64
+2025-10-25 20:57:19: - BepInEx files expected under /home/steam/sdsm/SDSM/go/bin/BepInEx
+2025-10-25 20:57:19: - Stationeers LaunchPad expected at /home/steam/sdsm/SDSM/go/bin/launchpad
+2025-10-25 20:57:50: Shutting down all servers.
+2025-10-25 20:57:50: All servers stopped successfully.
+2025-10-25 20:57:50: Configuration saved successfully
+2025-10-25 20:57:50: SDSM is shutting down.

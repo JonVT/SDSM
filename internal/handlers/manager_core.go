@@ -76,6 +76,34 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, username interface{}, overrides gin.H) {
 	worldLists, worldData := h.buildWorldSelectionData()
 
+	defaultVersionKey := ""
+	defaultWorld := ""
+	defaultStartLocation := ""
+	defaultStartCondition := ""
+	defaultBetaValue := "false"
+
+	if releaseWorlds := worldLists["release"]; len(releaseWorlds) > 0 {
+		defaultWorld = releaseWorlds[0]
+		defaultVersionKey = "release"
+	} else if betaWorlds := worldLists["beta"]; len(betaWorlds) > 0 {
+		defaultWorld = betaWorlds[0]
+		defaultVersionKey = "beta"
+		defaultBetaValue = "true"
+	}
+
+	if defaultVersionKey != "" && defaultWorld != "" {
+		if versionedWorlds, ok := worldData[defaultVersionKey]; ok {
+			if worldEntry, ok := versionedWorlds[defaultWorld]; ok {
+				if locationsRaw, ok := worldEntry["locations"].([]manager.LocationInfo); ok && len(locationsRaw) > 0 {
+					defaultStartLocation = locationsRaw[0].ID
+				}
+				if conditionsRaw, ok := worldEntry["conditions"].([]manager.ConditionInfo); ok && len(conditionsRaw) > 0 {
+					defaultStartCondition = conditionsRaw[0].ID
+				}
+			}
+		}
+	}
+
 	const defaultServerPort = 27016
 	suggestedName := "My Stationeers Server"
 	if count := h.manager.ServerCount(); count > 0 {
@@ -84,9 +112,9 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 
 	formDefaults := gin.H{
 		"name":                  suggestedName,
-		"world":                 "",
-		"start_location":        "",
-		"start_condition":       "",
+		"world":                 defaultWorld,
+		"start_location":        defaultStartLocation,
+		"start_condition":       defaultStartCondition,
 		"difficulty":            "Normal",
 		"port":                  fmt.Sprintf("%d", h.manager.GetNextAvailablePort(defaultServerPort)),
 		"max_clients":           "10",
@@ -94,7 +122,7 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		"auth_secret":           "",
 		"save_interval":         "300",
 		"restart_delay_seconds": fmt.Sprintf("%d", models.DefaultRestartDelaySeconds),
-		"beta":                  "false",
+		"beta":                  defaultBetaValue,
 		"auto_start":            false,
 		"auto_update":           false,
 		"auto_save":             true,
@@ -109,6 +137,22 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 			}
 			delete(overrides, "form")
 		}
+	}
+
+	if worldValue, ok := formDefaults["world"].(string); ok && worldValue == "" {
+		formDefaults["world"] = defaultWorld
+	}
+
+	if locValue, ok := formDefaults["start_location"].(string); ok && locValue == "" {
+		formDefaults["start_location"] = defaultStartLocation
+	}
+
+	if condValue, ok := formDefaults["start_condition"].(string); ok && condValue == "" {
+		formDefaults["start_condition"] = defaultStartCondition
+	}
+
+	if betaValue, ok := formDefaults["beta"].(string); ok && betaValue == "" {
+		formDefaults["beta"] = defaultBetaValue
 	}
 
 	payload := gin.H{
