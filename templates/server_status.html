@@ -472,6 +472,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            min-width: 0;
+            max-width: 100%;
         }
 
         .btn-log {
@@ -877,10 +879,10 @@
                                 <tr>
                                     <td>
                                         <span class="player-name">
-                                            {{.Name}}
                                             {{if .IsAdmin}}
                                             <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
                                             {{end}}
+                                            {{.Name}}
                                         </span>
                                     </td>
                                     <td>{{.SteamID}}</td>
@@ -917,10 +919,10 @@
                                 <tr>
                                     <td>
                                         <span class="player-name">
-                                            {{.Name}}
                                             {{if .IsAdmin}}
                                             <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
                                             {{end}}
+                                            {{.Name}}
                                         </span>
                                     </td>
                                     <td>{{.SteamID}}</td>
@@ -1056,22 +1058,21 @@
             <div class="card">
                 <h2 class="card-title">Chat</h2>
                 <div class="chat-section">
-                    <div class="chat-messages">
-                        {{if .server.Chat}}
-                        {{range .server.Chat}}
-                        <div class="chat-message">
-                            <span class="chat-time">{{.Time.Format "15:04"}}</span>
-                            <span class="chat-player">{{.Player}}:</span>
-                            <span class="chat-text">{{.Message}}</span>
-                        </div>
-                        {{end}}
-                        {{else}}
-                        <div class="empty-state">No chat messages</div>
+                    <div class="chat-messages" id="chat-messages">
+                        {{if gt (len .server.Chat) 0}}
+                            {{range .server.Chat}}
+                            <div class="chat-message">
+                                <span class="chat-time">{{.Datetime.Format "15:04"}}</span>
+                                <span class="chat-player">{{.Name}}:</span>
+                                <span class="chat-text">{{.Message}}</span>
+                            </div>
+                            {{end}}
                         {{end}}
                     </div>
-                    <form method="POST" class="chat-input-form">
-                        <input type="text" name="chat_message" placeholder="Type message..." class="chat-input">
-                        <button type="submit" name="send_chat" value="true" class="btn btn-send">Send</button>
+                    <div class="empty-state" id="chat-empty" {{if gt (len .server.Chat) 0}}style="display:none;"{{end}}>No chat messages</div>
+                    <form method="POST" class="chat-input-form" id="chat-send-form">
+                        <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
+                        <button type="submit" name="send_chat" value="true" class="btn btn-send" id="chat-send-button">Send</button>
                     </form>
                 </div>
             </div>
@@ -1154,6 +1155,8 @@
         const deleteButton = document.getElementById('btn-delete');
         const connectionBanner = document.getElementById('connection-status');
         const connectionBannerText = document.getElementById('connection-status-text');
+        const chatMessagesContainer = document.getElementById('chat-messages');
+        const chatEmptyState = document.getElementById('chat-empty');
 
         let serverIsRunning = rootEl.dataset.serverRunning === "true";
         let serverIsPaused = rootEl.dataset.serverPaused === "true";
@@ -1166,6 +1169,7 @@
         let statusTimer = null;
         let progressActive = false;
         let connectionLost = false;
+        let statusFailureCount = 0;
         let reconnectTimer = null;
         let setUpdateButtonDisabled = function() {};
         let stopProgressPolling = function() {};
@@ -1192,6 +1196,17 @@
                 return fallback;
             }
             return `${pad2(dt.getMonth() + 1)}/${pad2(dt.getDate())}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:${pad2(dt.getSeconds())}`;
+        }
+
+        function formatTimeDisplay(value, fallback) {
+            if (!value) {
+                return fallback;
+            }
+            const dt = new Date(value);
+            if (Number.isNaN(dt.getTime())) {
+                return fallback;
+            }
+            return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
         }
 
         function setTextContent(el, text) {
@@ -1247,10 +1262,6 @@
             const wrapper = document.createElement('span');
             wrapper.className = 'player-name';
 
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = player && player.name ? player.name : 'Unknown';
-            wrapper.appendChild(nameSpan);
-
             if (player && player.is_admin) {
                 const badge = document.createElement('span');
                 badge.className = 'player-admin-icon';
@@ -1259,6 +1270,10 @@
                 badge.textContent = '🛡️';
                 wrapper.appendChild(badge);
             }
+
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = player && player.name ? player.name : 'Unknown';
+            wrapper.appendChild(nameSpan);
 
             td.appendChild(wrapper);
             return td;
@@ -1321,6 +1336,49 @@
                 showElement(playersHistoryTable, false);
                 showElement(playersHistoryEmpty, true);
                 return;
+            }
+
+            function renderChatMessages(messages) {
+                if (!chatMessagesContainer || !chatEmptyState) {
+                    return;
+                }
+
+                chatMessagesContainer.textContent = '';
+
+                if (!Array.isArray(messages) || messages.length === 0) {
+                    chatEmptyState.style.removeProperty('display');
+                    return;
+                }
+
+                chatEmptyState.style.display = 'none';
+
+                messages.forEach((entry) => {
+                    if (!entry) {
+                        return;
+                    }
+                    const row = document.createElement('div');
+                    row.className = 'chat-message';
+
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'chat-time';
+                    timeSpan.textContent = formatTimeDisplay(entry.time, '--:--');
+
+                    const playerSpan = document.createElement('span');
+                    playerSpan.className = 'chat-player';
+                    playerSpan.textContent = `${entry.player || 'Unknown'}:`;
+
+                    const messageSpan = document.createElement('span');
+                    messageSpan.className = 'chat-text';
+                    messageSpan.textContent = entry.message || '';
+
+                    row.appendChild(timeSpan);
+                    row.appendChild(playerSpan);
+                    row.appendChild(messageSpan);
+
+                    chatMessagesContainer.appendChild(row);
+                });
+
+                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
             }
 
             showElement(playersHistoryTable, true, 'table');
@@ -1409,6 +1467,7 @@
                     return response.json();
                 })
                 .then(data => {
+                    statusFailureCount = 0;
                     handleConnectionRestored();
                     updateServerStatusUI(data);
                     fetchProgress();
@@ -1935,6 +1994,12 @@
                     renderHistoryPlayers([]);
                 }
 
+                if (Array.isArray(data.chat_messages)) {
+                    renderChatMessages(data.chat_messages);
+                } else {
+                    renderChatMessages([]);
+                }
+
                 updateControlButtons(data);
                 refreshUpdateButtonState();
             };
@@ -1960,13 +2025,17 @@
                         return res.json();
                     })
                     .then(data => {
+                        statusFailureCount = 0;
                         if (data) {
                             handleConnectionRestored();
                             updateServerStatusUI(data);
                         }
                     })
                     .catch(() => {
-                        handleConnectionLost();
+                        statusFailureCount += 1;
+                        if (statusFailureCount >= 2) {
+                            handleConnectionLost();
+                        }
                     });
             };
 

@@ -16,6 +16,7 @@ var (
 	difficultyRegex       = regexp.MustCompile(`Set difficulty to\s+(\S+)`)
 	worldLoadedRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+loaded\s+(\S+)\s+things in`)
 	adminCommandRegex     = regexp.MustCompile(`(?i)client\s+'(.+?)\s+\(([^)]+)\)'\s+ran\s+command`)
+	chatMessageRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:\s+([^:]+?):\s*(.+)$`)
 
 	logLineHandlers = []logLineHandler{
 		{
@@ -46,8 +47,9 @@ var (
 					Name:            name,
 					ConnectDatetime: t,
 				}
-				s.Clients = append(s.Clients, client)
-				s.appendPlayerLog(client)
+				if s.recordClientSession(client) {
+					s.appendPlayerLog(client)
+				}
 			},
 		},
 		{
@@ -95,13 +97,25 @@ var (
 				return nil
 			},
 			handle: func(s *Server, line string, matches []string) {
-				if len(matches) > 1 && strings.TrimSpace(matches[1]) != "" {
-					s.World = strings.TrimSpace(matches[1])
+				extract := func(raw string) string {
+					return strings.TrimSpace(raw)
+				}
+				worldID := ""
+				if len(matches) > 1 {
+					worldID = extract(matches[1])
+				}
+				if worldID == "" {
+					fields := strings.Fields(line)
+					if len(fields) > 2 {
+						worldID = extract(fields[2])
+					}
+				}
+				if worldID == "" {
 					return
 				}
-				fields := strings.Fields(line)
-				if len(fields) > 2 {
-					s.World = fields[2]
+				s.WorldID = worldID
+				if strings.TrimSpace(s.World) == "" {
+					s.World = worldID
 				}
 			},
 		},
@@ -120,33 +134,25 @@ var (
 		},
 		{
 			match: func(line string) []string {
-				if strings.Count(line, ":") < 4 {
-					return nil
-				}
-				parts := strings.Split(line, ":")
-				if len(parts) < 5 {
-					return nil
-				}
-				return parts
+				return chatMessageRegex.FindStringSubmatch(line)
 			},
-			handle: func(s *Server, line string, parts []string) {
-				if len(parts) < 5 {
+			handle: func(s *Server, line string, matches []string) {
+				if len(matches) < 3 {
 					return
 				}
-				name := strings.TrimSpace(parts[3])
-				if name == "" {
+				name := strings.TrimSpace(matches[1])
+				message := strings.TrimSpace(matches[2])
+				if name == "" || message == "" {
 					return
 				}
-				for _, client := range s.Clients {
-					if client.Name == name {
-						t := s.parseTime(line)
-						message := strings.Join(parts[4:], ":")
-						s.Chat = append(s.Chat, &Chat{
-							Datetime: t,
-							Name:     name,
-							Message:  strings.TrimSpace(message),
-						})
-						break
+				t := s.parseTime(line)
+				for _, client := range s.LiveClients() {
+					if client == nil {
+						continue
+					}
+					if strings.EqualFold(client.Name, name) {
+						s.addChatMessage(client.Name, t, message)
+						return
 					}
 				}
 			},

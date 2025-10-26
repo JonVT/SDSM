@@ -1726,10 +1726,10 @@ func (m *Manager) getDifficultiesFromXML(beta bool) []string {
 }
 
 // GetWorldImage returns the PNG bytes for the planet image that matches the normalized world name.
-func (m *Manager) GetWorldImage(world string, beta bool) ([]byte, error) {
+func (m *Manager) GetWorldImage(worldId string, beta bool) ([]byte, error) {
 	fileName := ""
 
-	switch world[0:2] {
+	switch worldId[0:2] {
 	case "Ma":
 		fileName = "StatMars.png"
 	case "Eu":
@@ -1749,7 +1749,7 @@ func (m *Manager) GetWorldImage(world string, beta bool) ([]byte, error) {
 		return data, nil
 	}
 
-	return nil, fmt.Errorf("world image not found for %s", world)
+	return nil, fmt.Errorf("world image not found for %s", worldId)
 }
 
 func (m *Manager) worldLocalizationKeys(worldID string, beta bool) (string, string, string, string) {
@@ -2957,9 +2957,7 @@ func (m *Manager) ServerByID(id int) *models.Server {
 func (m *Manager) GetTotalPlayers() int {
 	total := 0
 	for _, server := range m.Servers {
-		if server.IsRunning() {
-			total += server.ClientCount()
-		}
+		total += server.ClientCount()
 	}
 	return total
 }

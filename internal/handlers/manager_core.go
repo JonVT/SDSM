@@ -213,7 +213,7 @@ func (h *ManagerHandlers) ServerWorldImage(c *gin.Context) {
 		return
 	}
 
-	data, readErr := h.manager.GetWorldImage(srv.World, srv.Beta)
+	data, readErr := h.manager.GetWorldImage(srv.WorldID, srv.Beta)
 	if readErr != nil {
 		c.Status(http.StatusNotFound)
 		return

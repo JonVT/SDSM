@@ -65,6 +65,22 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		})
 	}
 
+	chatMessages := make([]gin.H, 0, len(s.Chat))
+	for _, entry := range s.Chat {
+		if entry == nil {
+			continue
+		}
+		timestamp := ""
+		if !entry.Datetime.IsZero() {
+			timestamp = entry.Datetime.Format(time.RFC3339)
+		}
+		chatMessages = append(chatMessages, gin.H{
+			"player":  entry.Name,
+			"message": entry.Message,
+			"time":    timestamp,
+		})
+	}
+
 	lastLine := strings.TrimSpace(s.LastLogLine)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -78,8 +94,8 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"server_started": started,
 		"server_saved":   saved,
 		"paused":         s.Paused,
-		"players":        players,
 		"clients":        history,
+		"chat_messages":  chatMessages,
 	})
 }
 

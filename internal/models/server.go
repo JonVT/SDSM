@@ -23,6 +23,7 @@ import (
 
 const DefaultRestartDelaySeconds = 10
 const playersLogFileName = "players.log"
+const maxChatMessages = 200
 
 type Client struct {
 	SteamID            string     `json:"steam_id"`
@@ -117,8 +118,8 @@ type Server struct {
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
 	ServerStarted       *time.Time    `json:"server_started,omitempty"`
 	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
-	Clients             []*Client     `json:"clients"`
-	Chat                []*Chat       `json:"chat"`
+	Clients             []*Client     `json:"-"`
+	Chat                []*Chat       `json:"-"`
 	Storming            bool          `json:"-"`
 	Paused              bool          `json:"-"`
 	Starting            bool          `json:"-"`
@@ -127,6 +128,7 @@ type Server struct {
 	progressReporter    func(stage string, processed, total int64)
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
+	playersLogDirty     bool
 }
 
 func (s *Server) EnsureLogger(paths *utils.Paths) {
@@ -169,6 +171,7 @@ func (s *Server) loadPlayerHistory() {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	deduped := false
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -199,15 +202,22 @@ func (s *Server) loadPlayerHistory() {
 			DisconnectDatetime: disconnect,
 			IsAdmin:            isAdmin,
 		}
-		s.Clients = append(s.Clients, client)
+		if !s.recordClientSession(client) {
+			deduped = true
+		}
 	}
 	if err := scanner.Err(); err != nil && s.Logger != nil {
 		s.Logger.Write(fmt.Sprintf("Error reading players log: %v", err))
+	}
+	if deduped {
+		s.markPlayersLogDirty()
 	}
 	s.playerHistoryLoaded = true
 }
 
 func (s *Server) appendPlayerLog(c *Client) {
+	s.flushPlayersLogIfDirty()
+
 	path := s.playersLogPath()
 	if path == "" {
 		return
@@ -255,6 +265,7 @@ func (s *Server) rewritePlayersLog() {
 	}
 
 	entries := make([]string, 0, len(s.Clients))
+	seen := make(map[string]struct{})
 	for _, client := range s.Clients {
 		if client == nil {
 			continue
@@ -266,6 +277,13 @@ func (s *Server) rewritePlayersLog() {
 		adminFlag := "0"
 		if client.IsAdmin {
 			adminFlag = "1"
+		}
+		key := sessionKey(client.SteamID, client.Name, client.ConnectDatetime)
+		if key != "" {
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
 		}
 		entry := fmt.Sprintf("%s,%s,%s,%s,%s,%s",
 			client.SteamID,
@@ -315,7 +333,10 @@ func (s *Server) rewritePlayersLog() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to replace players log: %v", err))
 		}
+		return
 	}
+
+	s.playersLogDirty = false
 }
 
 func (s *Server) LiveClients() []*Client {
@@ -329,6 +350,36 @@ func (s *Server) LiveClients() []*Client {
 		}
 	}
 	return live
+}
+
+func (s *Server) addChatMessage(name string, when time.Time, message string) {
+	name = strings.TrimSpace(name)
+	message = strings.TrimSpace(message)
+	if name == "" || message == "" {
+		return
+	}
+	if when.IsZero() {
+		when = time.Now()
+	}
+	s.Chat = append(s.Chat, &Chat{
+		Datetime: when,
+		Name:     name,
+		Message:  message,
+	})
+	if excess := len(s.Chat) - maxChatMessages; excess > 0 {
+		s.Chat = append([]*Chat(nil), s.Chat[excess:]...)
+	}
+}
+
+func (s *Server) resetChat() {
+	if len(s.Chat) == 0 {
+		s.Chat = nil
+		return
+	}
+	for i := range s.Chat {
+		s.Chat[i] = nil
+	}
+	s.Chat = nil
 }
 
 func (s *Server) markClientAdmin(name, steamID string) {
@@ -357,8 +408,108 @@ func (s *Server) markClientAdmin(name, steamID string) {
 	}
 
 	if updated {
-		s.rewritePlayersLog()
+		s.markPlayersLogDirty()
+		s.flushPlayersLogIfDirty()
 	}
+}
+
+func sessionKey(steamID, name string, connect time.Time) string {
+	id := strings.TrimSpace(steamID)
+	if id == "" {
+		id = strings.ToLower(strings.TrimSpace(name))
+	}
+	if id == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s|%s", id, connect.UTC().Format(time.RFC3339Nano))
+}
+
+func mergeClientSession(target, source *Client) {
+	if target == nil || source == nil {
+		return
+	}
+	if source.Name != "" {
+		target.Name = source.Name
+	}
+	if source.SteamID != "" {
+		target.SteamID = source.SteamID
+	}
+	if !source.ConnectDatetime.IsZero() {
+		target.ConnectDatetime = source.ConnectDatetime
+	}
+	if source.DisconnectDatetime != nil {
+		target.DisconnectDatetime = source.DisconnectDatetime
+	}
+	if source.IsAdmin {
+		target.IsAdmin = true
+	}
+}
+
+func sameSession(existing, candidate *Client) bool {
+	if existing == nil || candidate == nil {
+		return false
+	}
+	if existing.SteamID != "" && candidate.SteamID != "" && existing.SteamID == candidate.SteamID {
+		diff := existing.ConnectDatetime.Sub(candidate.ConnectDatetime)
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff <= time.Second {
+			return true
+		}
+	}
+	if existing.SteamID == "" && candidate.SteamID == "" && existing.Name != "" && candidate.Name != "" && strings.EqualFold(existing.Name, candidate.Name) {
+		diff := existing.ConnectDatetime.Sub(candidate.ConnectDatetime)
+		if diff < 0 {
+			diff = -diff
+		}
+		if diff <= time.Second {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) recordClientSession(c *Client) bool {
+	if c == nil {
+		return false
+	}
+
+	key := sessionKey(c.SteamID, c.Name, c.ConnectDatetime)
+	if key != "" {
+		for _, existing := range s.Clients {
+			if existing == nil {
+				continue
+			}
+			if sessionKey(existing.SteamID, existing.Name, existing.ConnectDatetime) == key {
+				mergeClientSession(existing, c)
+				s.markPlayersLogDirty()
+				return false
+			}
+		}
+	}
+
+	for _, existing := range s.Clients {
+		if sameSession(existing, c) {
+			mergeClientSession(existing, c)
+			s.markPlayersLogDirty()
+			return false
+		}
+	}
+
+	s.Clients = append(s.Clients, c)
+	return true
+}
+
+func (s *Server) markPlayersLogDirty() {
+	s.playersLogDirty = true
+}
+
+func (s *Server) flushPlayersLogIfDirty() {
+	if !s.playersLogDirty {
+		return
+	}
+	s.rewritePlayersLog()
 }
 
 func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *Server {
@@ -517,7 +668,13 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 }
 
 func (s *Server) ClientCount() int {
-	return len(s.Clients)
+	count := 0
+	for _, client := range s.Clients {
+		if client != nil && client.IsOnline() {
+			count++
+		}
+	}
+	return count
 }
 
 func (s *Server) IsRunning() bool {
@@ -672,6 +829,9 @@ func (s *Server) Stop() {
 	now := time.Now()
 	s.markAllClientsDisconnected(now)
 	s.rewritePlayersLog()
+	if s.Proc == nil {
+		s.resetChat()
+	}
 	if s.Proc != nil {
 		s.Proc.Process.Kill()
 	}
@@ -851,6 +1011,7 @@ func (s *Server) Start() {
 	}
 
 	s.Proc = cmd
+	s.resetChat()
 	stopChan := make(chan bool)
 	s.Thrd = stopChan
 	s.Starting = true
@@ -877,6 +1038,7 @@ func (s *Server) Start() {
 		tailWG.Wait()
 		s.markAllClientsDisconnected(time.Now())
 		s.rewritePlayersLog()
+		s.resetChat()
 		if s.Logger != nil {
 			s.Logger.Write("Server process ended")
 		}

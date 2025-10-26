@@ -53,12 +53,18 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		return
 	}
 
-	isAsync := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json") ||
-		strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
+	acceptsJSON := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json")
+	isXHR := strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
+	isHX := strings.EqualFold(c.GetHeader("HX-Request"), "true")
+	isAsync := acceptsJSON || isXHR || isHX
 
 	switch {
 	case c.PostForm("start") != "":
 		s.Start()
+		if isAsync {
+			c.JSON(http.StatusOK, gin.H{"status": "started"})
+			return
+		}
 	case c.PostForm("restart") != "":
 		go s.Restart()
 	case c.PostForm("stop") != "":
