@@ -81,12 +81,19 @@ type Manager struct {
 	betaVersionMu     sync.RWMutex     `json:"-"`
 	betaVersion       string           `json:"-"`
 	betaCheckedAt     time.Time        `json:"-"`
-	worldIndexMu      sync.RWMutex     `json:"-"`
-	worldIndex        map[bool]*worldDefinitionCache
-	progressMu        sync.RWMutex
-	progressByType    map[DeployType]*UpdateProgress
-	serverProgressMu  sync.RWMutex
-	serverProgress    map[int]*ServerCopyProgress
+	// Latest available (Steam) build IDs cache
+	releaseLatestMu  sync.RWMutex `json:"-"`
+	releaseLatest    string       `json:"-"`
+	releaseLatestAt  time.Time    `json:"-"`
+	betaLatestMu     sync.RWMutex `json:"-"`
+	betaLatest       string       `json:"-"`
+	betaLatestAt     time.Time    `json:"-"`
+	worldIndexMu     sync.RWMutex `json:"-"`
+	worldIndex       map[bool]*worldDefinitionCache
+	progressMu       sync.RWMutex
+	progressByType   map[DeployType]*UpdateProgress
+	serverProgressMu sync.RWMutex
+	serverProgress   map[int]*ServerCopyProgress
 }
 
 type UpdateProgress struct {
@@ -1295,6 +1302,7 @@ const launchPadLatestCacheTTL = 30 * time.Minute
 const launchPadLatestURL = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
 const launchPadVersionCacheTTL = time.Minute
 const rocketStationVersionCacheTTL = time.Minute
+const rocketStationLatestCacheTTL = time.Minute
 const bepInExVersionFile = "bepinex.version"
 
 type worldDefinition struct {
@@ -2115,11 +2123,67 @@ func (m *Manager) AddServer(cfg *models.ServerConfig) (*models.Server, error) {
 }
 
 func (m *Manager) ReleaseLatest() string {
-	return "1.0"
+	m.releaseLatestMu.RLock()
+	cached := m.releaseLatest
+	cachedAt := m.releaseLatestAt
+	m.releaseLatestMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < rocketStationLatestCacheTTL {
+		return cached
+	}
+
+	rel, bet, err := m.fetchRocketStationLatestBuildIDs()
+	if err != nil {
+		if cached != "" {
+			return cached
+		}
+		return "Unknown"
+	}
+
+	// Update both caches together
+	m.releaseLatestMu.Lock()
+	m.releaseLatest = rel
+	m.releaseLatestAt = time.Now()
+	m.releaseLatestMu.Unlock()
+
+	m.betaLatestMu.Lock()
+	m.betaLatest = bet
+	m.betaLatestAt = time.Now()
+	m.betaLatestMu.Unlock()
+
+	return rel
 }
 
 func (m *Manager) BetaLatest() string {
-	return "2.0"
+	m.betaLatestMu.RLock()
+	cached := m.betaLatest
+	cachedAt := m.betaLatestAt
+	m.betaLatestMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < rocketStationLatestCacheTTL {
+		return cached
+	}
+
+	rel, bet, err := m.fetchRocketStationLatestBuildIDs()
+	if err != nil {
+		if cached != "" {
+			return cached
+		}
+		return "Unknown"
+	}
+
+	// Update both caches together
+	m.releaseLatestMu.Lock()
+	m.releaseLatest = rel
+	m.releaseLatestAt = time.Now()
+	m.releaseLatestMu.Unlock()
+
+	m.betaLatestMu.Lock()
+	m.betaLatest = bet
+	m.betaLatestAt = time.Now()
+	m.betaLatestMu.Unlock()
+
+	return bet
 }
 
 func (m *Manager) invalidateSteamCmdVersionCache() {
@@ -2198,7 +2262,26 @@ func (m *Manager) SteamCmdVersion() string {
 }
 
 func (m *Manager) SteamCmdLatest() string {
-	return "0.0"
+	// There is no reliable public "latest" for SteamCMD version; use deployed as the effective latest
+	return m.SteamCmdDeployed()
+}
+
+// fetchRocketStationLatestBuildIDs queries Steam for the latest public and beta build IDs
+func (m *Manager) fetchRocketStationLatestBuildIDs() (string, string, error) {
+	s := steam.NewSteam(m.SteamID, m.UpdateLog, m.Paths)
+	versions, err := s.GetVersions()
+	if err != nil {
+		return "", "", err
+	}
+	if len(versions) < 2 {
+		return "", "", fmt.Errorf("incomplete version data from Steam API")
+	}
+	rel := strings.TrimSpace(versions[0])
+	bet := strings.TrimSpace(versions[1])
+	if rel == "" && bet == "" {
+		return "", "", fmt.Errorf("empty version data from Steam API")
+	}
+	return rel, bet, nil
 }
 
 func (m *Manager) BepInExLatest() string {

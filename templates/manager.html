@@ -415,12 +415,7 @@
                 });
             });
 
-            const buttons = Array.from(document.querySelectorAll('.update-trigger'));
-            const messageEl = document.getElementById('updateMessage');
-            const configForm = document.getElementById('configForm');
-            const configBtn = document.getElementById('updateConfigBtn');
-            const shutdownBtn = document.getElementById('shutdownBtn');
-            const restartBtn = document.getElementById('restartBtn');
+            // Defer DOM queries and event bindings until the DOM is ready
             let pollTimer = null;
 
             // Toast helper for fetch-based requests
@@ -455,6 +450,7 @@
             }
 
             function showMessage(text, isError) {
+                const messageEl = document.getElementById('updateMessage');
                 if (!messageEl) return;
                 if (!text) {
                     messageEl.classList.remove('active', 'error');
@@ -467,7 +463,8 @@
             }
 
             function setButtonsDisabled(disabled) {
-                buttons.forEach((btn) => {
+                const btns = document.querySelectorAll('.update-trigger');
+                btns.forEach((btn) => {
                     btn.disabled = disabled;
                     if (!disabled) showButtonSpinner(btn, false);
                 });
@@ -541,54 +538,82 @@
                 if (!pollTimer) pollTimer = setInterval(fetchProgress, 2000);
             }
 
-            buttons.forEach((btn) => {
-                btn.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    if (btn.disabled) return;
+            document.addEventListener('DOMContentLoaded', () => {
+                const buttons = Array.from(document.querySelectorAll('.update-trigger'));
+                const messageEl = document.getElementById('updateMessage');
+                const configForm = document.getElementById('configForm');
+                const configBtn = document.getElementById('updateConfigBtn');
+                const shutdownBtn = document.getElementById('shutdownBtn');
+                const restartBtn = document.getElementById('restartBtn');
 
-                    const target = btn.dataset.updateTarget;
-                    if (!target) return;
+                function showMessage(text, isError) {
+                    if (!messageEl) return;
+                    if (!text) {
+                        messageEl.classList.remove('active', 'error');
+                        messageEl.textContent = '';
+                        return;
+                    }
+                    messageEl.textContent = text;
+                    messageEl.classList.add('active');
+                    messageEl.classList.toggle('error', !!isError);
+                }
 
-                    const params = new URLSearchParams();
-                    params.append(target, '1');
+                function setButtonsDisabled(disabled) {
+                    buttons.forEach((btn) => {
+                        btn.disabled = disabled;
+                        if (!disabled) showButtonSpinner(btn, false);
+                    });
+                }
 
-                    setButtonsDisabled(true);
-                    showButtonSpinner(btn, true);
-                    showMessage('Starting update...', false);
+                // Wire up update buttons
+                buttons.forEach((btn) => {
+                    btn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        if (btn.disabled) return;
 
-                    fetch('/update', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        credentials: 'same-origin',
-                        body: params.toString()
-                    })
-                        .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json(); })
-                        .then((data) => {
-                            if (data && data.status === 'started') {
-                                const label = btn.closest('tr')?.querySelector('.component-title')?.textContent?.trim() || 'Update';
-                                showMessage(label + ' started...', false);
-                                fetchProgress();
-                                ensurePolling();
-                            } else if (data && data.status === 'ok') {
-                                showMessage('Configuration updated.', false);
-                                setButtonsDisabled(false);
-                            } else {
-                                showMessage('', false);
-                                setButtonsDisabled(false);
-                            }
+                        const target = btn.dataset.updateTarget;
+                        if (!target) return;
+
+                        const params = new URLSearchParams();
+                        params.append(target, '1');
+
+                        setButtonsDisabled(true);
+                        showButtonSpinner(btn, true);
+                        showMessage('Starting update...', false);
+
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: params.toString()
                         })
-                        .catch((err) => {
-                            const errorText = err && err.error ? err.error : 'Unable to start update. Please try again.';
-                            showMessage(errorText, true);
-                            setButtonsDisabled(false);
-                            fetchProgress();
-                        });
+                            .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json(); })
+                            .then((data) => {
+                                if (data && data.status === 'started') {
+                                    const label = btn.closest('tr')?.querySelector('.component-title')?.textContent?.trim() || 'Update';
+                                    showMessage(label + ' started...', false);
+                                    fetchProgress();
+                                    ensurePolling();
+                                } else if (data && data.status === 'ok') {
+                                    showMessage('Configuration updated.', false);
+                                    setButtonsDisabled(false);
+                                } else {
+                                    showMessage('', false);
+                                    setButtonsDisabled(false);
+                                }
+                            })
+                            .catch((err) => {
+                                const errorText = err && err.error ? err.error : 'Unable to start update. Please try again.';
+                                showMessage(errorText, true);
+                                setButtonsDisabled(false);
+                                fetchProgress();
+                            });
+                    });
                 });
-            });
 
             // Async submit for Configuration form with inline spinner
             if (configForm && configBtn) {
@@ -712,6 +737,7 @@
             // Initial progress fetch
             fetchProgress();
             ensurePolling();
+            }); // DOMContentLoaded end
         })();
     </script>
 </head>

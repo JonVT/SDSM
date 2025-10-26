@@ -1,610 +1,296 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Create New Server - Stationeers Server Manager">
-    <title>Create New Server - Stationeers Server Manager</title>
-    
-    <!-- Modern CSS Framework -->
-    <link rel="stylesheet" href="/static/modern.css">
-    
-    <!-- Fonts -->
+    <meta name="description" content="Create New Server - SDSM">
+    <title>Create New Server - SDSM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <style>
-        body {
-            display: flex;
-            min-height: 100vh;
-            margin: 0;
-            background: var(--page-background);
-        }
-
-        .layout-container {
-            display: flex;
-            width: 100%;
-            gap: var(--space-6);
-            padding: var(--space-6);
-        }
-
-        .progress-sidebar {
-            width: 280px;
-            position: sticky;
-            top: var(--space-6);
-            height: fit-content;
-            background: var(--panel-gradient);
-            border: 1px solid var(--panel-border);
-            border-radius: var(--radius-xl);
-            padding: var(--space-5);
-            backdrop-filter: blur(24px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .progress-header {
-            margin-bottom: var(--space-4);
-            padding-bottom: var(--space-3);
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .progress-header h3 {
-            margin: 0;
-            font-size: var(--text-lg);
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-        }
-
-        .progress-header h3::before {
-            content: '📋';
-            font-size: var(--text-xl);
-        }
-
-        .progress-stats {
-            margin-top: var(--space-2);
-            font-size: var(--text-sm);
-            color: var(--text-secondary);
-        }
-
-        .progress-bar-container {
-            margin: var(--space-3) 0;
-            padding: var(--space-3);
-            background: var(--bg-secondary);
-            border-radius: var(--radius-md);
-        }
-
-        .progress-bar {
-            height: 8px;
-            background: var(--border-color);
-            border-radius: var(--radius-full);
-            overflow: hidden;
-            margin-top: var(--space-2);
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #6366f1, #ec4899);
-            transition: width 0.3s ease;
-            width: 0%;
-        }
-
-        .progress-label {
-            font-size: var(--text-xs);
-            font-weight: 600;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .progress-items {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .progress-item {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-            padding: var(--space-2) 0;
-            font-size: var(--text-sm);
-            color: var(--text-secondary);
-        }
-
-        .progress-item-icon {
-            width: 18px;
-            height: 18px;
-            border-radius: var(--radius-full);
-            border: 2px solid var(--border-color);
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-        }
-
-        .progress-item.completed .progress-item-icon {
-            background: linear-gradient(135deg, #10b981, #059669);
-            border-color: #10b981;
-            color: white;
-        }
-
-        .progress-item.completed {
-            color: var(--text-tertiary);
-            text-decoration: line-through;
-        }
-
-        .form-container {
-            flex: 1;
-            max-width: 900px;
-        }
-
-        .header {
-            background: var(--panel-gradient);
-            border: 1px solid var(--panel-border);
-            border-radius: var(--radius-xl);
-            padding: var(--space-5);
-            margin-bottom: var(--space-6);
-            backdrop-filter: blur(24px);
-            box-shadow: var(--shadow-md);
-        }
-        
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            font-size: var(--text-2xl);
-            font-weight: 700;
-            color: var(--text-primary);
-            margin: 0 0 var(--space-1) 0;
-        }
-
-        .header p {
-            color: var(--text-secondary);
-            margin: 0;
-        }
-        
-        .form-card {
-            background: var(--panel-gradient);
-            border: 1px solid var(--panel-border);
-            border-radius: var(--radius-xl);
-            padding: var(--space-6);
-            backdrop-filter: blur(24px);
-            box-shadow: var(--shadow-md);
-        }
-        
-        .form-section {
-            margin-bottom: var(--space-6);
-        }
-        
-        .form-section h3 {
-            margin-top: 0;
-            margin-bottom: var(--space-4);
-            color: var(--text-primary);
-            font-size: var(--text-lg);
-            font-weight: 600;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: var(--space-2);
-        }
-        
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--space-4);
-        }
-        
-        .form-grid-full {
-            grid-column: 1 / -1;
-        }
-        
-        .form-group {
-            margin-bottom: var(--space-4);
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: var(--space-2);
-            color: var(--text-secondary);
-            font-size: var(--text-sm);
-            font-weight: 500;
-        }
-        
-        .form-group input[type="text"],
-        .form-group input[type="number"],
-        .form-group select {
-            width: 100%;
-            padding: var(--space-2) var(--space-3);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            font-size: var(--text-sm);
-            background: var(--bg-primary);
-            color: var(--text-primary);
-        }
-        
-        .form-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            margin-right: var(--space-2);
-        }
-        
-        .checkbox-label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-        }
-        
-        .form-actions {
-            display: flex;
-            gap: var(--space-3);
-            justify-content: flex-end;
-            margin-top: var(--space-6);
-            padding-top: var(--space-4);
-            border-top: 1px solid var(--border-color);
-        }
-        
-        .help-text {
-            font-size: var(--text-xs);
-            color: var(--text-tertiary);
-            margin-top: var(--space-1);
-        }
-
-        .alert {
-            border-radius: var(--radius-md);
-            padding: var(--space-3) var(--space-4);
-            margin-bottom: var(--space-4);
-            font-size: var(--text-sm);
-            border: 1px solid transparent;
-        }
-
-        .alert-error {
-            background: rgba(239, 68, 68, 0.12);
-            border-color: rgba(239, 68, 68, 0.35);
-            color: #991b1b;
-        }
-
-        .form-section h3 {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-        }
-
-        .help-toggle {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            border: none;
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-full);
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: all 0.2s ease;
-        }
-
-        .help-toggle:hover {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-            transform: scale(1.1);
-        }
-
-        .help-box {
-            background: rgba(59, 130, 246, 0.08);
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            border-radius: var(--radius-md);
-            padding: var(--space-4);
-            margin-bottom: var(--space-4);
-        }
-
-        .help-content h4 {
-            margin: 0 0 var(--space-3) 0;
-            color: var(--text-primary);
-            font-size: var(--text-base);
-            font-weight: 600;
-        }
-
-        .help-content ul {
-            margin: 0;
-            padding-left: var(--space-5);
-            color: var(--text-secondary);
-            font-size: var(--text-sm);
-            line-height: 1.6;
-        }
-
-        .help-content li {
-            margin-bottom: var(--space-2);
-        }
-
-        .help-content strong {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-        
-        @media (max-width: 1024px) {
-            .layout-container {
-                flex-direction: column;
-            }
-
-            .progress-sidebar {
-                width: 100%;
-                position: relative;
-                top: 0;
-            }
-
-            .form-container {
-                max-width: 100%;
-            }
-        }
-
-        @media (max-width: 768px) {
-            .form-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/ui-theme.css">
 </head>
 
-<body>
+<body class="page-shell">
     {{ $form := .form }}
-    
-    <div class="layout-container">
-        <!-- Progress Sidebar -->
-        <aside class="progress-sidebar">
-            <div class="progress-header">
-                <h3>Form Progress</h3>
-                <div class="progress-stats">
-                    <span id="completedCount">0</span> of <span id="totalCount">5</span> required fields
+    <div class="container">
+        <!-- Consistent hero header -->
+        <header class="hero-card">
+            <div class="hero-main">
+                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+                <div class="hero-heading">
+                    <h1 class="hero-title">Create New Server</h1>
+                    <p class="hero-subtitle">Configure and deploy a new Stationeers server.</p>
                 </div>
             </div>
+            <div class="hero-meta">
+                <div class="hero-meta-title">Setup Wizard</div>
+                <p class="hero-meta-text">Fill in the basic, network, and advanced settings below.</p>
+                <span class="pill">Step 1</span>
+            </div>
+            <div class="hero-actions">
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
+                <a href="/dashboard" class="btn btn-secondary">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                    </svg>
+                    Dashboard
+                </a>
+            </div>
+        </header>
 
-            <div class="progress-bar-container">
-                <div class="progress-label">Completion</div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
+        <!-- Main content grid: form left (wide), progress right -->
+        <div class="main-grid">
+            <!-- Left: Form -->
+            <div class="card">
+                {{ if .error }}
+                <div class="alert alert-error" role="alert">{{ .error }}</div>
+                {{ end }}
+                <form method="POST" action="/server/new" id="serverForm">
+                    <!-- Basic Settings -->
+                    <div class="form-section">
+                        <h3 class="section-title">Basic Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group form-grid-full">
+                                <label class="form-label" for="name">Server Name *</label>
+                                <input type="text" id="name" name="name" class="form-control" required
+                                       value="{{ index $form "name" }}"
+                                       placeholder="Enter server name">
+                                <p class="help-text">The name that will appear in the server list</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="world">World *</label>
+                                <select name="world" id="world" class="form-control" required>
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="start_location">Start Location *</label>
+                                <select name="start_location" id="start_location" class="form-control" required>
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="start_condition">Start Condition *</label>
+                                <select name="start_condition" id="start_condition" class="form-control" required>
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+
+                            {{ $selectedDifficulty := index $form "difficulty" }}
+                            <div class="form-group">
+                                <label class="form-label" for="difficulty">Difficulty *</label>
+                                <select id="difficulty" name="difficulty" class="form-control" required>
+                                    {{ range .difficulties }}
+                                    <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
+                                    {{ end }}
+                                </select>
+                                <p class="help-text">Game difficulty level</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Network Settings -->
+                    <div class="form-section">
+                        <h3 class="section-title">Network Settings</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="port">Port *</label>
+                                <input type="number" id="port" name="port" class="form-control" required 
+                                       value="{{ index $form "port" }}" min="1024" max="65535"
+                                       placeholder="27016">
+                                <p class="help-text">Server port (1024-65535)</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="max_clients">Max Players *</label>
+                                <input type="number" id="max_clients" name="max_clients" class="form-control" required 
+                                       value="{{ index $form "max_clients" }}" min="1" max="100"
+                                       placeholder="10">
+                                <p class="help-text">Maximum number of players</p>
+                            </div>
+                            
+                            <div class="form-group form-grid-full">
+                                <label class="form-label" for="password">Server Password</label>
+                                <input type="text" id="password" name="password" class="form-control"
+                                    value="{{ index $form "password" }}"
+                                    placeholder="Leave empty for no password">
+                                <p class="help-text">Optional password to join the server</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
+                                    <span>Server Visible</span>
+                                </label>
+                                <p class="help-text">Make server visible in server browser</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Advanced Settings -->
+                    <div class="form-section">
+                        <h3 class="section-title" style="display:flex;align-items:center;gap:var(--space-2)">
+                            Advanced Settings
+                            <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </button>
+                        </h3>
+                        <div class="help-box" id="advanced-help" style="display: none;">
+                            <div class="help-content">
+                                <h4>Advanced Settings Guide</h4>
+                                <ul>
+                                    <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
+                                    <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
+                                    <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
+                                    <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label" for="save_interval">Save Interval (seconds) *</label>
+                                <input type="number" id="save_interval" name="save_interval" class="form-control" required 
+                                       value="{{ index $form "save_interval" }}" min="60" max="3600"
+                                       placeholder="300">
+                                <p class="help-text">How often to save the world (60-3600)</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="restart_delay_seconds">Restart Delay (seconds)</label>
+                                <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" min="0" max="3600"
+                                       value="{{ index $form "restart_delay_seconds" }}" placeholder="10">
+                                <p class="help-text">Wait time between stop and restart (0-3600)</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="auth_secret">Auth Secret</label>
+                                <input type="text" id="auth_secret" name="auth_secret" class="form-control"
+                                       value="{{ index $form "auth_secret" }}"
+                                       placeholder="Optional authentication secret">
+                                <p class="help-text">Steam authentication secret (optional)</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label" for="beta">Game Version *</label>
+                                <select id="beta" name="beta" class="form-control" required>
+                                    <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
+                                    <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
+                                </select>
+                                <p class="help-text">Which version to use</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Startup Options -->
+                    <div class="form-section">
+                        <h3 class="section-title">Startup Options</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto_save" name="auto_save" {{ if index $form "auto_save" }}checked{{ end }}>
+                                    <span>Auto Save</span>
+                                </label>
+                                <p class="help-text">Toggle the dedicated server's autosave feature</p>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index $form "auto_pause" }}checked{{ end }}>
+                                    <span>Auto Pause</span>
+                                </label>
+                                <p class="help-text">Pause server simulation when no players are connected</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto_start" name="auto_start" {{ if index $form "auto_start" }}checked{{ end }}>
+                                    <span>Auto Start</span>
+                                </label>
+                                <p class="help-text">Start server automatically when SDSM starts</p>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="auto_update" name="auto_update" {{ if index $form "auto_update" }}checked{{ end }}>
+                                    <span>Auto Update</span>
+                                </label>
+                                <p class="help-text">Update server files before starting</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Form Actions -->
+                    <div class="update-button-container">
+                        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary btn-min-lg">Create Server</button>
+                    </div>
+                </form>
             </div>
 
-            <ul class="progress-items">
-                <li class="progress-item" data-field="name">
-                    <span class="progress-item-icon"></span>
-                    <span>Server Name</span>
-                </li>
-                <li class="progress-item" data-field="world">
-                    <span class="progress-item-icon"></span>
-                    <span>World</span>
-                </li>
-                <li class="progress-item" data-field="start_location">
-                    <span class="progress-item-icon"></span>
-                    <span>Start Location</span>
-                </li>
-                <li class="progress-item" data-field="start_condition">
-                    <span class="progress-item-icon"></span>
-                    <span>Start Condition</span>
-                </li>
-                <li class="progress-item" data-field="difficulty">
-                    <span class="progress-item-icon"></span>
-                    <span>Difficulty</span>
-                </li>
-            </ul>
-        </aside>
-
-        <div class="form-container">
-            <!-- Header -->
-            <header class="header">
-                <div class="header-content">
-                    <div>
-                        <h1>Create New Server</h1>
-                        <p class="text-secondary">Configure and deploy a new Stationeers server</p>
-                    </div>
-                    <div>
-                        <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+            <!-- Right: Progress -->
+            <aside class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Form Progress</h2>
+                </div>
+                <div class="status-info" style="margin-top:0;">
+                    <div class="status-row">
+                        <span class="status-label">Completion</span>
+                        <span><span id="completedCount">0</span> of <span id="totalCount">5</span> required</span>
                     </div>
                 </div>
-            </header>
-    
-            {{ if .error }}
-            <div class="alert alert-error" role="alert">{{ .error }}</div>
-            {{ end }}
-            <form method="POST" action="/server/new" id="serverForm">
-                <div class="form-card">
-                <!-- Basic Settings -->
-                <div class="form-section">
-                    <h3>Basic Settings</h3>
-                    <div class="form-grid">
-                        <div class="form-group form-grid-full">
-                            <label for="name">Server Name *</label>
-                            <input type="text" id="name" name="name" required
-                                   value="{{ index $form "name" }}"
-                                   placeholder="Enter server name">
-                            <p class="help-text">The name that will appear in the server list</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label" for="world">World *</label>
-                            <select name="world" id="world" class="form-select" required>
-                                <option value="">Loading...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label" for="start_location">Start Location *</label>
-                            <select name="start_location" id="start_location" class="form-select" required>
-                                <option value="">Loading...</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label" for="start_condition">Start Condition *</label>
-                            <select name="start_condition" id="start_condition" class="form-select" required>
-                                <option value="">Loading...</option>
-                            </select>
-                        </div>
-
-                        {{ $selectedDifficulty := index $form "difficulty" }}
-                        <div class="form-group">
-                            <label for="difficulty">Difficulty *</label>
-                            <select id="difficulty" name="difficulty" required>
-                                {{ range .difficulties }}
-                                <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
-                                {{ end }}
-                            </select>
-                            <p class="help-text">Game difficulty level</p>
-                        </div>
+                <div class="update-progress active" id="form-progress">
+                    <div class="update-progress-bar">
+                        <div class="update-progress-fill" id="progressFill" style="width:0%"></div>
                     </div>
+                    <div class="update-progress-text">Idle</div>
                 </div>
-                
-                <!-- Network Settings -->
-                <div class="form-section">
-                    <h3>Network Settings</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="port">Port *</label>
-                            <input type="number" id="port" name="port" required 
-                                   value="{{ index $form "port" }}" min="1024" max="65535"
-                                   placeholder="27016">
-                            <p class="help-text">Server port (1024-65535)</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="max_clients">Max Players *</label>
-                            <input type="number" id="max_clients" name="max_clients" required 
-                                   value="{{ index $form "max_clients" }}" min="1" max="100"
-                                   placeholder="10">
-                            <p class="help-text">Maximum number of players</p>
-                        </div>
-                        
-                        <div class="form-group form-grid-full">
-                            <label for="password">Server Password</label>
-                            <input type="text" id="password" name="password" 
-                                value="{{ index $form "password" }}"
-                                placeholder="Leave empty for no password">
-                            <p class="help-text">Optional password to join the server</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
-                                Server Visible
-                            </label>
-                            <p class="help-text">Make server visible in server browser</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Advanced Settings -->
-                <div class="form-section">
-                    <h3>
-                        Advanced Settings
-                        <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                            </svg>
-                        </button>
-                    </h3>
-                    <div class="help-box" id="advanced-help" style="display: none;">
-                        <div class="help-content">
-                            <h4>Advanced Settings Guide</h4>
-                            <ul>
-                                <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
-                                <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
-                                <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
-                                <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="save_interval">Save Interval (seconds) *</label>
-                            <input type="number" id="save_interval" name="save_interval" required 
-                                   value="{{ index $form "save_interval" }}" min="60" max="3600"
-                                   placeholder="300">
-                            <p class="help-text">How often to save the world (60-3600)</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="restart_delay_seconds">Restart Delay (seconds)</label>
-                            <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" min="0" max="3600"
-                                   value="{{ index $form "restart_delay_seconds" }}" placeholder="10">
-                            <p class="help-text">Wait time between stop and restart (0-3600)</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="auth_secret">Auth Secret</label>
-                            <input type="text" id="auth_secret" name="auth_secret" 
-                                   value="{{ index $form "auth_secret" }}"
-                                   placeholder="Optional authentication secret">
-                            <p class="help-text">Steam authentication secret (optional)</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="beta">Game Version *</label>
-                            <select id="beta" name="beta" required>
-                                <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
-                                <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
-                            </select>
-                            <p class="help-text">Which version to use</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Startup Options -->
-                <div class="form-section">
-                    <h3>Startup Options</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="auto_save" name="auto_save" {{ if index $form "auto_save" }}checked{{ end }}>
-                                <span>Auto Save</span>
-                            </label>
-                            <p class="help-text">Toggle the dedicated server's autosave feature</p>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index $form "auto_pause" }}checked{{ end }}>
-                                <span>Auto Pause</span>
-                            </label>
-                            <p class="help-text">Pause server simulation when no players are connected</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="auto_start" name="auto_start" {{ if index $form "auto_start" }}checked{{ end }}>
-                                <span>Auto Start</span>
-                            </label>
-                            <p class="help-text">Start server automatically when SDSM starts</p>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="auto_update" name="auto_update" {{ if index $form "auto_update" }}checked{{ end }}>
-                                <span>Auto Update</span>
-                            </label>
-                            <p class="help-text">Update server files before starting</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Form Actions -->
-                <div class="form-actions">
-                    <a href="/dashboard" class="btn btn-secondary">Cancel</a>
-                    <button type="submit" class="btn btn-primary">Create Server</button>
-                </div>
-            </div>
-        </form>
+                <ul style="margin-top: var(--space-3); padding-left: var(--space-5); color: var(--text-secondary);">
+                    <li class="progress-item" data-field="name">Server Name</li>
+                    <li class="progress-item" data-field="world">World</li>
+                    <li class="progress-item" data-field="start_location">Start Location</li>
+                    <li class="progress-item" data-field="start_condition">Start Condition</li>
+                    <li class="progress-item" data-field="difficulty">Difficulty</li>
+                </ul>
+            </aside>
         </div>
+    
     </div>
 
     <script>
+        function getStoredTheme() {
+            return localStorage.getItem('theme') || 'dark';
+        }
+
+        function setTheme(theme) {
+            const html = document.documentElement;
+            html.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('theme-icon');
+            if (icon) {
+                icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+            }
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
+            const next = current === 'dark' ? 'light' : 'dark';
+            setTheme(next);
+        }
+
+        // Initialize theme
+        setTheme(getStoredTheme());
+
         let worldLists = {"release": [], "beta": []};
         let worldDataByVersion = {"release": {}, "beta": {}};
         let selectedWorld = "{{ js (index $form "world") }}";
@@ -803,12 +489,10 @@
                     const isComplete = input.value && input.value.trim() !== '';
                     
                     if (isComplete) {
-                        item.classList.add('completed');
-                        item.querySelector('.progress-item-icon').textContent = '✓';
+                        item.style.textDecoration = 'line-through';
                         completedCount++;
                     } else {
-                        item.classList.remove('completed');
-                        item.querySelector('.progress-item-icon').textContent = '';
+                        item.style.textDecoration = '';
                     }
                 }
             });
@@ -818,7 +502,10 @@
 
             document.getElementById('completedCount').textContent = completedCount;
             document.getElementById('totalCount').textContent = totalCount;
-            document.getElementById('progressFill').style.width = percentage + '%';
+            const fill = document.getElementById('progressFill');
+            if (fill) fill.style.width = percentage + '%';
+            const progressText = document.querySelector('#form-progress .update-progress-text');
+            if (progressText) progressText.textContent = `Completion ${percentage}%`;
         }
 
         function toggleHelp(targetId) {
