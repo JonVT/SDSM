@@ -2987,6 +2987,13 @@ func (m *Manager) CheckMissingComponents() {
 		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers release binary expected at %s", releasePath))
 	}
 
+	// Check for Stationeers game files (Beta)
+	betaPath := filepath.Join(m.Paths.BetaDir(), "rocketstation_DedicatedServer.x86_64")
+	if _, err := os.Stat(betaPath); os.IsNotExist(err) {
+		m.MissingComponents = append(m.MissingComponents, "Stationeers Beta")
+		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers beta binary expected at %s", betaPath))
+	}
+
 	// Check for BepInEx
 	if !m.hasBepInExInstall() {
 		m.MissingComponents = append(m.MissingComponents, "BepInEx")

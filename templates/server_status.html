@@ -1696,6 +1696,45 @@
             fetchStatus();
             startStatusUpdates();
 
+            // Intercept Chat send form to POST a command to the API
+            (function(){
+                const chatForm = document.getElementById('chat-send-form');
+                const chatInput = document.getElementById('chat-input');
+                const chatBtn = document.getElementById('chat-send-button');
+                if (!chatForm || !chatInput || !chatBtn || !serverId) return;
+                chatForm.addEventListener('submit', function(e){
+                    e.preventDefault();
+                    const message = (chatInput.value || '').trim();
+                    if (!message || chatBtn.disabled) return;
+                    setButtonDisabled(chatBtn, true);
+                    toggleButtonSpinner(chatBtn, true);
+                    fetch(`/api/servers/${serverId}/command`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({ type: 'chat', payload: message })
+                    })
+                    .then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const msg = res.headers.get('X-Toast-Message');
+                                if (msg) window.showToast({ type: type || 'info', title: title || '', message: msg });
+                            }
+                        } catch(_) {}
+                        if (res.ok) {
+                            chatInput.value = '';
+                        }
+                        // Status polling already updates chat view from logs
+                    })
+                    .catch(() => { /* no-op */ })
+                    .finally(() => { toggleButtonSpinner(chatBtn, false); setButtonDisabled(chatBtn, false); });
+                });
+            })();
+
             // Intercept Banned Add form submit for async update
             (function(){
                 const addForm = document.getElementById('banned-add-form');

@@ -273,6 +273,55 @@ func (h *ManagerHandlers) APIServerLog(c *gin.Context) {
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
 }
 
+// APIServerCommand accepts a command to be sent to the running server process via stdin.
+// JSON body: { "type": "console"|"chat", "payload": "..." }
+func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Parse JSON body
+	var req struct {
+		Type    string `json:"type"`
+		Payload string `json:"payload"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Message", "Invalid request body.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+	if strings.TrimSpace(req.Payload) == "" {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Message", "Empty command.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty command"})
+		return
+	}
+
+	if err := s.SendCommand(req.Type, req.Payload); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Command Sent")
+	c.Header("X-Toast-Message", "Your command was sent to the server.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"active":              h.manager.IsActive(),

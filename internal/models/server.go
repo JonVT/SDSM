@@ -129,6 +129,10 @@ type Server struct {
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
 	playersLogDirty     bool
+	// stdin is a handle to the running server process' standard input when available.
+	// It is used to send console commands. Guard all writes with stdinMu.
+	stdin   io.WriteCloser `json:"-"`
+	stdinMu sync.Mutex     `json:"-"`
 }
 
 func (s *Server) EnsureLogger(paths *utils.Paths) {
@@ -1181,6 +1185,14 @@ func (s *Server) Start() {
 	}
 
 	s.Proc = cmd
+	// Attempt to capture stdin for sending console commands
+	if stdin, err := cmd.StdinPipe(); err == nil {
+		s.stdinMu.Lock()
+		s.stdin = stdin
+		s.stdinMu.Unlock()
+	} else if s.Logger != nil {
+		s.Logger.Write(fmt.Sprintf("Failed to acquire stdin for server process: %v", err))
+	}
 	s.resetChat()
 	stopChan := make(chan bool)
 	s.Thrd = stopChan
@@ -1201,6 +1213,13 @@ func (s *Server) Start() {
 		s.Running = false
 		s.Starting = false
 		s.Proc = nil
+		// Close stdin if present and clear it
+		s.stdinMu.Lock()
+		if s.stdin != nil {
+			_ = s.stdin.Close()
+			s.stdin = nil
+		}
+		s.stdinMu.Unlock()
 		close(stop)
 		if s.Thrd == stop {
 			s.Thrd = nil
@@ -1311,6 +1330,54 @@ func (s *Server) processLine(line string) {
 			handler.handle(s, line, matches)
 			break
 		}
+	}
+}
+
+// SendRaw writes a single console line to the running server's stdin.
+// It returns an error if the server is not running or stdin is unavailable.
+func (s *Server) SendRaw(line string) error {
+	if s == nil {
+		return fmt.Errorf("server unavailable")
+	}
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return fmt.Errorf("empty command")
+	}
+	if !s.IsRunning() || s.Proc == nil {
+		return fmt.Errorf("server is not running")
+	}
+	s.stdinMu.Lock()
+	defer s.stdinMu.Unlock()
+	if s.stdin == nil {
+		return fmt.Errorf("stdin not available")
+	}
+	// Ensure single line only
+	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
+	trimmed = strings.ReplaceAll(trimmed, "\r", " ")
+	if _, err := io.WriteString(s.stdin, trimmed+"\n"); err != nil {
+		return fmt.Errorf("failed to send command: %w", err)
+	}
+	return nil
+}
+
+// SendCommand provides a small layer over SendRaw for different command kinds.
+// kind may be "console" (default) or "chat". For chat, we prefix with "say "
+// which is commonly used by dedicated servers to broadcast messages.
+func (s *Server) SendCommand(kind, payload string) error {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	msg := strings.TrimSpace(payload)
+	if msg == "" {
+		return fmt.Errorf("no payload provided")
+	}
+	switch k {
+	case "", "console":
+		return s.SendRaw(msg)
+	case "chat":
+		// Prefix with 'say' which many servers use; adjust if Stationeers expects a different verb
+		return s.SendRaw("say " + msg)
+	default:
+		// Unknown type, treat as console
+		return s.SendRaw(msg)
 	}
 }
 

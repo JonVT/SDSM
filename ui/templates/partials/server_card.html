@@ -1,0 +1,114 @@
+{{ define "server_card.html" }}
+{{/*
+  Renders a single server card. Dot MUST be a *models.Server.
+*/}}
+{{ $srv := . }}
+
+<article class="glass-card server-card" data-server-id="{{ $srv.ID }}" data-target-url="/server/{{ $srv.ID }}">
+  <div class="card-header">
+    <div class="server-name card-title">
+      {{ if $srv.Beta }}
+      <!-- Beta icon: lab flask -->
+      <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
+        <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
+        <path d="M7 14h10"/>
+      </svg>
+      {{ else }}
+      <!-- Release icon: server stack (default) -->
+      <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+        <line x1="6" y1="6" x2="6.01" y2="6"></line>
+        <line x1="6" y1="18" x2="6.01" y2="18"></line>
+      </svg>
+      {{ end }}
+      {{ $srv.Name }}
+    </div>
+    <span class="status-pill {{ if $srv.IsRunning }}is-running{{ else }}is-stopped{{ end }}" data-status>
+      {{ if $srv.IsRunning }}
+        <svg class="icon-inline" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+        </svg>
+        Running
+      {{ else }}
+        <svg class="icon-inline" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+        </svg>
+        Stopped
+      {{ end }}
+    </span>
+  </div>
+
+  <div class="server-info">
+    <div class="info-item">
+      <div class="info-label">World</div>
+      <div class="info-value">{{ $srv.World }}</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Port</div>
+      <div class="info-value">{{ $srv.Port }}</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Players</div>
+      <div class="info-value" data-player-count>{{ $srv.ClientCount }}/{{ $srv.MaxClients }}</div>
+    </div>
+    <div class="info-item">
+      <div class="info-label">Password</div>
+      <div class="info-value">{{ if $srv.Password }}Yes{{ else }}No{{ end }}</div>
+    </div>
+  </div>
+
+  <div class="server-actions">
+    {{ if $srv.IsRunning }}
+      <button
+        class="btn btn-danger btn-pill"
+        hx-post="/api/servers/{{ $srv.ID }}/stop"
+        hx-trigger="click"
+        hx-confirm="Are you sure you want to stop this server?"
+        hx-target="closest .server-card"
+        hx-swap="outerHTML"
+        data-stop-navigation="true"
+      >
+        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12"></rect>
+        </svg>
+        <span class="htmx-indicator" aria-hidden="true">⟳</span>
+        Stop
+      </button>
+    {{ else }}
+      <button
+        class="btn btn-success btn-pill"
+        hx-post="/api/servers/{{ $srv.ID }}/start"
+        hx-trigger="click"
+        hx-target="closest .server-card"
+        hx-swap="outerHTML"
+        data-stop-navigation="true"
+      >
+        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <span class="htmx-indicator" aria-hidden="true">⟳</span>
+        Start
+      </button>
+    {{ end }}
+    <button
+      class="btn btn-danger btn-pill"
+      hx-post="/api/servers/{{ $srv.ID }}/delete"
+      hx-trigger="click"
+      hx-confirm="Are you sure you want to delete {{ $srv.Name }}? This cannot be undone."
+      hx-target="closest .server-card"
+      hx-swap="outerHTML"
+      data-stop-navigation="true"
+    >
+      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+      </svg>
+      <span class="htmx-indicator" aria-hidden="true">⟳</span>
+      Delete
+    </button>
+  </div>
+</article>
+{{ end }}

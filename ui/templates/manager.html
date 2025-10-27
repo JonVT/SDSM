@@ -1,0 +1,1499 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Stationeers Server Manager - Configuration and Updates">
+    <title>Manager - Stationeers Server Manager</title>
+    
+    <!-- Shared UI theme for consistent styling with Dashboard/Server pages -->
+    <link rel="stylesheet" href="/static/ui-theme.css">
+    
+    <!-- HTMX for dynamic interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        .manager-header {
+            background: linear-gradient(120deg, rgba(37, 99, 235, 0.93) 0%, rgba(139, 92, 246, 0.93) 100%);
+            border-radius: var(--radius-xl);
+            padding: var(--space-4) var(--space-5);
+            margin-bottom: var(--space-5);
+            box-shadow: var(--shadow-lg);
+            color: #f8fafc;
+        }
+
+        /* Connection banner uses shared styles from ui-theme.css */
+        
+        
+        .button-group {
+            display: flex;
+            gap: var(--space-3);
+            justify-content: center;
+            margin-top: var(--space-4);
+        }
+        
+        #updating {
+            max-height: 400px;
+            overflow-y: auto;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            font-family: monospace;
+            font-size: var(--text-sm);
+        }
+        
+        #updating div {
+            margin-bottom: var(--space-1);
+            color: var(--text-primary);
+        }
+        
+        /* Theme toggle uses shared styles from ui-theme.css */
+
+        .setup-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+        }
+
+        .setup-overlay.hidden {
+            display: none;
+        }
+
+        .setup-modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl, 24px);
+            padding: var(--space-7, 3rem);
+            max-width: 640px;
+            width: min(92%, 640px);
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+            border: 1px solid var(--border-color);
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: setupSlideIn 0.25s ease-out;
+        }
+
+        @keyframes setupSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-24px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .setup-header {
+            text-align: center;
+            margin-bottom: var(--space-6, 2rem);
+        }
+
+        .setup-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto var(--space-4);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+
+        .setup-header h2 {
+            margin-bottom: var(--space-2);
+            font-size: var(--text-2xl);
+            color: var(--text-primary);
+        }
+
+        .setup-header p {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+        }
+
+        .missing-components {
+            background: rgba(234, 179, 8, 0.1);
+            border-left: 4px solid rgba(202, 138, 4, 0.85);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4, 1.5rem);
+            margin-bottom: var(--space-5, 1.5rem);
+        }
+
+        .missing-components h3 {
+            font-size: var(--text-base);
+            font-weight: 600;
+            color: #b45309;
+            margin-bottom: var(--space-2);
+        }
+
+        .missing-components ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .missing-components li {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2, 0.75rem);
+            padding: var(--space-2, 0.75rem) 0;
+            color: #92400e;
+            font-size: var(--text-sm);
+        }
+
+        .missing-components li::before {
+            content: "⚠️";
+        }
+
+        .missing-components.empty {
+            border-left-color: rgba(22, 163, 74, 0.7);
+            background: rgba(22, 163, 74, 0.12);
+        }
+
+        .missing-components.empty h3 {
+            color: #166534;
+        }
+
+        .missing-components .empty-message {
+            display: none;
+            color: #166534;
+            font-weight: 600;
+            font-size: var(--text-sm);
+        }
+
+        .missing-components.empty .empty-message {
+            display: block;
+        }
+
+        .missing-components.empty ul {
+            display: none;
+        }
+
+        .setup-error-box {
+            display: none;
+            background: rgba(248, 113, 113, 0.12);
+            border-left: 4px solid rgba(220, 38, 38, 0.9);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4, 1.5rem);
+            margin-bottom: var(--space-5, 1.5rem);
+        }
+
+        .setup-error-box.active {
+            display: block;
+        }
+
+        .setup-error-box h3 {
+            font-size: var(--text-base);
+            font-weight: 600;
+            color: #b91c1c;
+            margin-bottom: var(--space-2);
+        }
+
+        .setup-error-box ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .setup-error-box li {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2, 0.75rem);
+            padding: var(--space-2, 0.75rem) 0;
+            color: #b91c1c;
+            font-size: var(--text-sm);
+        }
+
+        .setup-error-box li::before {
+            content: "⛔";
+        }
+
+        .error-hint {
+            font-size: var(--text-xs);
+            color: #b91c1c;
+            margin-top: var(--space-2);
+        }
+
+        .setup-progress {
+            display: none;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color);
+            padding: var(--space-4, 1.5rem);
+            margin-bottom: var(--space-5, 1.5rem);
+        }
+
+        .setup-progress.active {
+            display: block;
+        }
+
+        .setup-progress-text {
+            color: var(--text-secondary);
+            font-size: var(--text-sm);
+            margin-bottom: var(--space-3, 1rem);
+            text-align: center;
+        }
+
+        .setup-progress-bar {
+            width: 100%;
+            height: 10px;
+            background: var(--border-color);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .setup-progress-fill {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+
+        .setup-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: var(--space-3, 1rem);
+        }
+
+        .setup-actions .btn {
+            min-width: 140px;
+        }
+
+        .setup-log-footer {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3, 1rem);
+            margin-top: var(--space-5, 1.5rem);
+        }
+
+        .setup-log-footer .setup-log-text {
+            flex: 1;
+            font-size: var(--text-sm);
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .setup-log-footer .btn {
+            flex-shrink: 0;
+        }
+
+        /* Inline spinner for action buttons */
+        .btn-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-left: 8px;
+            border-radius: 50%;
+            border: 2px solid rgba(99, 102, 241, 0.35);
+            border-top-color: #6366f1;
+            animation: btnspin 0.8s linear infinite;
+            vertical-align: -2px;
+        }
+
+        @keyframes btnspin { to { transform: rotate(360deg); } }
+
+        /* Arrange Manager cards side-by-side on wide screens */
+        .manager-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: var(--space-4);
+        }
+
+        @media (min-width: 1024px) {
+            .manager-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .manager-content {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+            width: 100%;
+            padding-left: var(--space-6);
+            padding-right: var(--space-6);
+        }
+
+        /* Inline layout for Configuration form: labels left, inputs right */
+        .config-form .form-group {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            align-items: center;
+            gap: var(--space-3);
+        }
+
+        .config-form .form-group label {
+            margin: 0;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .config-form .form-group input[type="text"],
+        .config-form .form-group input[type="number"],
+        .config-form .form-group select {
+            width: 100%;
+        }
+
+        /* Checkbox row aligns inline as well */
+        .config-form .form-group input[type="checkbox"] {
+            justify-self: start;
+            width: 18px;
+            height: 18px;
+        }
+
+        /* Position Update button aligned with inputs (second column), add space above */
+        .config-form .form-row-full {
+            grid-template-columns: 260px 1fr;
+            margin-top: var(--space-4);
+        }
+        .config-form .form-row-full > * {
+            /* Span across both columns and align to the right edge of the pane */
+            grid-column: 1 / -1;
+            justify-self: end;
+            width: auto;
+        }
+
+        @media (max-width: 640px) {
+            .config-form .form-group {
+                grid-template-columns: 1fr;
+                align-items: start;
+            }
+
+            .config-form .form-group label {
+                margin-bottom: var(--space-1);
+            }
+        }
+    </style>
+    <script>
+        (function () {
+            // Lightweight header stats fetcher to keep hero-meta live
+            function pollStats() {
+                fetch('/api/stats', {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                })
+                    .then((res) => res.ok ? res.json() : null)
+                    .then((data) => {
+                        if (!data) return;
+                        try {
+                            document.getElementById('header-total-servers').textContent = data.totalServers;
+                            document.getElementById('header-total-servers-suffix').textContent = data.totalServers === 1 ? '' : 's';
+                            document.getElementById('header-active-servers').textContent = data.activeServers;
+                            document.getElementById('header-total-players').textContent = data.totalPlayers;
+                            document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString();
+                        } catch(e) {
+                            console.error("Error updating header stats:", e);
+                        }
+                    })
+                    .catch(() => {});
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                pollStats();
+                setInterval(pollStats, 30000);
+                // Trigger polling when user clicks the global refresh button
+                document.body.addEventListener('htmx:afterRequest', function(evt) {
+                    if (evt.detail.elt.getAttribute('hx-get') === '/api/refresh') {
+                        pollStats();
+                    }
+                });
+            });
+
+            // Defer DOM queries and event bindings until the DOM is ready
+            let pollTimer = null;
+
+            // Toast helper for fetch-based requests
+            function showToastFromHeaders(res) {
+                try {
+                    if (!window.showToast || !res || !res.headers) return;
+                    const type = res.headers.get('X-Toast-Type');
+                    const title = res.headers.get('X-Toast-Title');
+                    const message = res.headers.get('X-Toast-Message');
+                    if (message) {
+                        window.showToast({ type: type || 'info', title: title || '', message });
+                    }
+                } catch (_) {
+                    // ignore header parse failures
+                }
+            }
+
+            function showButtonSpinner(btn, on) {
+                if (!btn) return;
+                btn.setAttribute('aria-busy', on ? 'true' : 'false');
+                let sp = btn.querySelector('.btn-spinner');
+                if (on) {
+                    if (!sp) {
+                        sp = document.createElement('span');
+                        sp.className = 'btn-spinner';
+                        sp.setAttribute('aria-hidden', 'true');
+                        btn.appendChild(sp);
+                    }
+                } else if (sp) {
+                    sp.remove();
+                }
+            }
+
+            function showMessage(text, isError) {
+                const messageEl = document.getElementById('updateMessage');
+                if (!messageEl) return;
+                if (!text) {
+                    messageEl.classList.remove('active', 'error');
+                    messageEl.textContent = '';
+                    return;
+                }
+                messageEl.textContent = text;
+                messageEl.classList.add('active');
+                messageEl.classList.toggle('error', !!isError);
+            }
+
+            function setButtonsDisabled(disabled) {
+                const btns = document.querySelectorAll('.update-trigger');
+                btns.forEach((btn) => {
+                    btn.disabled = disabled;
+                    if (!disabled) showButtonSpinner(btn, false);
+                });
+            }
+
+            function selectProgressRow(key) {
+                if (!key) return null;
+                return document.querySelector('.progress-row[data-progress="' + key.toLowerCase() + '"]');
+            }
+
+            function formatBytes(bytes) {
+                if (!bytes || bytes <= 0) return '0 B';
+                const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                let value = bytes; let index = 0;
+                while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
+                const fixed = value < 10 && index > 0 ? value.toFixed(1) : Math.round(value).toString();
+                return fixed + ' ' + units[index];
+            }
+
+            function updateProgressRow(component) {
+                const row = selectProgressRow(component.key || component.component);
+                if (!row) return;
+                const fill = row.querySelector('.progress-fill');
+                const text = row.querySelector('.progress-text');
+                const active = component.running || component.percent > 0 || !!component.error;
+
+                row.classList.toggle('active', active);
+                row.classList.toggle('error', !!component.error);
+
+                if (fill) {
+                    if (component.total > 0) {
+                        fill.style.width = Math.min(component.percent || 0, 100) + '%';
+                        fill.classList.remove('indeterminate');
+                    } else if (component.running) {
+                        fill.style.width = '100%';
+                        fill.classList.add('indeterminate');
+                    } else {
+                        fill.style.width = '0%';
+                        fill.classList.remove('indeterminate');
+                    }
+                }
+
+                if (text) {
+                    let status = component.stage || '';
+                    if (component.error) {
+                        status = 'Error: ' + component.error;
+                    } else if (component.total > 0 && component.running) {
+                        status = status + ' (' + (component.percent || 0) + '% of ' + formatBytes(component.total) + ')';
+                    } else if (!component.running && component.percent >= 100 && !component.error) {
+                        status = status || 'Completed';
+                    }
+                    text.textContent = status.trim();
+                }
+            }
+
+            function handleProgressSnapshot(snapshot) {
+                if (!snapshot || !Array.isArray(snapshot.components)) return;
+                snapshot.components.forEach(updateProgressRow);
+                setButtonsDisabled(snapshot.updating);
+                if (!snapshot.updating && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            }
+
+            function fetchProgress() {
+                fetch('/update/progress', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+                    .then((res) => res.ok ? res.json() : null)
+                    .then(handleProgressSnapshot)
+                    .catch(() => {});
+            }
+
+            function ensurePolling() {
+                if (!pollTimer) pollTimer = setInterval(fetchProgress, 2000);
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const buttons = Array.from(document.querySelectorAll('.update-trigger'));
+                const messageEl = document.getElementById('updateMessage');
+                const configForm = document.getElementById('configForm');
+                const configBtn = document.getElementById('updateConfigBtn');
+                const shutdownBtn = document.getElementById('shutdownBtn');
+                const restartBtn = document.getElementById('restartBtn');
+
+                function showMessage(text, isError) {
+                    if (!messageEl) return;
+                    if (!text) {
+                        messageEl.classList.remove('active', 'error');
+                        messageEl.textContent = '';
+                        return;
+                    }
+                    messageEl.textContent = text;
+                    messageEl.classList.add('active');
+                    messageEl.classList.toggle('error', !!isError);
+                }
+
+                function setButtonsDisabled(disabled) {
+                    buttons.forEach((btn) => {
+                        btn.disabled = disabled;
+                        if (!disabled) showButtonSpinner(btn, false);
+                    });
+                }
+
+                // Wire up update buttons
+                buttons.forEach((btn) => {
+                    btn.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        if (btn.disabled) return;
+
+                        const target = btn.dataset.updateTarget;
+                        if (!target) return;
+
+                        const params = new URLSearchParams();
+                        params.append(target, '1');
+
+                        setButtonsDisabled(true);
+                        showButtonSpinner(btn, true);
+                        showMessage('Starting update...', false);
+
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: params.toString()
+                        })
+                            .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json(); })
+                            .then((data) => {
+                                if (data && data.status === 'started') {
+                                    const label = btn.closest('tr')?.querySelector('.component-title')?.textContent?.trim() || 'Update';
+                                    showMessage(label + ' started...', false);
+                                    fetchProgress();
+                                    ensurePolling();
+                                } else if (data && data.status === 'ok') {
+                                    showMessage('Configuration updated.', false);
+                                    setButtonsDisabled(false);
+                                } else {
+                                    showMessage('', false);
+                                    setButtonsDisabled(false);
+                                }
+                            })
+                            .catch((err) => {
+                                const errorText = err && err.error ? err.error : 'Unable to start update. Please try again.';
+                                showMessage(errorText, true);
+                                setButtonsDisabled(false);
+                                fetchProgress();
+                            });
+                    });
+                });
+
+            // Async submit for Configuration form with inline spinner
+            if (configForm && configBtn) {
+                configForm.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    if (configBtn.disabled) return;
+
+                    const fd = new FormData(configForm);
+                    const params = new URLSearchParams();
+                    for (const [key, value] of fd.entries()) {
+                        params.append(key, typeof value === 'string' ? value : String(value));
+                    }
+                    if (!params.has('update_config')) params.append('update_config', '1');
+
+                    configBtn.disabled = true;
+                    showButtonSpinner(configBtn, true);
+                    showMessage('Saving configuration…', false);
+
+                    fetch('/update', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: params.toString()
+                    })
+                        .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json(); })
+                        .then((data) => {
+                            if (data && (data.status === 'ok' || data.status === 'updated')) {
+                                showMessage('Configuration updated.', false);
+                            } else {
+                                showMessage('Configuration updated.', false);
+                            }
+                        })
+                        .catch((err) => {
+                            const errorText = err && err.error ? err.error : 'Unable to save configuration. Please try again.';
+                            showMessage(errorText, true);
+                            if (window.showToast) window.showToast({ type: 'error', title: 'Save Failed', message: errorText });
+                        })
+                        .finally(() => {
+                            configBtn.disabled = false;
+                            showButtonSpinner(configBtn, false);
+                        });
+                });
+            }
+
+            // Footer actions: Shutdown / Restart with async POSTs and spinners
+            function disableFooterButtons(disabled) {
+                if (shutdownBtn) shutdownBtn.disabled = disabled;
+                if (restartBtn) restartBtn.disabled = disabled;
+                if (!disabled) {
+                    if (shutdownBtn) showButtonSpinner(shutdownBtn, false);
+                    if (restartBtn) showButtonSpinner(restartBtn, false);
+                }
+            }
+
+            function postFooterAction(kind, btn, confirmingText, startedText, successText, errorText) {
+                if (!btn) return;
+                if (!confirm(confirmingText)) return;
+
+                const params = new URLSearchParams();
+                params.append(kind, '1');
+
+                disableFooterButtons(true);
+                showButtonSpinner(btn, true);
+                showMessage(startedText, false);
+
+                fetch('/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: params.toString()
+                })
+                    .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json().catch(() => ({})); })
+                    .then(() => {
+                        showMessage(successText, false);
+                        setTimeout(() => disableFooterButtons(false), 3000);
+                    })
+                    .catch((err) => {
+                        const e = err && err.error ? err.error : errorText;
+                        showMessage(e, true);
+                        if (window.showToast) window.showToast({ type: 'error', title: 'Request Failed', message: e });
+                        disableFooterButtons(false);
+                    });
+            }
+
+            if (shutdownBtn) {
+                shutdownBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    postFooterAction(
+                        'shutdown',
+                        shutdownBtn,
+                        'Are you sure you want to shutdown SDSM? All servers will be stopped.',
+                        'Shutting down SDSM…',
+                        'Shutdown initiated. The UI may go offline shortly.',
+                        'Unable to shutdown SDSM. Please try again.'
+                    );
+                });
+            }
+
+            if (restartBtn) {
+                restartBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    postFooterAction(
+                        'restart',
+                        restartBtn,
+                        'Are you sure you want to restart SDSM? All servers will be temporarily stopped.',
+                        'Restarting SDSM…',
+                        'Restart initiated. The UI will reconnect when available.',
+                        'Unable to restart SDSM. Please try again.'
+                    );
+                });
+            }
+
+            // Initial progress fetch
+            fetchProgress();
+            ensurePolling();
+            }); // DOMContentLoaded end
+        })();
+    </script>
+</head>
+
+<body class="page-shell">
+    <div id="connectionBanner" class="connection-banner" role="status" aria-live="polite">
+        <span id="connectionBannerText">Connection lost. Attempting to reconnect...</span>
+        <button type="button" id="connectionBannerAction">Reload</button>
+    </div>
+    <!-- Header (identical to Dashboard width: wrap in .container) -->
+    <div class="container">
+    <header class="hero-card">
+        <div class="hero-main">
+            <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+            <div class="hero-heading">
+                <h1 class="hero-title">Server Manager</h1>
+                <p class="hero-subtitle">Configure and update your Stationeers servers.</p>
+            </div>
+        </div>
+        <div class="hero-meta">
+            <div class="hero-meta-title">Fleet Overview</div>
+            <p class="hero-meta-text">
+                <span id="header-total-servers">--</span> server<span id="header-total-servers-suffix">s</span> tracked •
+                <span id="header-active-servers">--</span> active •
+                <span id="header-total-players">--</span> players
+            </p>
+            <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
+        </div>
+        <div class="hero-actions">
+            <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                <span id="theme-icon">🌙</span>
+            </button>
+            <button
+                class="btn btn-primary"
+                hx-get="/api/refresh"
+                hx-trigger="click"
+                hx-indicator="#manager-refresh-indicator"
+                hx-swap="none"
+            >
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                    <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+                <span id="manager-refresh-indicator" class="hidden">⟳</span>
+                Refresh
+            </button>
+            <a href="/dashboard" class="btn btn-secondary">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+                Dashboard
+            </a>
+            <a href="/logout" class="btn btn-secondary">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Logout
+            </a>
+        </div>
+    </header>
+    </div>
+
+    <main class="container">
+        <div class="manager-content">
+            <div class="manager-grid">
+                <div class="glass-card">
+                    <h3>Configuration</h3>
+                    <form id="configForm" class="config-form" action="/update" method="POST">
+                        <div class="form-group">
+                            <label for="steam_id">Steam ID</label>
+                            <input type="text" id="steam_id" name="steam_id" value="{{ .steam_id }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="port">Port</label>
+                            <input type="text" id="port" name="port" value="{{ .port }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="language">Language</label>
+                            <select id="language" name="language">
+                                {{ range .languages }}
+                                <option value="{{ . }}" {{ if eq . $.language }}selected{{ end }}>{{ . }}</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="root_path">Root Path</label>
+                            <input type="text" id="root_path" name="root_path" value="{{ .root_path }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="auto_update">Auto Update Time</label>
+                            <input type="text" id="auto_update" name="auto_update" value="{{ .auto_update }}" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="start_update">Update at Start</label>
+                            <input type="checkbox" id="start_update" name="start_update" {{if .start_update}}checked{{end}}>
+                        </div>
+                        <div class="form-group form-row-full">
+                            <button id="updateConfigBtn" type="submit" name="update_config" class="btn btn-primary" {{if .updating}}disabled{{end}}>
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                </svg>
+                                Update Config
+                            </button>
+                        </div>
+                    </form>
+                    <div class="note">
+                        <strong>Note:</strong> After updating the configuration, SDSM may restart so changes can take effect.
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    {{if not .updating}}
+                    <div id="versions">
+                        <h3>Software Versions</h3><h6>(WIP)</h6>
+                        <form action="/update" method="POST" id="updateForm">
+                            <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Component</th>
+                                            <th>Deployed</th>
+                                            <th>Latest</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">rocketstation_DedicatedServer Release</div>
+                                                <div class="progress-row" data-progress="release">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .release_deployed }}</td>
+                                            <td>{{ .release_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn {{if eq .release_deployed .release_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">rocketstation_DedicatedServer Beta</div>
+                                                <div class="progress-row" data-progress="beta">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .beta_deployed }}</td>
+                                            <td>{{ .beta_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn {{if eq .beta_deployed .beta_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">steamcmd</div>
+                                                <div class="progress-row" data-progress="steamcmd">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .steamcmd_deployed }}</td>
+                                            <td>{{ .steamcmd_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn {{if eq .steamcmd_deployed .steamcmd_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">BEPINEX</div>
+                                                <div class="progress-row" data-progress="bepinex">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .bepinex_deployed }}</td>
+                                            <td>{{ .bepinex_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn {{if eq .bepinex_deployed .bepinex_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">Stationeers LaunchPad</div>
+                                                <div class="progress-row" data-progress="launchpad">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .launchpad_deployed }}</td>
+                                            <td>{{ .launchpad_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn {{if eq .launchpad_deployed .launchpad_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="3"></td>
+                                            <td>
+                                                <button type="submit" name="update_all" data-update-target="update_all" data-component="all" class="btn btn-primary update-trigger" {{if .updating}}disabled{{end}}>
+                                                    Update All
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </form>
+                    </div>
+                    {{else}}
+                    <div>
+                        <h3>Updating...</h3>
+                        <div id="updating">Nothing to see here...</div>
+                        <script>
+                            const eventSource = new EventSource('/updating');
+                            const messagesDiv = document.getElementById('updating');
+
+                            eventSource.onmessage = function (event) {
+                                const newMessage = document.createElement('div');
+                                newMessage.textContent = event.data;
+                                messagesDiv.appendChild(newMessage);
+                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                            };
+                        </script>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            
+            <!-- Footer with Actions -->
+            <div class="glass-card">
+                <p>There are <strong>{{.server_count_active}}</strong> servers currently running.</p>
+                <div class="button-group">
+                    <form id="footerActionsForm" action="/update" method="POST" style="display: contents;">
+                        <button id="shutdownBtn" type="submit" name="shutdown" value="1" class="btn btn-danger" {{if .updating}}disabled{{end}}>
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                <line x1="12" y1="2" x2="12" y2="12"></line>
+                            </svg>
+                            Shutdown SDSM
+                        </button>
+                        <button id="restartBtn" type="submit" name="restart" value="1" class="btn btn-primary" {{if .updating}}disabled{{end}}>
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <polyline points="1 20 1 14 7 14"></polyline>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                            </svg>
+                            Restart SDSM
+                        </button>
+                    </form>
+                    <a class="btn btn-secondary" href="/logs/sdsm" target="_blank" rel="noopener">
+                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        View Log
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        (function () {
+            const HEALTH_ENDPOINT = '/healthz';
+            const HEALTH_TIMEOUT = 4000;
+            const INTERVAL_OK = 15000;
+            const INTERVAL_LOST = 5000;
+
+            let healthTimer = null;
+            let connectionLost = false;
+
+            function setBanner(active, message) {
+                const banner = document.getElementById('connectionBanner');
+                const text = document.getElementById('connectionBannerText');
+                if (!banner) {
+                    return;
+                }
+                if (active) {
+                    banner.classList.add('active');
+                    if (text && message) {
+                        text.textContent = message;
+                    }
+                    document.body.style.paddingTop = '4rem';
+                } else {
+                    banner.classList.remove('active');
+                    document.body.style.paddingTop = '';
+                }
+            }
+
+            function scheduleNext(delay) {
+                if (healthTimer) {
+                    clearTimeout(healthTimer);
+                }
+                healthTimer = setTimeout(runHealthCheck, delay);
+            }
+
+            function runHealthCheck() {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
+
+                fetch(HEALTH_ENDPOINT, {
+                    cache: 'no-store',
+                    credentials: 'same-origin',
+                    signal: controller.signal
+                })
+                    .then((response) => {
+                        clearTimeout(timeoutId);
+                        if (!response.ok) {
+                            throw new Error('Health check failed');
+                        }
+                        if (connectionLost) {
+                            connectionLost = false;
+                            setBanner(true, 'Connection restored. Reloading...');
+                            setTimeout(() => {
+                                setBanner(false);
+                                window.location.reload();
+                            }, 1200);
+                            return;
+                        }
+                        setBanner(false);
+                    })
+                    .catch(() => {
+                        clearTimeout(timeoutId);
+                        if (!connectionLost) {
+                            connectionLost = true;
+                            setBanner(true, 'Connection lost. Attempting to reconnect...');
+                        }
+                    })
+                    .finally(() => {
+                        scheduleNext(connectionLost ? INTERVAL_LOST : INTERVAL_OK);
+                    });
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                const reloadButton = document.getElementById('connectionBannerAction');
+                if (reloadButton) {
+                    reloadButton.addEventListener('click', () => window.location.reload());
+                }
+                runHealthCheck();
+            });
+        })();
+    </script>
+
+        {{ $missingCount := len .missing_components }}
+        {{ $errorCount := len .deploy_errors }}
+        {{ $shouldShowSetup := or .needs_setup (or .setup_in_progress (or (gt $missingCount 0) (gt $errorCount 0))) }}
+        <div id="setupOverlay" class="setup-overlay{{if not $shouldShowSetup}} hidden{{end}}" data-needs="{{if .needs_setup}}true{{else}}false{{end}}" data-in-progress="{{if .setup_in_progress}}true{{else}}false{{end}}" data-log-fallback="{{.setup_log_fallback}}" data-last-log="{{.setup_last_log_line}}">
+            <div class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+                <div class="setup-header">
+                    <div class="setup-icon">🔧</div>
+                    <h2 id="setupTitle">Initial Setup Required</h2>
+                    <p>We need to download a few components before everything is ready.</p>
+                </div>
+
+                <div id="setupMissingContainer" class="missing-components{{if eq $missingCount 0}} empty{{end}}">
+                    <h3>Missing Components</h3>
+                    <p id="setupMissingEmpty" class="empty-message">All components are present. You're good to go!</p>
+                    <ul id="setupMissingList">
+                        {{range .missing_components}}
+                        <li>{{.}}</li>
+                        {{end}}
+                    </ul>
+                </div>
+
+                <div id="setupErrorBox" class="setup-error-box{{if gt $errorCount 0}} active{{end}}">
+                    <h3>Installation Issues Detected</h3>
+                    <ul id="setupErrorList">
+                        {{range .deploy_errors}}
+                        <li>{{.}}</li>
+                        {{end}}
+                    </ul>
+                    <p class="error-hint">Review the setup log for details, then try again.</p>
+                </div>
+
+                <div id="setupProgress" class="setup-progress{{if .setup_in_progress}} active{{end}}">
+                    <div class="setup-progress-text" id="setupProgressText">{{if .setup_in_progress}}⏳ Installing components, please wait...{{else}}Ready when you are.{{end}}</div>
+                    <div class="setup-progress-bar">
+                        <div class="setup-progress-fill" id="setupProgressFill"></div>
+                    </div>
+                </div>
+
+                <div class="setup-actions">
+                    <button type="button" class="btn btn-secondary" id="setupSkipBtn">Skip for Now</button>
+                    <button type="button" class="btn btn-primary" id="setupStartBtn">Start Setup</button>
+                </div>
+
+                <div class="setup-log-footer">
+                    <a id="setupViewLogBtn" class="btn btn-secondary" href="/logs/updates" target="_blank" rel="noopener">
+                        View Log
+                    </a>
+                    <div class="setup-log-text" id="setupLogLine">
+                        {{if .setup_last_log_line}}Last log entry: {{.setup_last_log_line}}{{else}}Last log entry: {{.setup_log_fallback}}{{end}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+    <!-- Theme Toggle Script -->
+        <script>
+            (function () {
+                const overlay = document.getElementById('setupOverlay');
+                if (!overlay) {
+                    return;
+                }
+
+                const progressContainer = document.getElementById('setupProgress');
+                const progressFill = document.getElementById('setupProgressFill');
+                const progressText = document.getElementById('setupProgressText');
+                const setupButton = document.getElementById('setupStartBtn');
+                const skipButton = document.getElementById('setupSkipBtn');
+                const errorBox = document.getElementById('setupErrorBox');
+                const errorList = document.getElementById('setupErrorList');
+                const missingContainer = document.getElementById('setupMissingContainer');
+                const missingList = document.getElementById('setupMissingList');
+                const missingEmpty = document.getElementById('setupMissingEmpty');
+                const logLineElement = document.getElementById('setupLogLine');
+                const logFallback = overlay.dataset.logFallback || 'No update activity recorded yet.';
+                const logPrefix = '';
+                let lastLogValue = overlay.dataset.lastLog ? overlay.dataset.lastLog.trim() : '';
+
+                if (logLineElement) {
+                    logLineElement.textContent = logPrefix + (lastLogValue || logFallback);
+                }
+
+                let statusInterval = null;
+                let progressInterval = null;
+
+                function setButtonsDisabled(disabled) {
+                    if (setupButton) {
+                        setupButton.disabled = disabled;
+                    }
+                    if (skipButton) {
+                        skipButton.disabled = disabled;
+                    }
+                }
+
+                function updateErrorBox(errors) {
+                    if (!errorBox || !errorList) {
+                        return;
+                    }
+
+                    errorList.innerHTML = '';
+
+                    if (errors && errors.length) {
+                        errors.forEach((msg) => {
+                            const item = document.createElement('li');
+                            item.textContent = msg;
+                            errorList.appendChild(item);
+                        });
+                        errorBox.classList.add('active');
+                    } else {
+                        errorBox.classList.remove('active');
+                    }
+                }
+
+                function updateMissingComponents(items) {
+                    if (!missingContainer || !missingList || !missingEmpty) {
+                        return;
+                    }
+
+                    missingList.innerHTML = '';
+
+                    if (!items || !items.length) {
+                        missingContainer.classList.add('empty');
+                        return;
+                    }
+
+                    missingContainer.classList.remove('empty');
+                    items.forEach((item) => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        missingList.appendChild(li);
+                    });
+                }
+
+                function stopProgressAnimation() {
+                    if (progressInterval) {
+                        clearInterval(progressInterval);
+                        progressInterval = null;
+                    }
+                }
+
+                function startProgressAnimation() {
+                    stopProgressAnimation();
+                    if (progressFill) {
+                        progressFill.style.width = '0%';
+                    }
+                    let width = 0;
+                    progressInterval = setInterval(() => {
+                        width += 1;
+                        if (progressFill && width <= 95) {
+                            progressFill.style.width = width + '%';
+                        }
+                        if (width > 95) {
+                            stopProgressAnimation();
+                        }
+                    }, 300);
+                }
+
+                function showOverlay() {
+                    overlay.classList.remove('hidden');
+                }
+
+                function hideOverlay() {
+                    overlay.classList.add('hidden');
+                    overlay.dataset.needs = 'false';
+                    overlay.dataset.inProgress = 'false';
+                }
+
+                function stopStatusPolling() {
+                    if (statusInterval) {
+                        clearInterval(statusInterval);
+                        statusInterval = null;
+                    }
+                }
+
+                function startStatusPolling() {
+                    stopStatusPolling();
+                    statusInterval = setInterval(checkSetupStatus, 2000);
+                    checkSetupStatus();
+                }
+
+                function handleSetupStart() {
+                    setButtonsDisabled(true);
+                    if (progressContainer) {
+                        progressContainer.classList.add('active');
+                    }
+                    if (progressText) {
+                        progressText.textContent = '⏳ Installing components, please wait...';
+                    }
+                    startProgressAnimation();
+                    showOverlay();
+
+                    fetch('/setup/install', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        }
+                    }).then((response) => {
+                        if (!response.ok) {
+                            throw new Error('Failed to start setup');
+                        }
+                        overlay.dataset.inProgress = 'true';
+                        startStatusPolling();
+                    }).catch((error) => {
+                        stopProgressAnimation();
+                        if (progressText) {
+                            progressText.textContent = `⚠️ ${error.message}`;
+                        }
+                        setButtonsDisabled(false);
+                    });
+                }
+
+                function skipSetup() {
+                    setButtonsDisabled(true);
+                    fetch('/setup/skip', {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    }).then((response) => {
+                        if (!response.ok) {
+                            throw new Error('Failed to skip setup');
+                        }
+                        return response.json();
+                    }).then(() => {
+                        stopProgressAnimation();
+                        stopStatusPolling();
+                        hideOverlay();
+                    }).catch((error) => {
+                        if (progressText) {
+                            progressText.textContent = `⚠️ ${error.message}`;
+                        }
+                        setButtonsDisabled(false);
+                    });
+                }
+
+                function checkSetupStatus() {
+                    fetch('/setup/status', {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            overlay.dataset.needs = data.needsUploadPrompt ? 'true' : 'false';
+                            overlay.dataset.inProgress = data.inProgress ? 'true' : 'false';
+
+                            updateMissingComponents(data.missingComponents || []);
+                            updateErrorBox(data.errors || []);
+
+                            const lastLog = (data.lastUpdateLog || '').trim();
+                            lastLogValue = lastLog;
+                            overlay.dataset.lastLog = lastLog;
+                            if (logLineElement) {
+                                logLineElement.textContent = logPrefix + (lastLog || logFallback);
+                            }
+
+                            const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
+
+                            if (data.inProgress) {
+                                if (progressContainer) {
+                                    progressContainer.classList.add('active');
+                                }
+                                if (progressText) {
+                                    progressText.textContent = '⏳ Installing components, please wait...';
+                                }
+                                if (!progressInterval) {
+                                    startProgressAnimation();
+                                }
+                                setButtonsDisabled(true);
+                                showOverlay();
+                                return;
+                            }
+
+                            stopProgressAnimation();
+                            if (progressFill) {
+                                progressFill.style.width = stillMissing ? '0%' : '100%';
+                            }
+
+                            if (data.errors && data.errors.length) {
+                                if (progressContainer) {
+                                    progressContainer.classList.add('active');
+                                }
+                                if (progressText) {
+                                    progressText.textContent = '⚠️ Setup encountered errors. Review the details below.';
+                                }
+                                setButtonsDisabled(false);
+                                showOverlay();
+                                return;
+                            }
+
+                            if (!data.needsUploadPrompt && !stillMissing) {
+                                if (progressContainer) {
+                                    progressContainer.classList.add('active');
+                                }
+                                if (progressText) {
+                                    progressText.textContent = '✅ Setup complete! Refreshing…';
+                                }
+                                setButtonsDisabled(true);
+                                stopStatusPolling();
+                                setTimeout(() => {
+                                    hideOverlay();
+                                    window.location.reload();
+                                }, 800);
+                            } else {
+                                if (progressContainer) {
+                                    progressContainer.classList.add('active');
+                                }
+                                if (progressText) {
+                                    progressText.textContent = '⚠️ Some components are still missing. Please try again.';
+                                }
+                                setButtonsDisabled(false);
+                                showOverlay();
+                            }
+                        })
+                        .catch((error) => {
+                            console.error('Error checking setup status:', error);
+                        });
+                }
+
+                if (setupButton) {
+                    setupButton.addEventListener('click', handleSetupStart);
+                }
+
+                if (skipButton) {
+                    skipButton.addEventListener('click', skipSetup);
+                }
+
+                const shouldAutoShow = overlay.dataset.needs === 'true' || overlay.dataset.inProgress === 'true';
+                if (shouldAutoShow) {
+                    showOverlay();
+                    if (overlay.dataset.inProgress === 'true') {
+                        setButtonsDisabled(true);
+                        if (progressContainer) {
+                            progressContainer.classList.add('active');
+                        }
+                        if (progressText) {
+                            progressText.textContent = '⏳ Installing components, please wait...';
+                        }
+                        startProgressAnimation();
+                    }
+                    startStatusPolling();
+                }
+            })();
+        </script>
+    <script>
+        // Theme management
+        function getStoredTheme() {
+            return localStorage.getItem('theme') || 'light';
+        }
+        
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('theme-icon');
+            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        
+        function toggleTheme() {
+            const currentTheme = getStoredTheme();
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        }
+        
+        // Initialize theme
+        setTheme(getStoredTheme());
+    </script>
+    
+    
+    {{ template "toast.html" . }}
+</body>
+
+</html>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Stationeers Dedicated Server Manager - Secure Login">
+    <title>Login - Stationeers Server Manager</title>
+    
+    <!-- Modern CSS Framework -->
+    <link rel="stylesheet" href="/static/modern.css">
+    
+    <!-- HTMX for dynamic interactions -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- Preconnect to external fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Login-specific styles */
+        .login-container {
+            min-height: 100vh;
+            background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.35), transparent 45%),
+                        radial-gradient(circle at bottom right, rgba(236, 72, 153, 0.35), transparent 40%),
+                        linear-gradient(135deg, var(--primary-500) 0%, var(--primary-700) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--space-5);
+        }
+        
+        .login-card {
+            background: rgba(15, 23, 42, 0.85);
+            border-radius: var(--radius-2xl);
+            box-shadow: 0 25px 60px rgba(15, 23, 42, 0.45);
+            backdrop-filter: blur(10px);
+            padding: var(--space-6);
+            width: 100%;
+            max-width: 380px;
+            border: 1px solid rgba(148, 163, 184, 0.25);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: var(--space-6);
+        }
+        
+        .login-logo {
+            width: 68px;
+            height: 68px;
+            margin: 0 auto var(--space-4);
+            display: block;
+            border-radius: var(--radius-xl);
+            padding: var(--space-2);
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+            object-fit: contain;
+        }
+        
+        .login-title {
+            font-size: var(--text-2xl);
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: var(--space-2);
+        }
+        
+        .login-subtitle {
+            color: rgba(226, 232, 240, 0.75);
+            font-size: var(--text-sm);
+        }
+        
+        .theme-toggle {
+            position: absolute;
+            top: var(--space-4);
+            right: var(--space-4);
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: var(--radius-full);
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #f8fafc;
+            transition: transform var(--transition-default), background-color var(--transition-default);
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(15, 23, 42, 0.7);
+            transform: translateY(-1px);
+        }
+        
+        /* Dark theme adjustments for login */
+        [data-theme="dark"] .login-container {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-900) 100%);
+        }
+        
+        [data-theme="dark"] .login-card {
+            border-color: var(--gray-600);
+        }
+        
+        .error-message {
+            background: rgba(248, 113, 113, 0.2);
+            color: #fecaca;
+            padding: var(--space-3);
+            border-radius: var(--radius-md);
+            margin-bottom: var(--space-4);
+            font-size: var(--text-sm);
+            animation: slideIn 0.3s ease-out;
+            border: 1px solid rgba(248, 113, 113, 0.35);
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .form-loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        .btn-loading {
+            position: relative;
+        }
+        
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            margin: auto;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <!-- Theme Toggle -->
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+            <span id="theme-icon">🌙</span>
+        </button>
+        
+        <div class="login-card">
+            <div class="login-header">
+                <img src="/sdsm.png" alt="SDSM logo" class="login-logo" width="96" height="96">
+                <h1 class="login-title">Welcome Back</h1>
+                <p class="login-subtitle">Please sign in to your account</p>
+            </div>
+            
+            <!-- Error Display -->
+            {{ if .error }}
+            <div class="error-message" role="alert">
+                {{ .error }}
+            </div>
+            {{ end }}
+            
+            <!-- Login Form -->
+            <form 
+                method="POST" 
+                action="/login"
+                id="login-form"
+                novalidate
+            >
+                {{ if .redirect }}
+                <input type="hidden" name="redirect" value="{{ .redirect }}">
+                {{ end }}
+                
+                <div class="form-group">
+                    <label for="username" class="form-label">Username</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        class="form-input" 
+                        required
+                        autocomplete="username"
+                        placeholder="Enter your username"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label for="password" class="form-label">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        class="form-input" 
+                        required
+                        autocomplete="current-password"
+                        placeholder="Enter your password"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <button 
+                        type="submit" 
+                        class="btn btn-primary btn-lg" 
+                        style="width: 100%;"
+                        id="login-button"
+                    >
+                        <span id="button-text">Sign In</span>
+                        <div id="loading-indicator" class="loading hidden" style="margin-left: var(--space-2);"></div>
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Footer -->
+            <div style="text-align: center; margin-top: var(--space-6); padding-top: var(--space-6); border-top: 1px solid var(--border-color);">
+                <p class="text-sm text-secondary">
+                    Stationeers Dedicated Server Manager v2.0
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Theme management
+        function getStoredTheme() {
+            return localStorage.getItem('theme') || 'light';
+        }
+        
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('theme-icon');
+            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        
+        function toggleTheme() {
+            const currentTheme = getStoredTheme();
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+        }
+        
+        // Initialize theme
+        setTheme(getStoredTheme());
+        
+        // Form validation and UX enhancements
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('login-form');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            
+            // Real-time validation
+            function validateInput(input) {
+                const value = input.value.trim();
+                const isValid = value.length >= (input.name === 'password' ? 6 : 3);
+                
+                input.classList.toggle('border-danger-500', !isValid && value.length > 0);
+                input.classList.toggle('border-success-500', isValid);
+                
+                return isValid;
+            }
+            
+            usernameInput.addEventListener('input', () => validateInput(usernameInput));
+            passwordInput.addEventListener('input', () => validateInput(passwordInput));
+            
+            // Enhanced form submission
+            form.addEventListener('submit', function(e) {
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value;
+                
+                if (!username || !password) {
+                    e.preventDefault();
+                    showError('Please fill in all fields');
+                    return;
+                }
+                
+                if (username.length < 3) {
+                    e.preventDefault();
+                    showError('Username must be at least 3 characters');
+                    return;
+                }
+                
+                if (password.length < 6) {
+                    e.preventDefault();
+                    showError('Password must be at least 6 characters');
+                    return;
+                }
+                
+                // Show loading state
+                setLoadingState(true);
+            });
+            
+            // HTMX event handlers
+            document.body.addEventListener('htmx:beforeRequest', function() {
+                setLoadingState(true);
+            });
+            
+            document.body.addEventListener('htmx:afterRequest', function() {
+                setLoadingState(false);
+            });
+            
+            document.body.addEventListener('htmx:responseError', function() {
+                showError('Network error. Please try again.');
+                setLoadingState(false);
+            });
+        });
+        
+        function setLoadingState(loading) {
+            const form = document.getElementById('login-form');
+            const button = document.getElementById('login-button');
+            const buttonText = document.getElementById('button-text');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            
+            if (loading) {
+                form.classList.add('form-loading');
+                button.disabled = true;
+                buttonText.textContent = 'Signing In...';
+                loadingIndicator.classList.remove('hidden');
+            } else {
+                form.classList.remove('form-loading');
+                button.disabled = false;
+                buttonText.textContent = 'Sign In';
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+        
+        function showError(message) {
+            const existingError = document.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.setAttribute('role', 'alert');
+            errorDiv.textContent = message;
+            
+            const form = document.getElementById('login-form');
+            form.parentNode.insertBefore(errorDiv, form);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (errorDiv.parentNode) {
+                    errorDiv.remove();
+                }
+            }, 5000);
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
+                toggleTheme();
+            }
+        });
+        
+        // Auto-focus first empty field
+        document.addEventListener('DOMContentLoaded', function() {
+            const usernameInput = document.getElementById('username');
+            if (!usernameInput.value) {
+                usernameInput.focus();
+            } else {
+                document.getElementById('password').focus();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -167,6 +167,9 @@ func determineSetupDeployTargets(missing []string, serverCount int) ([]manager.D
 		case "Stationeers Release":
 			required[manager.DeployTypeRelease] = true
 			needsServerRedeploy = true
+		case "Stationeers Beta":
+			required[manager.DeployTypeBeta] = true
+			needsServerRedeploy = true
 		case "Stationeers LaunchPad":
 			required[manager.DeployTypeLaunchPad] = true
 			needsServerRedeploy = true

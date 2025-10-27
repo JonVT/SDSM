@@ -8,13 +8,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
-	"syscall"
-	"time"
-
 	"sdsm/internal/handlers"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
+	"sdsm/ui"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"io/fs"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
@@ -32,16 +35,20 @@ type App struct {
 
 var app *App
 
+func logStuff(msg string) {
+	if app.manager != nil && app.manager.Log != nil {
+		app.manager.Log.Write(msg)
+	} else {
+		log.Println(msg)
+	}
+}
+
 // managerLogWriter adapts Manager.Log to io.Writer for frameworks like Gin.
 type managerLogWriter struct{ mgr *manager.Manager }
 
 func (w managerLogWriter) Write(p []byte) (int, error) {
 	msg := strings.TrimRight(string(p), "\n")
-	if w.mgr != nil && w.mgr.Log != nil {
-		w.mgr.Log.Write(msg)
-	} else {
-		fmt.Println(msg)
-	}
+	logStuff(msg)
 	return len(p), nil
 }
 
@@ -81,13 +88,18 @@ func main() {
 	}
 
 	if !app.manager.IsActive() {
-		log.Fatal("Manager failed to initialize")
+		logStuff("Manager failed to initialize")
+		os.Exit(1)
 	}
 
 	// Start WebSocket hub
 	go app.wsHub.Run()
 
-	// Set up Gin with security middleware
+	// Route Gin logs to manager.Log and set up Gin with security middleware
+	if app.manager != nil && app.manager.Log != nil {
+		gin.DefaultWriter = managerLogWriter{mgr: app.manager}
+		gin.DefaultErrorWriter = managerLogWriter{mgr: app.manager}
+	}
 	r := setupRouter()
 
 	// Set up graceful shutdown
@@ -102,19 +114,26 @@ func main() {
 	// Start server in a goroutine
 	if app.tlsEnabled {
 		if app.tlsCertPath == "" || app.tlsKeyPath == "" {
-			log.Fatalf("%s is enabled but %s or %s not provided", envUseTLS, envTLSCert, envTLSKey)
+			logStuff(fmt.Sprintf("%s is enabled but %s or %s not provided", envUseTLS, envTLSCert, envTLSKey))
+			os.Exit(1)
 		}
 		go func() {
-			log.Printf("Starting HTTPS server on port %d", app.manager.Port)
+			logStuff(fmt.Sprintf("Starting HTTPS server on port %d", app.manager.Port))
 			if err := srv.ListenAndServeTLS(app.tlsCertPath, app.tlsKeyPath); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("HTTPS server failed to start: %v", err)
+				logStuff(fmt.Sprintf("HTTPS server failed to start: %v", err))
+				os.Exit(1)
 			}
 		}()
 	} else {
 		go func() {
-			log.Printf("Starting server on port %d", app.manager.Port)
+			if app.tlsEnabled {
+				fmt.Printf("Starting server at https://localhost:%d\n", app.manager.Port)
+			} else {
+				fmt.Printf("Starting server at http://localhost:%d\n", app.manager.Port)
+			}
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("Server failed to start: %v", err)
+				logStuff(fmt.Sprintf("Server failed to start: %v", err))
+				os.Exit(1)
 			}
 		}()
 	}
@@ -123,7 +142,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	logStuff("Shutting down server...")
 
 	// Shutdown manager first
 	app.manager.Shutdown()
@@ -136,10 +155,11 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+		logStuff(fmt.Sprintf("Server forced to shutdown: %v", err))
+		os.Exit(1)
 	}
 
-	log.Println("Server exited")
+	logStuff("Server exited")
 }
 
 func setupRouter() *gin.Engine {
@@ -170,7 +190,7 @@ func setupRouter() *gin.Engine {
 	// Rate limiting - 100 requests per minute per IP
 	r.Use(app.rateLimiter.Middleware())
 
-	// Load templates: include root-level and one-level nested (e.g., templates/partials)
+	// Load templates from embedded filesystem
 	funcMap := htmltmpl.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"has": func(slice []string, item string) bool {
@@ -183,13 +203,42 @@ func setupRouter() *gin.Engine {
 		},
 	}
 	r.SetFuncMap(funcMap)
-	// Build a combined template set so both root and subdir files are available by name
+	// Build a combined template set from embedded assets so both root and subdir files are available by name
 	t := htmltmpl.New("").Funcs(funcMap)
-	t = htmltmpl.Must(t.ParseGlob("templates/*.html"))
-	t = htmltmpl.Must(t.ParseGlob("templates/*/*.html"))
+	// Parse templates from embedded FS
+	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/*.html"))
+	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/*/*.html"))
+	// Validate presence of critical templates
+	requiredTemplates := []string{"login.html", "manager.html", "frame.html", "dashboard.html", "setup.html", "error.html"}
+	for _, name := range requiredTemplates {
+		if t.Lookup(name) == nil {
+			logStuff(fmt.Sprintf("FATAL: embedded template missing: %s", name))
+			os.Exit(1)
+		}
+	}
 	r.SetHTMLTemplate(t)
-	r.Static("/static", "./static")
-	r.StaticFile("/sdsm.png", "./sdsm.png")
+	// Static assets from embedded FS (no disk fallback)
+	staticFS, err := fs.Sub(ui.Assets, "static")
+	if err != nil {
+		// Fail fast: embedded static must be present
+		logStuff(fmt.Sprintf("FATAL: embedded static directory missing: %v", err))
+		os.Exit(1)
+	}
+	// Validate embedded critical static assets exist
+	for _, asset := range []string{"sdsm.png", "ui-theme.css", "modern.css"} {
+		if f, openErr := staticFS.Open(asset); openErr != nil {
+			logStuff(fmt.Sprintf("FATAL: embedded static asset missing: %s (%v)", asset, openErr))
+			os.Exit(1)
+		} else {
+			_ = f.Close()
+		}
+	}
+	r.StaticFS("/static", http.FS(staticFS))
+	// Serve icon from embedded FS
+	r.GET("/sdsm.png", func(c *gin.Context) {
+		c.FileFromFS("sdsm.png", http.FS(staticFS))
+	})
+	// sdsm icon served above from embedded FS
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
