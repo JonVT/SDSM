@@ -32,6 +32,19 @@ type App struct {
 
 var app *App
 
+// managerLogWriter adapts Manager.Log to io.Writer for frameworks like Gin.
+type managerLogWriter struct{ mgr *manager.Manager }
+
+func (w managerLogWriter) Write(p []byte) (int, error) {
+	msg := strings.TrimRight(string(p), "\n")
+	if w.mgr != nil && w.mgr.Log != nil {
+		w.mgr.Log.Write(msg)
+	} else {
+		fmt.Println(msg)
+	}
+	return len(p), nil
+}
+
 const (
 	envUseTLS  = "SDSM_USE_TLS"
 	envTLSCert = "SDSM_TLS_CERT"
