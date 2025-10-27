@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sdsm/internal/handlers"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
@@ -31,6 +32,7 @@ type App struct {
 	tlsEnabled  bool
 	tlsCertPath string
 	tlsKeyPath  string
+	ginLogFile  *os.File
 }
 
 var app *App
@@ -41,6 +43,22 @@ func logStuff(msg string) {
 	} else {
 		log.Println(msg)
 	}
+}
+
+func clearLogFile(path string) {
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		logStuff(fmt.Sprintf("Failed to ensure log directory for %s: %v", path, err))
+		return
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		logStuff(fmt.Sprintf("Failed to clear log file %s: %v", path, err))
+		return
+	}
+	_ = file.Close()
 }
 
 // managerLogWriter adapts Manager.Log to io.Writer for frameworks like Gin.
@@ -76,11 +94,13 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	mgr := manager.NewManager()
+
 	// Initialize application
 	app = &App{
-		manager:     manager.NewManager(),
+		manager:     mgr,
 		authService: middleware.NewAuthService(),
-		wsHub:       middleware.NewHub(),
+		wsHub:       middleware.NewHub(mgr.Log),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Minute/100), 10),
 		tlsEnabled:  envBool(envUseTLS),
 		tlsCertPath: os.Getenv(envTLSCert),
@@ -92,13 +112,36 @@ func main() {
 		os.Exit(1)
 	}
 
+	if app.manager.Paths != nil {
+		clearLogFile(filepath.Join(app.manager.Paths.LogsDir(), "GIN.log"))
+		clearLogFile(app.manager.Paths.UpdateLogFile())
+	}
+
 	// Start WebSocket hub
 	go app.wsHub.Run()
 
-	// Route Gin logs to manager.Log and set up Gin with security middleware
-	if app.manager != nil && app.manager.Log != nil {
+	// Route Gin logs to dedicated GIN.log file (fallback to manager log on error)
+	if app.manager != nil && app.manager.Paths != nil {
+		if err := os.MkdirAll(app.manager.Paths.LogsDir(), 0o755); err != nil {
+			logStuff(fmt.Sprintf("Failed to ensure logs directory: %v", err))
+		} else {
+			ginLogPath := filepath.Join(app.manager.Paths.LogsDir(), "GIN.log")
+			file, err := os.OpenFile(ginLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err != nil {
+				logStuff(fmt.Sprintf("Failed to open Gin log file: %v", err))
+			} else {
+				app.ginLogFile = file
+				gin.DefaultWriter = file
+				gin.DefaultErrorWriter = file
+			}
+		}
+	}
+	if app.ginLogFile == nil && app.manager != nil && app.manager.Log != nil {
 		gin.DefaultWriter = managerLogWriter{mgr: app.manager}
 		gin.DefaultErrorWriter = managerLogWriter{mgr: app.manager}
+	}
+	if app.ginLogFile != nil {
+		defer app.ginLogFile.Close()
 	}
 	r := setupRouter()
 

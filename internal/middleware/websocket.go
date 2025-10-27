@@ -1,9 +1,12 @@
 package middleware
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
+
+	"sdsm/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -21,14 +24,16 @@ type Hub struct {
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
 	mutex      sync.RWMutex
+	logger     *utils.Logger
 }
 
-func NewHub() *Hub {
+func NewHub(logger *utils.Logger) *Hub {
 	return &Hub{
 		clients:    make(map[*websocket.Conn]bool),
 		broadcast:  make(chan []byte),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
+		logger:     logger,
 	}
 }
 
@@ -39,7 +44,7 @@ func (h *Hub) Run() {
 			h.mutex.Lock()
 			h.clients[conn] = true
 			h.mutex.Unlock()
-			log.Println("WebSocket client connected")
+			h.logf("WebSocket client connected")
 
 		case conn := <-h.unregister:
 			h.mutex.Lock()
@@ -48,13 +53,13 @@ func (h *Hub) Run() {
 				conn.Close()
 			}
 			h.mutex.Unlock()
-			log.Println("WebSocket client disconnected")
+			h.logf("WebSocket client disconnected")
 
 		case message := <-h.broadcast:
 			h.mutex.RLock()
 			for conn := range h.clients {
 				if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-					log.Printf("WebSocket write error: %v", err)
+					h.logf("WebSocket write error: %v", err)
 					delete(h.clients, conn)
 					conn.Close()
 				}
@@ -78,7 +83,7 @@ func (h *Hub) HandleWebSocket() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			log.Printf("WebSocket upgrade error: %v", err)
+			h.logf("WebSocket upgrade error: %v", err)
 			return
 		}
 
@@ -92,10 +97,19 @@ func (h *Hub) HandleWebSocket() gin.HandlerFunc {
 			_, _, err := conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-					log.Printf("WebSocket error: %v", err)
+					h.logf("WebSocket error: %v", err)
 				}
 				break
 			}
 		}
 	}
+}
+
+func (h *Hub) logf(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if h.logger != nil {
+		h.logger.Write(msg)
+		return
+	}
+	log.Println(msg)
 }

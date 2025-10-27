@@ -180,7 +180,7 @@ func NewManager() *Manager {
 	}
 
 	// Initialize paths with default values
-	m.Paths = utils.NewPaths("/tmp/sdsm") // Default fallback path
+	m.Paths = utils.NewPaths("./") // Default fallback path
 
 	// Prepare logging early so load() can report issues
 	m.startLogs()
@@ -1582,6 +1582,15 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 	})
 
 	cache.generatedAt = time.Now()
+
+	if m.Log != nil {
+		var b strings.Builder
+		fmt.Fprintf(&b, "World cache built (beta=%t) with %d entries:", beta, len(cache.definitions))
+		for _, def := range cache.definitions {
+			fmt.Fprintf(&b, "\n- directory=%s id=%s display=%q priority=%d root=%s nameKey=%s descKey=%s", def.Directory, def.ID, def.DisplayName, def.Priority, def.Root, def.NameKey, def.DescriptionKey)
+		}
+		m.Log.Write(b.String())
+	}
 	return cache
 }
 
@@ -2782,6 +2791,7 @@ func (m *Manager) fetchSteamCmdVersion() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	m.safeLog(fmt.Sprintf("Executing command: %s %s", steamCmdPath, "+quit"))
 	cmd := exec.CommandContext(ctx, steamCmdPath, "+quit")
 	cmd.Dir = filepath.Dir(steamCmdPath)
 	output, err := cmd.CombinedOutput()
@@ -2973,22 +2983,29 @@ func (m *Manager) CheckMissingComponents() {
 	m.MissingComponents = []string{}
 	var missingDetails []string
 
+	steamCmdBinary := "steamcmd.sh"
+	releaseBinary := "rocketstation_DedicatedServer.x86_64"
+	if runtime.GOOS == "windows" {
+		steamCmdBinary = "steamcmd.exe"
+		releaseBinary = "rocketstation_DedicatedServer.exe"
+	}
+
 	// Check for SteamCMD
-	steamCmdPath := filepath.Join(m.Paths.SteamDir(), "steamcmd.sh")
+	steamCmdPath := filepath.Join(m.Paths.SteamDir(), steamCmdBinary)
 	if _, err := os.Stat(steamCmdPath); os.IsNotExist(err) {
 		m.MissingComponents = append(m.MissingComponents, "SteamCMD")
 		missingDetails = append(missingDetails, fmt.Sprintf("SteamCMD expected at %s", steamCmdPath))
 	}
 
 	// Check for Stationeers game files (Release)
-	releasePath := filepath.Join(m.Paths.ReleaseDir(), "rocketstation_DedicatedServer.x86_64")
+	releasePath := filepath.Join(m.Paths.ReleaseDir(), releaseBinary)
 	if _, err := os.Stat(releasePath); os.IsNotExist(err) {
 		m.MissingComponents = append(m.MissingComponents, "Stationeers Release")
 		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers release binary expected at %s", releasePath))
 	}
 
 	// Check for Stationeers game files (Beta)
-	betaPath := filepath.Join(m.Paths.BetaDir(), "rocketstation_DedicatedServer.x86_64")
+	betaPath := filepath.Join(m.Paths.BetaDir(), releaseBinary)
 	if _, err := os.Stat(betaPath); os.IsNotExist(err) {
 		m.MissingComponents = append(m.MissingComponents, "Stationeers Beta")
 		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers beta binary expected at %s", betaPath))

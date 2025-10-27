@@ -169,19 +169,38 @@ func (s *Steam) UpdateGame(beta bool) error {
 	}
 	steamCmd = append(steamCmd, "validate", "+quit")
 
-	cmd := exec.Command(filepath.Join(s.Paths.SteamDir(), s.steamCmdExecutable()), steamCmd...)
+	steamCmdPath := filepath.Join(s.Paths.SteamDir(), s.steamCmdExecutable())
+	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", steamCmdPath, strings.Join(steamCmd, " ")))
+	cmd := exec.Command(steamCmdPath, steamCmd...)
 
-	// Capture output
+	// Stream output to update log if available, otherwise capture
+	var captureOutput bool
+	if file := s.Logger.File(); file != nil {
+		cmd.Stdout = file
+		cmd.Stderr = file
+	} else {
+		captureOutput = true
+	}
+
 	s.reportProgress("Running SteamCMD", 0, 0)
-	output, err := cmd.CombinedOutput()
+	var output []byte
+	var err error
+	if captureOutput {
+		output, err = cmd.CombinedOutput()
+	} else {
+		err = cmd.Run()
+	}
 	if err != nil {
 		s.reportProgress("SteamCMD failed", 0, 0)
 		s.Logger.Write(fmt.Sprintf("SteamCMD error: %v", err))
-		s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
+		if captureOutput {
+			s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
+		}
 		return err
 	}
-
-	s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
+	if captureOutput {
+		s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
+	}
 	s.Logger.Write("rocketstation_DedicatedServer updated successfully")
 	s.reportProgress("Completed", 0, 0)
 	return nil

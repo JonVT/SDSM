@@ -9,11 +9,10 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}",
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "SDSM_CONFIG": "test_config.json"
-            }
+            "program": "${workspaceFolder}/cmd/sdsm",
+            //"buildFlags": "-o ${workspaceFolder}/test/",
+            "cwd": "${workspaceFolder}/test",
+            "args": ["${workspaceFolder}/test/sdsm.config"]
         }
     ]
-    }
+}

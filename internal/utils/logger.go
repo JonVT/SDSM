@@ -56,3 +56,11 @@ func (l *Logger) Close() {
 		l.readFile.Close()
 	}
 }
+
+// File returns the underlying write file handle when available.
+func (l *Logger) File() *os.File {
+	if l == nil {
+		return nil
+	}
+	return l.writeFile
+}

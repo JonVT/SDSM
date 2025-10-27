@@ -1,1 +1,4 @@
 .config/
+test/
+cmd/sdsm/bin/
+cmd/sdsm/logs/

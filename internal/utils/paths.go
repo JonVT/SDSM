@@ -3,7 +3,10 @@ package utils
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"syscall"
 )
 
@@ -160,6 +163,18 @@ func RestartProcess(executable string, args []string) error {
 	// Get the environment
 	env := os.Environ()
 
-	// Use syscall.Exec to replace the current process (on Unix-like systems)
+	if runtime.GOOS == "windows" {
+		// On Windows, spawn a new process and allow the current one to exit normally.
+		cmd := exec.Command(executable, args...)
+		cmd.Env = env
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		commandLine := strings.Join(append([]string{executable}, args...), " ")
+		fmt.Printf("Executing command: %s\n", commandLine)
+		return cmd.Start()
+	}
+
+	// Use syscall.Exec to replace the current process on Unix-like systems.
 	return syscall.Exec(executable, append([]string{executable}, args...), env)
 }
