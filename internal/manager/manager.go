@@ -5,10 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	fs "io/fs"
 	"net/http"
 	"os"
@@ -1002,9 +1000,8 @@ func (m *Manager) ResolveWorldID(world string, beta bool) string {
 
 // getGameDataPath returns the path to the game data directory
 // It checks ReleaseDir, BetaDir, and common Steam installation paths
-func (m *Manager) getGameDataPath() string {
-	return m.getGameDataPathForVersion(false)
-}
+// Deprecated helper no longer used; callers should prefer getGameDataPathForVersion.
+// func (m *Manager) getGameDataPath() string { return m.getGameDataPathForVersion(false) }
 
 func (m *Manager) getGameDataPathForVersion(beta bool) string {
 	if m.Paths == nil {
@@ -1058,23 +1055,19 @@ func (m *Manager) GetDifficultiesForVersion(beta bool) []string {
 	return []string{"Creative", "Easy", "Normal", "Stationeer"}
 }
 
-func (m *Manager) GetStartConditions() []string {
-	if conditions := m.getStartConditionsFromXML(false); len(conditions) > 0 {
-		return conditions
-	}
-	return []string{}
-}
+// Deprecated: GetStartConditions previously aggregated all start conditions via manual XML parsing.
+// Callers should prefer GetStartConditionsForWorldVersion which uses RocketStation scans.
+func (m *Manager) GetStartConditions() []string { return []string{} }
 
 func (m *Manager) GetLanguages() []string {
-	// Pull language options directly from the Stationeers language directory.
-	return m.getLanguagesFromFolder()
+	// Use release channel languages via RocketStation scan
+	return m.GetLanguagesForVersion(false)
 }
 
 // GetLanguagesForVersion returns available languages for release/beta independently.
 // It prefers the RocketStation language scan, falling back to folder scanning.
 func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 	base := m.getGameDataPathForVersion(beta)
-	// Try RS scanner first
 	if langs, err := ScanLanguages(base); err == nil && len(langs) > 0 {
 		out := make([]string, 0, len(langs))
 		for _, l := range langs {
@@ -1086,69 +1079,23 @@ func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 		sort.Strings(out)
 		return out
 	}
-	// Fallback to legacy folder scan with channel-specific base path
-	langPath := filepath.Join(base, "StreamingAssets", "Language")
-	entries, err := os.ReadDir(langPath)
-	if err != nil {
-		return nil
-	}
-	seen := make(map[string]struct{})
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".xml") || strings.Contains(name, "_") {
-			continue
-		}
-		trimmed := strings.TrimSuffix(name, ".xml")
-		if trimmed == "" {
-			continue
-		}
-		seen[trimmed] = struct{}{}
-	}
-	var result []string
-	for k := range seen {
-		result = append(result, k)
-	}
-	sort.Strings(result)
-	return result
+	return nil
 }
 
-// XML parsing structures
-type GameData struct {
-	WorldSettings   WorldSettings    `xml:"WorldSettings"`
-	StartConditions []StartCondition `xml:"StartCondition"`
-}
+// Legacy XML structure types removed; RocketStation scanners provide structured data.
 
-type WorldSettings struct {
-	World World `xml:"World"`
-}
+// Deprecated: legacy XML helpers retained previously for world metadata booleans.
+// type boolFlagElement struct { Value string `xml:"Value,attr"`; Text string `xml:",chardata"` }
 
-type World struct {
-	ID       string `xml:"Id,attr"`
-	Priority string `xml:"Priority,attr"`
-	Hidden   string `xml:"Hidden,attr"`
-}
-
-type StartCondition struct {
-	ID   string `xml:"Id,attr"`
-	Name string `xml:"Name"`
-}
-
-type boolFlagElement struct {
-	Value string `xml:"Value,attr"`
-	Text  string `xml:",chardata"`
-}
-
-func attrValueIsTrue(attrs []xml.Attr) bool {
-	for _, attr := range attrs {
-		if strings.EqualFold(attr.Name.Local, "Value") && strings.EqualFold(attr.Value, "true") {
-			return true
-		}
-	}
-	return false
-}
+// Deprecated: legacy XML helpers no longer used.
+// func attrValueIsTrue(attrs []xml.Attr) bool {
+//     for _, attr := range attrs {
+//         if strings.EqualFold(attr.Name.Local, "Value") && strings.EqualFold(attr.Value, "true") {
+//             return true
+//         }
+//     }
+//     return false
+// }
 
 func (m *Manager) getWorldsFromXML(beta bool) []string {
 	cache := m.worldDefinitionsCache(beta)
@@ -1162,62 +1109,7 @@ func (m *Manager) getWorldsFromXML(beta bool) []string {
 	return worlds
 }
 
-func extractWorldLocalizationKeys(worldXML []byte) (string, string, string, string) {
-	decoder := xml.NewDecoder(bytes.NewReader(worldXML))
-	var current string
-	var nameKey, nameText, descKey, descText string
-
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nameKey, nameText, descKey, descText
-		}
-
-		switch elem := tok.(type) {
-		case xml.StartElement:
-			switch elem.Name.Local {
-			case "Name":
-				current = "Name"
-				for _, attr := range elem.Attr {
-					if attr.Name.Local == "Key" && nameKey == "" {
-						nameKey = attr.Value
-						break
-					}
-				}
-			case "Description":
-				current = "Description"
-				for _, attr := range elem.Attr {
-					if attr.Name.Local == "Key" && descKey == "" {
-						descKey = attr.Value
-						break
-					}
-				}
-			default:
-				current = ""
-			}
-		case xml.CharData:
-			text := strings.TrimSpace(string(elem))
-			if text == "" {
-				continue
-			}
-			if current == "Name" && nameText == "" {
-				nameText = text
-			}
-			if current == "Description" && descText == "" {
-				descText = text
-			}
-		case xml.EndElement:
-			if elem.Name.Local == "Name" || elem.Name.Local == "Description" {
-				current = ""
-			}
-		}
-	}
-
-	return nameKey, nameText, descKey, descText
-}
+// Removed: extractWorldLocalizationKeys; world metadata now comes from RocketStation scans.
 
 func (m *Manager) lookupLanguageValue(beta bool, key string) string {
 	if key == "" {
@@ -1256,74 +1148,20 @@ func (m *Manager) lookupLanguageValue(beta bool, key string) string {
 	return section[valueStart : valueStart+valueEnd]
 }
 
-func (m *Manager) getStartConditionsFromXML(beta bool) []string {
-	xmlPath := filepath.Join(m.getGameDataPathForVersion(beta), "StreamingAssets", "Data", "startconditions.xml")
+// getStartConditionsFromXML removed; use ScanWorldDefinitions and world StartConditions instead.
 
-	data, err := os.ReadFile(xmlPath)
-	if err != nil {
-		return nil
-	}
-
-	var gameData GameData
-	if err := xml.Unmarshal(data, &gameData); err != nil {
-		return nil
-	}
-
-	var conditions []string
-	for _, sc := range gameData.StartConditions {
-		if sc.ID != "" {
-			conditions = append(conditions, sc.ID)
-		}
-	}
-
-	return conditions
-}
-
-func (m *Manager) getLanguagesFromFolder() []string {
-	langPath := filepath.Join(m.getGameDataPath(), "StreamingAssets", "Language")
-
-	entries, err := os.ReadDir(langPath)
-	if err != nil {
-		return nil
-	}
-
-	languagesMap := make(map[string]bool)
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		// Skip non-language files
-		if !strings.HasSuffix(name, ".xml") || strings.Contains(name, "_") {
-			continue
-		}
-
-		// Remove .xml extension
-		langName := strings.TrimSuffix(name, ".xml")
-
-		// Skip override files
-		if strings.Contains(langName, "Override") {
-			continue
-		}
-
-		languagesMap[langName] = true
-	}
-
-	var result []string
-	for lang := range languagesMap {
-		result = append(result, lang)
-	}
-
-	return result
-}
+// Deprecated: legacy folder scan for languages no longer used.
+// func (m *Manager) getLanguagesFromFolder() []string { return nil }
 
 // WorldInfo contains localized world name and description
 type WorldInfo struct {
 	ID          string
 	Name        string
 	Description string
+	// Image is the relative path (under StreamingAssets) to the planet image for this world,
+	// as resolved by the RocketStation parser (e.g. Images/SpaceMapImages/Planets/StatMoon.png).
+	// It is exposed for templates that wish to reference it directly.
+	Image string
 }
 
 // LocationInfo contains localized start location information
@@ -1371,6 +1209,9 @@ type worldDefinition struct {
 	NameFallback        string
 	DescriptionKey      string
 	DescriptionFallback string
+	StartConditions     []RSStartCondition
+	StartLocations      []RSStartLocation
+	Image               string
 }
 
 func (wd worldDefinition) effectivePriority() int {
@@ -1393,14 +1234,10 @@ type worldDefinitionCache struct {
 	generatedAt time.Time
 }
 
-type worldMetadata struct {
-	ID                  string
-	Priority            int
-	Hidden              bool
-	AllowDedicated      bool
-	AllowDedicatedKnown bool
-	ShouldSkip          bool
-}
+// start locations are now part of cached world definitions; no separate cache needed
+
+// Deprecated: legacy worldMetadata structure no longer used.
+// type worldMetadata struct { ID string; Priority int; Hidden bool; AllowDedicated bool; AllowDedicatedKnown bool; ShouldSkip bool }
 
 func canonicalWorldIdentifier(value string) string {
 	value = strings.TrimSpace(value)
@@ -1416,94 +1253,14 @@ func canonicalWorldIdentifier(value string) string {
 	return builder.String()
 }
 
-func isTrueString(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "true", "1", "yes", "y":
-		return true
-	default:
-		return false
-	}
-}
+// Deprecated: legacy boolean parsing helper no longer used.
+// func isTrueString(value string) bool { switch strings.ToLower(strings.TrimSpace(value)) { case "true","1","yes","y": return true; default: return false } }
 
-func parseBooleanElement(decoder *xml.Decoder, start xml.StartElement) bool {
-	if attrValueIsTrue(start.Attr) {
-		return true
-	}
-	var flag boolFlagElement
-	if err := decoder.DecodeElement(&flag, &start); err != nil {
-		return false
-	}
-	if isTrueString(flag.Value) {
-		return true
-	}
-	return isTrueString(flag.Text)
-}
+// Deprecated: legacy XML element boolean parse no longer used.
+// func parseBooleanElement(decoder *xml.Decoder, start xml.StartElement) bool { if attrValueIsTrue(start.Attr) { return true }; var flag boolFlagElement; if err := decoder.DecodeElement(&flag, &start); err != nil { return false }; if isTrueString(flag.Value) { return true }; return isTrueString(flag.Text) }
 
-func extractWorldMetadata(data []byte) (worldMetadata, error) {
-	meta := worldMetadata{
-		Priority:       1 << 30,
-		AllowDedicated: true,
-	}
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return meta, err
-		}
-
-		switch elem := tok.(type) {
-		case xml.StartElement:
-			switch elem.Name.Local {
-			case "World":
-				for _, attr := range elem.Attr {
-					switch attr.Name.Local {
-					case "Id":
-						if meta.ID == "" {
-							meta.ID = strings.TrimSpace(attr.Value)
-						}
-					case "Priority":
-						if p, err := strconv.Atoi(strings.TrimSpace(attr.Value)); err == nil {
-							meta.Priority = p
-						}
-					case "Hidden":
-						if isTrueString(attr.Value) {
-							meta.Hidden = true
-						}
-					case "Deprecated":
-						if isTrueString(attr.Value) {
-							meta.ShouldSkip = true
-						}
-					case "AllowDedicated":
-						meta.AllowDedicatedKnown = true
-						meta.AllowDedicated = isTrueString(attr.Value)
-						if !meta.AllowDedicated {
-							meta.ShouldSkip = true
-						}
-					}
-				}
-			case "AllowDedicated":
-				meta.AllowDedicatedKnown = true
-				if !parseBooleanElement(decoder, elem) {
-					meta.AllowDedicated = false
-					meta.ShouldSkip = true
-				}
-			case "IsTutorial", "IsDepreciated":
-				if parseBooleanElement(decoder, elem) {
-					meta.ShouldSkip = true
-				}
-			}
-		}
-	}
-
-	if meta.Hidden {
-		meta.ShouldSkip = true
-	}
-
-	return meta, nil
-}
+// Deprecated: legacy world metadata extraction removed.
+// func extractWorldMetadata(data []byte) (worldMetadata, error) { return worldMetadata{}, nil }
 
 func (m *Manager) worldDefinitionsCache(beta bool) *worldDefinitionCache {
 	m.worldIndexMu.RLock()
@@ -1570,6 +1327,12 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 				Root:                root,
 				NameFallback:        strings.TrimSpace(w.Name),
 				DescriptionFallback: strings.TrimSpace(w.Description),
+				StartConditions:     append([]RSStartCondition(nil), w.StartConditions...),
+				Image:               strings.TrimSpace(w.Image),
+			}
+			// Copy start locations
+			if len(w.StartLocations) > 0 {
+				def.StartLocations = append([]RSStartLocation(nil), w.StartLocations...)
 			}
 			if def.ID == "" {
 				def.ID = def.Directory
@@ -1622,143 +1385,13 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 	return cache
 }
 
-func (m *Manager) worldLocalizationFromDirectory(root, dir string) (string, string, string, string, error) {
-	if root == "" || dir == "" {
-		return "", "", "", "", os.ErrNotExist
-	}
-	base := filepath.Join(root, "StreamingAssets", "Worlds", dir)
-	primary := filepath.Join(base, dir+".xml")
-	data, err := os.ReadFile(primary)
-	if err != nil {
-		xmlFiles, globErr := filepath.Glob(filepath.Join(base, "*.xml"))
-		if globErr != nil || len(xmlFiles) == 0 {
-			return "", "", "", "", err
-		}
-		readErr := err
-		for _, candidate := range xmlFiles {
-			if candidate == primary {
-				continue
-			}
-			data, readErr = os.ReadFile(candidate)
-			if readErr == nil {
-				break
-			}
-		}
-		if readErr != nil {
-			return "", "", "", "", readErr
-		}
-	}
+// Removed: worldLocalizationFromDirectory; not needed with RocketStation scans.
 
-	nameKey, nameFallback, descKey, descFallback := extractWorldLocalizationKeys(data)
-	return nameKey, nameFallback, descKey, descFallback, nil
-}
+// Removed: extractLocalizationForElement; XML parsing now centralized.
 
-func extractLocalizationForElement(data []byte, elementName, targetID string) (string, string, string, string) {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	var capturing bool
-	current := ""
-	var nameKey, nameFallback, descKey, descFallback string
-
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return "", "", "", ""
-		}
-
-		switch elem := tok.(type) {
-		case xml.StartElement:
-			if elem.Name.Local == elementName {
-				match := false
-				for _, attr := range elem.Attr {
-					if strings.EqualFold(attr.Name.Local, "Id") && strings.EqualFold(strings.TrimSpace(attr.Value), targetID) {
-						match = true
-						break
-					}
-				}
-				capturing = match
-				current = ""
-				continue
-			}
-			if !capturing {
-				continue
-			}
-			switch elem.Name.Local {
-			case "Name":
-				current = "Name"
-				for _, attr := range elem.Attr {
-					if attr.Name.Local == "Key" && nameKey == "" {
-						nameKey = attr.Value
-					}
-				}
-			case "Description":
-				current = "Description"
-				for _, attr := range elem.Attr {
-					if attr.Name.Local == "Key" && descKey == "" {
-						descKey = attr.Value
-					}
-				}
-			default:
-				current = ""
-			}
-		case xml.CharData:
-			if !capturing || current == "" {
-				continue
-			}
-			text := strings.TrimSpace(string(elem))
-			if text == "" {
-				continue
-			}
-			if current == "Name" && nameFallback == "" {
-				nameFallback = text
-			}
-			if current == "Description" && descFallback == "" {
-				descFallback = text
-			}
-		case xml.EndElement:
-			if !capturing {
-				continue
-			}
-			if elem.Name.Local == elementName {
-				return nameKey, nameFallback, descKey, descFallback
-			}
-			if elem.Name.Local == "Name" || elem.Name.Local == "Description" {
-				current = ""
-			}
-		}
-	}
-
-	return nameKey, nameFallback, descKey, descFallback
-}
-
-func (m *Manager) getConditionLocalizationFromXML(conditionID string, beta bool) (string, string, string, string) {
-	roots := []string{m.getGameDataPathForVersion(beta)}
-	if beta {
-		roots = append(roots, m.getGameDataPathForVersion(false))
-	}
-
-	for _, root := range uniqueStrings(roots) {
-		if root == "" {
-			continue
-		}
-		path := filepath.Join(root, "StreamingAssets", "Data", "startconditions.xml")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		nameKey, nameFallback, descKey, descFallback := extractLocalizationForElement(data, "StartCondition", conditionID)
-		if nameKey != "" || nameFallback != "" || descKey != "" || descFallback != "" {
-			return nameKey, nameFallback, descKey, descFallback
-		}
-	}
-
-	return "", "", "", ""
-}
+// Removed: getConditionLocalizationFromXML; condition info is derived from world scan data.
 
 func (m *Manager) getDifficultiesFromXML(beta bool) []string {
-	// Prefer RocketStation XML parsing for difficulties and fall back to legacy scan if needed
 	base := m.getGameDataPathForVersion(beta)
 	language := m.Language
 	if strings.TrimSpace(language) == "" {
@@ -1774,128 +1407,16 @@ func (m *Manager) getDifficultiesFromXML(beta bool) []string {
 		sort.Strings(ids)
 		return ids
 	}
-
-	// Legacy fallback (kept for robustness)
-	roots := []string{m.getGameDataPathForVersion(beta)}
-	if beta {
-		roots = append(roots, m.getGameDataPathForVersion(false))
-	}
-
-	seen := make(map[string]struct{})
-
-	for _, root := range uniqueStrings(roots) {
-		if root == "" {
-			continue
-		}
-		dataDir := filepath.Join(root, "StreamingAssets", "Data")
-		candidates := []string{
-			filepath.Join(dataDir, "difficultysettings.xml"),
-			filepath.Join(dataDir, "DifficultySettings.xml"),
-			filepath.Join(dataDir, "difficulties.xml"),
-		}
-
-		for _, path := range candidates {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				continue
-			}
-			decoder := xml.NewDecoder(bytes.NewReader(data))
-			for {
-				tok, err := decoder.Token()
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
-					break
-				}
-				start, ok := tok.(xml.StartElement)
-				if !ok {
-					continue
-				}
-				switch strings.ToLower(start.Name.Local) {
-				case "difficultysetting", "difficulty":
-					for _, attr := range start.Attr {
-						if strings.EqualFold(attr.Name.Local, "Id") {
-							id := strings.TrimSpace(attr.Value)
-							if id != "" {
-								seen[id] = struct{}{}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	if len(seen) == 0 {
-		return nil
-	}
-	result := make([]string, 0, len(seen))
-	for id := range seen {
-		result = append(result, id)
-	}
-	sort.Strings(result)
-	return result
+	return nil
 }
 
 // GetWorldImage returns the PNG bytes for the planet image that matches the normalized world name.
 func (m *Manager) GetWorldImage(worldId string, beta bool) ([]byte, error) {
-	fileName := ""
-
-	switch worldId[0:2] {
-	case "Ma":
-		fileName = "StatMars.png"
-	case "Eu":
-		fileName = "StatEuropa.png"
-	case "Mi":
-		fileName = "StatMimas.png"
-	case "Lu":
-		fileName = "StatMoon.png"
-	case "Ve":
-		fileName = "StatVenus.png"
-	case "Vu":
-		fileName = "StatVulkan.png"
-	}
-	imagePath := filepath.Join(m.Paths.RootPath, "bin", "release", "rocketstation_DedicatedServer_Data", "StreamingAssets", "Images", "SpaceMapImages", "Planets", fileName)
-	data, err := os.ReadFile(imagePath)
-	if err == nil {
-		return data, nil
-	}
-
-	return nil, fmt.Errorf("world image not found for %s", worldId)
+	base := m.getGameDataPathForVersion(beta)
+	return GetWorldImage(base, worldId)
 }
 
-func (m *Manager) worldLocalizationKeys(worldID string, beta bool) (string, string, string, string) {
-	canonical := canonicalWorldIdentifier(worldID)
-	if cache := m.worldDefinitionsCache(beta); cache != nil {
-		if def, ok := cache.byCanonical[canonical]; ok {
-			if def.NameKey != "" || def.NameFallback != "" || def.DescriptionKey != "" || def.DescriptionFallback != "" {
-				return def.NameKey, def.NameFallback, def.DescriptionKey, def.DescriptionFallback
-			}
-			if nameKey, nameFallback, descKey, descFallback, err := m.worldLocalizationFromDirectory(def.Root, def.Directory); err == nil {
-				return nameKey, nameFallback, descKey, descFallback
-			}
-		}
-	}
-
-	technicalID := m.resolveWorldTechnicalID(worldID, beta)
-	roots := []string{m.getGameDataPathForVersion(beta)}
-	if beta {
-		roots = append(roots, m.getGameDataPathForVersion(false))
-	}
-
-	for _, root := range uniqueStrings(roots) {
-		nameKey, nameFallback, descKey, descFallback, err := m.worldLocalizationFromDirectory(root, technicalID)
-		if err != nil {
-			continue
-		}
-		if nameKey != "" || nameFallback != "" || descKey != "" || descFallback != "" {
-			return nameKey, nameFallback, descKey, descFallback
-		}
-	}
-
-	return "", "", "", ""
-}
+// Removed: worldLocalizationKeys; world info is obtained from cached definitions directly.
 
 func (m *Manager) resolveWorldTechnicalID(worldID string, beta bool) string {
 	canonical := canonicalWorldIdentifier(worldID)
@@ -1908,36 +1429,21 @@ func (m *Manager) resolveWorldTechnicalID(worldID string, beta bool) string {
 }
 
 func (m *Manager) GetWorldInfo(worldID string, beta bool) WorldInfo {
-	nameKey, nameFallback, descKey, descFallback := m.worldLocalizationKeys(worldID, beta)
-
-	name := worldID
-	description := "No description available"
-
-	if nameKey != "" {
-		if value := strings.TrimSpace(m.lookupLanguageValue(beta, nameKey)); value != "" {
-			name = value
-		} else if nameFallback != "" {
-			name = nameFallback
+	canonical := canonicalWorldIdentifier(worldID)
+	if cache := m.worldDefinitionsCache(beta); cache != nil {
+		if def, ok := cache.byCanonical[canonical]; ok {
+			name := strings.TrimSpace(def.DisplayName)
+			if name == "" {
+				name = def.NameFallback
+			}
+			if strings.TrimSpace(name) == "" {
+				name = worldID
+			}
+			desc := strings.TrimSpace(def.DescriptionFallback)
+			return WorldInfo{ID: worldID, Name: name, Description: desc, Image: def.Image}
 		}
-	} else if nameFallback != "" {
-		name = nameFallback
 	}
-
-	if descKey != "" {
-		if value := strings.TrimSpace(m.lookupLanguageValue(beta, descKey)); value != "" {
-			description = value
-		} else if descFallback != "" {
-			description = descFallback
-		}
-	} else if descFallback != "" {
-		description = descFallback
-	}
-
-	return WorldInfo{
-		ID:          worldID,
-		Name:        name,
-		Description: description,
-	}
+	return WorldInfo{ID: worldID, Name: worldID, Description: "", Image: ""}
 }
 
 // GetStartLocationsForWorld returns all start locations available for a specific world
@@ -1950,46 +1456,22 @@ func (m *Manager) GetStartLocationsForWorldVersion(worldID string, beta bool) []
 	if technicalID == "" {
 		return []LocationInfo{}
 	}
-
-	worldXMLPath := filepath.Join(m.getGameDataPathForVersion(beta), "StreamingAssets", "Worlds", technicalID, technicalID+".xml")
-
-	data, err := os.ReadFile(worldXMLPath)
-	if err != nil {
-		return []LocationInfo{}
+	// Use the cached world definitions (which now include StartLocations)
+	canonical := canonicalWorldIdentifier(worldID)
+	if cache := m.worldDefinitionsCache(beta); cache != nil {
+		if def, ok := cache.byCanonical[canonical]; ok {
+			out := make([]LocationInfo, 0, len(def.StartLocations))
+			for _, l := range def.StartLocations {
+				name := strings.TrimSpace(l.Name)
+				if name == "" {
+					name = l.ID
+				}
+				out = append(out, LocationInfo{ID: l.ID, Name: name, Description: l.Description})
+			}
+			return out
+		}
 	}
-
-	content := string(data)
-	var locations []LocationInfo
-	seen := make(map[string]bool)
-
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		if !strings.Contains(line, "<StartLocation Id=") {
-			continue
-		}
-
-		start := strings.Index(line, "Id=\"")
-		if start == -1 {
-			continue
-		}
-		start += 4
-
-		end := strings.Index(line[start:], "\"")
-		if end <= 0 {
-			continue
-		}
-
-		locationID := line[start : start+end]
-		if locationID == "" || seen[locationID] {
-			continue
-		}
-
-		seen[locationID] = true
-		locationInfo := m.GetLocationInfo(locationID, beta)
-		locations = append(locations, locationInfo)
-	}
-
-	return locations
+	return []LocationInfo{}
 }
 
 // GetStartConditionsForWorld returns all start conditions available for a specific world
@@ -1998,44 +1480,31 @@ func (m *Manager) GetStartConditionsForWorld(worldID string) []ConditionInfo {
 }
 
 func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) []ConditionInfo {
-	// Prefer RocketStation XML parsing for start conditions instead of manual line parsing
 	technicalID := m.resolveWorldTechnicalID(worldID, beta)
 	if technicalID == "" {
 		return []ConditionInfo{}
 	}
-
-	base := m.getGameDataPathForVersion(beta)
-	language := m.Language
-	if strings.TrimSpace(language) == "" {
-		language = "english"
-	}
-	worlds, err := ScanWorldDefinitions(base, language+".xml")
-	if err != nil || len(worlds) == 0 {
-		return []ConditionInfo{}
-	}
-
-	var target *RSWorldDefinition
-	for i := range worlds {
-		w := &worlds[i]
-		if strings.EqualFold(w.Directory, technicalID) || strings.EqualFold(w.ID, technicalID) {
-			target = w
-			break
+	// Use cached world definitions to avoid repeated scans
+	if cache := m.worldDefinitionsCache(beta); cache != nil {
+		canonical := canonicalWorldIdentifier(worldID)
+		if def, ok := cache.byCanonical[canonical]; ok {
+			seen := make(map[string]bool)
+			out := make([]ConditionInfo, 0, len(def.StartConditions))
+			for _, sc := range def.StartConditions {
+				if sc.ID == "" || seen[sc.ID] {
+					continue
+				}
+				seen[sc.ID] = true
+				name := strings.TrimSpace(sc.DisplayName)
+				if name == "" {
+					name = sc.ID
+				}
+				out = append(out, ConditionInfo{ID: sc.ID, Name: name, Description: sc.Description})
+			}
+			return out
 		}
 	}
-	if target == nil {
-		return []ConditionInfo{}
-	}
-
-	seen := make(map[string]bool)
-	out := make([]ConditionInfo, 0, len(target.StartConditions))
-	for _, sc := range target.StartConditions {
-		if sc.ID == "" || seen[sc.ID] {
-			continue
-		}
-		seen[sc.ID] = true
-		out = append(out, m.GetConditionInfo(sc.ID, worldID, beta))
-	}
-	return out
+	return []ConditionInfo{}
 }
 
 func uniqueStrings(values []string) []string {
@@ -2057,87 +1526,39 @@ func uniqueStrings(values []string) []string {
 }
 
 // GetLocationInfo returns localized information for a start location
-func (m *Manager) GetLocationInfo(locationID string, beta bool) LocationInfo {
-	langPath := filepath.Join(m.getGameDataPathForVersion(beta), "StreamingAssets", "Language", m.Language+".xml")
-
-	data, err := os.ReadFile(langPath)
-	if err != nil {
-		return LocationInfo{
-			ID:          locationID,
-			Name:        locationID,
-			Description: "",
-		}
-	}
-
-	content := string(data)
-
-	// Location keys follow pattern: {LocationID}Name and {LocationID}Description
-	nameKey := locationID + "Name"
-	descKey := locationID + "Description"
-
-	name := locationID
-	description := ""
-
-	// Extract name
-	if idx := strings.Index(content, "<Key>"+nameKey+"</Key>"); idx != -1 {
-		remaining := content[idx:]
-		if valueStart := strings.Index(remaining, "<Value>"); valueStart != -1 {
-			valueStart += 7
-			if valueEnd := strings.Index(remaining[valueStart:], "</Value>"); valueEnd != -1 {
-				name = remaining[valueStart : valueStart+valueEnd]
-			}
-		}
-	}
-
-	// Extract description
-	if idx := strings.Index(content, "<Key>"+descKey+"</Key>"); idx != -1 {
-		remaining := content[idx:]
-		if valueStart := strings.Index(remaining, "<Value>"); valueStart != -1 {
-			valueStart += 7
-			if valueEnd := strings.Index(remaining[valueStart:], "</Value>"); valueEnd != -1 {
-				description = remaining[valueStart : valueStart+valueEnd]
-			}
-		}
-	}
-
-	return LocationInfo{
-		ID:          locationID,
-		Name:        name,
-		Description: description,
-	}
-}
+// Removed: GetLocationInfo; start locations are fully resolved via ScanStartLocations.
 
 // GetConditionInfo returns localized information for a start condition
 func (m *Manager) GetConditionInfo(conditionID string, worldID string, beta bool) ConditionInfo {
-	nameKey, nameFallback, descKey, descFallback := m.getConditionLocalizationFromXML(conditionID, beta)
-
-	name := conditionID
-	if nameKey != "" {
-		if value := strings.TrimSpace(m.lookupLanguageValue(beta, nameKey)); value != "" {
-			name = value
-		} else if nameFallback != "" {
-			name = nameFallback
+	technicalID := m.resolveWorldTechnicalID(worldID, beta)
+	if technicalID == "" {
+		return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
+	}
+	base := m.getGameDataPathForVersion(beta)
+	language := m.Language
+	if strings.TrimSpace(language) == "" {
+		language = "english"
+	}
+	worlds, err := ScanWorldDefinitions(base, language+".xml")
+	if err != nil || len(worlds) == 0 {
+		return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
+	}
+	for i := range worlds {
+		w := &worlds[i]
+		if strings.EqualFold(w.Directory, technicalID) || strings.EqualFold(w.ID, technicalID) {
+			for _, sc := range w.StartConditions {
+				if strings.EqualFold(sc.ID, conditionID) {
+					name := strings.TrimSpace(sc.DisplayName)
+					if name == "" {
+						name = conditionID
+					}
+					return ConditionInfo{ID: conditionID, Name: name, Description: sc.Description}
+				}
+			}
+			break
 		}
-	} else if nameFallback != "" {
-		name = nameFallback
 	}
-
-	description := ""
-	if descKey != "" {
-		if value := strings.TrimSpace(m.lookupLanguageValue(beta, descKey)); value != "" {
-			description = value
-		} else if descFallback != "" {
-			description = descFallback
-		}
-	} else if descFallback != "" {
-		description = descFallback
-	}
-
-	return ConditionInfo{
-		ID:          conditionID,
-		Name:        name,
-		Description: description,
-	}
+	return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
 }
 
 func (m *Manager) NextID() int {

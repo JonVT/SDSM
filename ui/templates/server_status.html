@@ -132,6 +132,7 @@
                         class="world-thumb" 
                         src="/server/{{.server.ID}}/world-image" 
                         alt="World image for {{.server.World}}" 
+                        data-world-image="{{ if .worldInfo }}{{ .worldInfo.Image }}{{ end }}"
                         onerror="this.style.display='none'">
 
                     <div class="server-info">

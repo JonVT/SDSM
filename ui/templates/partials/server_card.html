@@ -40,13 +40,21 @@
   </div>
 
   {{ if $srv.LastError }}
-  <div class="error-banner" role="alert" aria-live="polite">
-    <svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-      <circle cx="12" cy="12" r="10"></circle>
-      <line x1="12" y1="8" x2="12" y2="12"></line>
-      <line x1="12" y1="16" x2="12" y2="16"></line>
-    </svg>
-    <span class="error-text">{{ $srv.LastError }}</span>
+  <div class="alert alert-danger alert-compact" role="alert" aria-live="polite">
+    <div class="alert-icon" aria-hidden="true">
+      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12" y2="16"></line>
+      </svg>
+    </div>
+    <div class="alert-content">
+      <div class="alert-title">Startup error detected</div>
+      <div class="alert-message">{{ $srv.LastError }}</div>
+      {{ if $srv.LastErrorAt }}
+      <div class="alert-meta">Occurred at <span>{{ $srv.LastErrorAt.Format "01/02/2006 15:04:05" }}</span></div>
+      {{ end }}
+    </div>
   </div>
   {{ end }}
 

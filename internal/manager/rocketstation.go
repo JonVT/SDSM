@@ -22,6 +22,12 @@ type RSStartCondition struct {
 	IsDefault     bool
 }
 
+type RSStartLocation struct {
+	ID          string
+	Name        string
+	Description string
+}
+
 type RSDifficulty struct {
 	ID            string
 	Name          string
@@ -41,6 +47,8 @@ type RSWorldDefinition struct {
 	Rating           string
 	RatingColor      string
 	StartConditions  []RSStartCondition
+	StartLocations   []RSStartLocation
+	Image            string
 }
 
 // Helper to read and unmarshal XML
@@ -167,6 +175,9 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 							Id        string `xml:"Id,attr"`
 							IsDefault bool   `xml:"IsDefault,attr"`
 						} `xml:"StartCondition"`
+						StartLocation []struct {
+							Id string `xml:"Id,attr"`
+						} `xml:"StartLocation"`
 					} `xml:"World"`
 				} `xml:"WorldSettings"`
 			}
@@ -188,6 +199,11 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 				RatingColor:      w.Rating.Color,
 			}
 
+			// Attach world image relative path when known
+			if img := WorldImageFileName(world.ID); img != "" {
+				world.Image = filepath.Join("Images", "SpaceMapImages", "Planets", img)
+			}
+
 			for _, sc := range w.StartCondition {
 				if def, ok := scDefs[sc.Id]; ok {
 					world.StartConditions = append(world.StartConditions, RSStartCondition{
@@ -200,10 +216,60 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 				}
 			}
 
+			for _, sl := range w.StartLocation {
+				id := strings.TrimSpace(sl.Id)
+				if id == "" {
+					continue
+				}
+				name := translations[id+"Name"]
+				if strings.TrimSpace(name) == "" {
+					name = id
+				}
+				desc := translations[id+"Description"]
+				world.StartLocations = append(world.StartLocations, RSStartLocation{ID: id, Name: name, Description: desc})
+			}
+
 			worlds = append(worlds, world)
 		}
 	}
 	return worlds, nil
+}
+
+// WorldImageFileName returns the map image file name for a world ID prefix.
+func WorldImageFileName(worldId string) string {
+	if len(worldId) < 2 {
+		return ""
+	}
+	switch worldId[0:2] {
+	case "Ma":
+		return "StatMars.png"
+	case "Eu":
+		return "StatEuropa.png"
+	case "Mi":
+		return "StatMimas.png"
+	case "Lu":
+		return "StatMoon.png"
+	case "Ve":
+		return "StatVenus.png"
+	case "Vu":
+		return "StatVulkan.png"
+	default:
+		return ""
+	}
+}
+
+// GetWorldImage reads the planet image PNG for a world from the game data base path.
+func GetWorldImage(basePath string, worldId string) ([]byte, error) {
+	fileName := WorldImageFileName(worldId)
+	if fileName == "" {
+		return nil, fmt.Errorf("world image not found for %s", worldId)
+	}
+	imagePath := filepath.Join(basePath, "StreamingAssets", "Images", "SpaceMapImages", "Planets", fileName)
+	data, err := os.ReadFile(imagePath)
+	if err != nil {
+		return nil, fmt.Errorf("world image not found for %s", worldId)
+	}
+	return data, nil
 }
 
 // Scan languages
@@ -278,4 +344,60 @@ func ScanDifficulties(basePath string, languageFile string) ([]RSDifficulty, err
 		})
 	}
 	return difficulties, nil
+}
+
+// Scan start locations for a specific world directory
+func ScanStartLocations(basePath string, languageFile string, worldDir string) ([]RSStartLocation, error) {
+	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
+	if err != nil {
+		return nil, err
+	}
+
+	// Look for primary world XML first; if not present, any XML under the worldDir
+	worldsPath := filepath.Join(basePath, "StreamingAssets", "Worlds", worldDir)
+	candidates := []string{filepath.Join(worldsPath, worldDir+".xml")}
+	if fi, err := os.Stat(candidates[0]); err != nil || fi.IsDir() {
+		matches, _ := filepath.Glob(filepath.Join(worldsPath, "*.xml"))
+		candidates = matches
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("world xml not found for %s", worldDir)
+	}
+
+	type startLocation struct {
+		Id string `xml:"Id,attr"`
+	}
+	var out []RSStartLocation
+	seen := make(map[string]struct{})
+
+	for _, path := range candidates {
+		var data struct {
+			WorldSettings struct {
+				World struct {
+					StartLocation []startLocation `xml:"StartLocation"`
+				} `xml:"World"`
+			} `xml:"WorldSettings"`
+		}
+		if err := readXML(path, &data); err != nil {
+			continue
+		}
+		for _, sl := range data.WorldSettings.World.StartLocation {
+			id := strings.TrimSpace(sl.Id)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			name := translations[id+"Name"]
+			if strings.TrimSpace(name) == "" {
+				name = id
+			}
+			desc := translations[id+"Description"]
+			out = append(out, RSStartLocation{ID: id, Name: name, Description: desc})
+		}
+	}
+
+	return out, nil
 }
