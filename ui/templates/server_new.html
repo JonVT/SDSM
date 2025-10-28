@@ -400,8 +400,12 @@
             diffSelect.innerHTML = "";
             if (!diffs || !diffs.length) {
                 diffSelect.innerHTML = '<option value="">No difficulties</option>';
+                diffSelect.disabled = true;
+                diffSelect.required = false;
                 return;
             }
+            diffSelect.disabled = false;
+            diffSelect.required = true;
             diffs.forEach(d => {
                 const opt = document.createElement("option");
                 opt.value = d;
@@ -511,9 +515,14 @@
                 { id: 'name', field: 'name' },
                 { id: 'world', field: 'world' },
                 { id: 'start_location', field: 'start_location' },
-                { id: 'start_condition', field: 'start_condition' },
-                { id: 'difficulty', field: 'difficulty' }
+                { id: 'start_condition', field: 'start_condition' }
             ];
+
+            // Only require difficulty when options are available
+            const difficultyEl = document.getElementById('difficulty');
+            if (difficultyEl && !difficultyEl.disabled) {
+                requiredFields.push({ id: 'difficulty', field: 'difficulty' });
+            }
 
             let completedCount = 0;
 

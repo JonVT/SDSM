@@ -898,7 +898,7 @@ func (m *Manager) GetDeployErrors() []string {
 	m.deployMu.Lock()
 	defer m.deployMu.Unlock()
 	if len(m.DeployErrors) == 0 {
-		return nil
+		return []string{}
 	}
 	errs := make([]string, len(m.DeployErrors))
 	copy(errs, m.DeployErrors)
@@ -984,10 +984,15 @@ func (m *Manager) GetWorlds() []string {
 }
 
 func (m *Manager) GetWorldsByVersion(beta bool) []string {
-	if worlds := m.getWorldsFromXML(beta); len(worlds) > 0 {
-		return worlds
+	cache := m.worldDefinitionsCache(beta)
+	if cache == nil || len(cache.definitions) == 0 {
+		return []string{}
 	}
-	return []string{"Error: No worlds found"}
+	worlds := make([]string, 0, len(cache.definitions))
+	for _, def := range cache.definitions {
+		worlds = append(worlds, def.DisplayName)
+	}
+	return worlds
 }
 
 // ResolveWorldID returns the technical world identifier (directory name) for a given world display name.
@@ -1040,10 +1045,7 @@ func (m *Manager) getGameDataPathForVersion(beta bool) string {
 }
 
 func (m *Manager) GetDifficulties() []string {
-	if difficulties := m.getDifficultiesFromXML(false); len(difficulties) > 0 {
-		return difficulties
-	}
-	return []string{"Creative", "Easy", "Normal", "Stationeer"}
+	return m.GetDifficultiesForVersion(false)
 }
 
 // GetDifficultiesForVersion returns difficulty IDs for the specified channel.
@@ -1051,13 +1053,10 @@ func (m *Manager) GetDifficultiesForVersion(beta bool) []string {
 	if difficulties := m.getDifficultiesFromXML(beta); len(difficulties) > 0 {
 		return difficulties
 	}
-	// Fallback defaults mirror GetDifficulties behavior
-	return []string{"Creative", "Easy", "Normal", "Stationeer"}
+	return []string{}
 }
 
-// Deprecated: GetStartConditions previously aggregated all start conditions via manual XML parsing.
-// Callers should prefer GetStartConditionsForWorldVersion which uses RocketStation scans.
-func (m *Manager) GetStartConditions() []string { return []string{} }
+// Removed: GetStartConditions; callers should use GetStartConditionsForWorldVersion.
 
 func (m *Manager) GetLanguages() []string {
 	// Use release channel languages via RocketStation scan
@@ -1079,7 +1078,7 @@ func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 		sort.Strings(out)
 		return out
 	}
-	return nil
+	return []string{}
 }
 
 // Legacy XML structure types removed; RocketStation scanners provide structured data.
@@ -1097,58 +1096,9 @@ func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 //     return false
 // }
 
-func (m *Manager) getWorldsFromXML(beta bool) []string {
-	cache := m.worldDefinitionsCache(beta)
-	if cache == nil || len(cache.definitions) == 0 {
-		return nil
-	}
-	worlds := make([]string, 0, len(cache.definitions))
-	for _, def := range cache.definitions {
-		worlds = append(worlds, def.DisplayName)
-	}
-	return worlds
-}
+// Removed: getWorldsFromXML; world list comes from cached RocketStation scan.
 
-// Removed: extractWorldLocalizationKeys; world metadata now comes from RocketStation scans.
-
-func (m *Manager) lookupLanguageValue(beta bool, key string) string {
-	if key == "" {
-		return ""
-	}
-
-	language := m.Language
-	if language == "" {
-		language = "english"
-	}
-
-	langPath := filepath.Join(m.getGameDataPathForVersion(beta), "StreamingAssets", "Language", language+".xml")
-	data, err := os.ReadFile(langPath)
-	if err != nil {
-		return ""
-	}
-
-	content := string(data)
-	searchKey := "<Key>" + key + "</Key>"
-	idx := strings.Index(content, searchKey)
-	if idx == -1 {
-		return ""
-	}
-
-	section := content[idx+len(searchKey):]
-	valueStart := strings.Index(section, "<Value>")
-	if valueStart == -1 {
-		return ""
-	}
-	valueStart += len("<Value>")
-	valueEnd := strings.Index(section[valueStart:], "</Value>")
-	if valueEnd == -1 {
-		return ""
-	}
-
-	return section[valueStart : valueStart+valueEnd]
-}
-
-// getStartConditionsFromXML removed; use ScanWorldDefinitions and world StartConditions instead.
+// Removed: legacy language value lookup and ad-hoc XML parsing; RocketStation scans provide localization.
 
 // Deprecated: legacy folder scan for languages no longer used.
 // func (m *Manager) getLanguagesFromFolder() []string { return nil }
@@ -1205,9 +1155,7 @@ type worldDefinition struct {
 	DisplayName         string
 	Priority            int
 	Root                string
-	NameKey             string
 	NameFallback        string
-	DescriptionKey      string
 	DescriptionFallback string
 	StartConditions     []RSStartCondition
 	StartLocations      []RSStartLocation
@@ -1378,7 +1326,7 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 		var b strings.Builder
 		fmt.Fprintf(&b, "World cache built (beta=%t) with %d entries:", beta, len(cache.definitions))
 		for _, def := range cache.definitions {
-			fmt.Fprintf(&b, "\n- directory=%s id=%s display=%q priority=%d root=%s nameKey=%s descKey=%s", def.Directory, def.ID, def.DisplayName, def.Priority, def.Root, def.NameKey, def.DescriptionKey)
+			fmt.Fprintf(&b, "\n- directory=%s id=%s display=%q priority=%d root=%s", def.Directory, def.ID, def.DisplayName, def.Priority, def.Root)
 		}
 		m.Log.Write(b.String())
 	}
@@ -1407,7 +1355,7 @@ func (m *Manager) getDifficultiesFromXML(beta bool) []string {
 		sort.Strings(ids)
 		return ids
 	}
-	return nil
+	return []string{}
 }
 
 // GetWorldImage returns the PNG bytes for the planet image that matches the normalized world name.
@@ -1452,11 +1400,6 @@ func (m *Manager) GetStartLocationsForWorld(worldID string) []LocationInfo {
 }
 
 func (m *Manager) GetStartLocationsForWorldVersion(worldID string, beta bool) []LocationInfo {
-	technicalID := m.resolveWorldTechnicalID(worldID, beta)
-	if technicalID == "" {
-		return []LocationInfo{}
-	}
-	// Use the cached world definitions (which now include StartLocations)
 	canonical := canonicalWorldIdentifier(worldID)
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
 		if def, ok := cache.byCanonical[canonical]; ok {
@@ -1480,11 +1423,6 @@ func (m *Manager) GetStartConditionsForWorld(worldID string) []ConditionInfo {
 }
 
 func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) []ConditionInfo {
-	technicalID := m.resolveWorldTechnicalID(worldID, beta)
-	if technicalID == "" {
-		return []ConditionInfo{}
-	}
-	// Use cached world definitions to avoid repeated scans
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
 		canonical := canonicalWorldIdentifier(worldID)
 		if def, ok := cache.byCanonical[canonical]; ok {
@@ -1509,7 +1447,7 @@ func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) [
 
 func uniqueStrings(values []string) []string {
 	seen := make(map[string]struct{})
-	var result []string
+	result := make([]string, 0, len(values))
 
 	for _, v := range values {
 		if v == "" {
@@ -1529,37 +1467,7 @@ func uniqueStrings(values []string) []string {
 // Removed: GetLocationInfo; start locations are fully resolved via ScanStartLocations.
 
 // GetConditionInfo returns localized information for a start condition
-func (m *Manager) GetConditionInfo(conditionID string, worldID string, beta bool) ConditionInfo {
-	technicalID := m.resolveWorldTechnicalID(worldID, beta)
-	if technicalID == "" {
-		return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
-	}
-	base := m.getGameDataPathForVersion(beta)
-	language := m.Language
-	if strings.TrimSpace(language) == "" {
-		language = "english"
-	}
-	worlds, err := ScanWorldDefinitions(base, language+".xml")
-	if err != nil || len(worlds) == 0 {
-		return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
-	}
-	for i := range worlds {
-		w := &worlds[i]
-		if strings.EqualFold(w.Directory, technicalID) || strings.EqualFold(w.ID, technicalID) {
-			for _, sc := range w.StartConditions {
-				if strings.EqualFold(sc.ID, conditionID) {
-					name := strings.TrimSpace(sc.DisplayName)
-					if name == "" {
-						name = conditionID
-					}
-					return ConditionInfo{ID: conditionID, Name: name, Description: sc.Description}
-				}
-			}
-			break
-		}
-	}
-	return ConditionInfo{ID: conditionID, Name: conditionID, Description: ""}
-}
+// Removed: GetConditionInfo; use GetStartConditionsForWorldVersion and filter by ID if needed.
 
 func (m *Manager) NextID() int {
 	maxID := 0
@@ -2522,7 +2430,7 @@ func (m *Manager) GetMissingComponents() []string {
 	m.deployMu.Lock()
 	defer m.deployMu.Unlock()
 	if len(m.MissingComponents) == 0 {
-		return nil
+		return []string{}
 	}
 	comps := make([]string, len(m.MissingComponents))
 	copy(comps, m.MissingComponents)

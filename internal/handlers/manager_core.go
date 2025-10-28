@@ -114,12 +114,18 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		suggestedName = fmt.Sprintf("My Stationeers Server %d", count+1)
 	}
 
+	// Determine default difficulty from release channel if available
+	defaultDifficulty := ""
+	if relDiffs := h.manager.GetDifficultiesForVersion(false); len(relDiffs) > 0 {
+		defaultDifficulty = relDiffs[0]
+	}
+
 	formDefaults := gin.H{
 		"name":                  suggestedName,
 		"world":                 defaultWorld,
 		"start_location":        defaultStartLocation,
 		"start_condition":       defaultStartCondition,
-		"difficulty":            "Normal",
+		"difficulty":            defaultDifficulty,
 		"port":                  fmt.Sprintf("%d", h.manager.GetNextAvailablePort(defaultServerPort)),
 		"max_clients":           "10",
 		"password":              "",
@@ -251,6 +257,34 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	setupInProgress := h.manager.SetupInProgress
 	lastLogLine := h.manager.LastUpdateLogLine()
 
+	// Build lightweight game-data warnings if scanners return empty sets
+	relLangs := h.manager.GetLanguagesForVersion(false)
+	betaLangs := h.manager.GetLanguagesForVersion(true)
+	relWorlds := h.manager.GetWorldsByVersion(false)
+	betaWorlds := h.manager.GetWorldsByVersion(true)
+	relDiffs := h.manager.GetDifficultiesForVersion(false)
+	betaDiffs := h.manager.GetDifficultiesForVersion(true)
+
+	warnings := []string{}
+	if len(relWorlds) == 0 {
+		warnings = append(warnings, "No worlds found for Release channel.")
+	}
+	if len(betaWorlds) == 0 {
+		warnings = append(warnings, "No worlds found for Beta channel.")
+	}
+	if len(relLangs) == 0 {
+		warnings = append(warnings, "No languages found for Release channel.")
+	}
+	if len(betaLangs) == 0 {
+		warnings = append(warnings, "No languages found for Beta channel.")
+	}
+	if len(relDiffs) == 0 {
+		warnings = append(warnings, "No difficulties found for Release channel.")
+	}
+	if len(betaDiffs) == 0 {
+		warnings = append(warnings, "No difficulties found for Beta channel.")
+	}
+
 	data := gin.H{
 		"username":  username,
 		"steam_id":  h.manager.SteamID,
@@ -258,9 +292,9 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"port":      h.manager.Port,
 		"language":  h.manager.Language,
 		// Provide both release and beta languages for live switching in the UI
-		"languages":           h.manager.GetLanguages(),
-		"release_languages":   h.manager.GetLanguagesForVersion(false),
-		"beta_languages":      h.manager.GetLanguagesForVersion(true),
+		"languages":           relLangs,
+		"release_languages":   relLangs,
+		"beta_languages":      betaLangs,
 		"auto_update":         h.manager.UpdateTime.Format("15:04:05"),
 		"start_update":        h.manager.StartupUpdate,
 		"release_latest":      h.manager.ReleaseLatest(),
@@ -282,6 +316,7 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"deploy_errors":       deployErrors,
 		"setup_last_log_line": lastLogLine,
 		"setup_log_fallback":  updateLogFallback,
+		"game_data_warnings":  warnings,
 	}
 	c.HTML(http.StatusOK, "manager.html", data)
 }

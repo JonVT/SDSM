@@ -875,6 +875,27 @@
     </div>
 
     <main class="container">
+        {{ if .game_data_warnings }}
+        {{ if gt (len .game_data_warnings) 0 }}
+        <div class="alert alert-warning" role="status" aria-live="polite" style="margin-bottom: var(--space-4);">
+            <div class="alert-icon" aria-hidden="true">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12" y2="16"></line>
+                </svg>
+            </div>
+            <div class="alert-content">
+                <div class="alert-title">Game data missing</div>
+                <ul class="alert-message" style="margin:0; padding-left: 1.2rem;">
+                    {{ range .game_data_warnings }}
+                    <li>{{ . }}</li>
+                    {{ end }}
+                </ul>
+            </div>
+        </div>
+        {{ end }}
+        {{ end }}
         <div class="manager-content">
             <div class="manager-grid">
                 <div class="glass-card">
