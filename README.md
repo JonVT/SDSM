@@ -95,7 +95,7 @@ go/
 │   ├── models/         # Server lifecycle, log parsing, players/chat buffers
 │   └── utils/          # Logging, filesystem paths, process helpers
 ├── static/             # CSS and front-end assets
-├── templates/          # HTML templates for dashboard, manager, auth, server detail
+├── ui/templates/       # HTML templates for dashboard, manager, auth, server detail (embedded)
 ├── docs/media/         # SVG illustrations used in this README
 ├── test_config.json    # Example configuration for local testing
 └── README.md
@@ -109,7 +109,7 @@ go/
 - **Logs:** `sdsm.log` and `updates.log` are truncated on startup for clean sessions.
 - **Player history:** `players.log` is deduplicated and rewritten automatically when servers stop or restart.
 
-For UI work, edit the HTML in `templates/` and the styles in `static/`; the JavaScript inside `templates/server_status.html` powers live player/chat/log updates.
+For UI work, edit the HTML in `ui/templates/` and the styles in `ui/static/`; the JavaScript inside `ui/templates/server_status.html` powers live player/chat/log updates.
 
 ## Contributing
 
