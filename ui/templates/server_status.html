@@ -509,6 +509,12 @@
                             </select>
                         </div>
                         <div class="form-row">
+                            <label for="difficulty">Difficulty:</label>
+                            <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
                             <label for="port">Port:</label>
                             <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
                         </div>
@@ -1281,10 +1287,25 @@
         };
         {{ end }}
 
+        // Difficulties per version from server payload
+        const releaseDifficulties = [
+            {{- range $idx, $d := .release_difficulties -}}
+            {{- if $idx}}, {{- end -}}
+            "{{ js $d }}"
+            {{- end -}}
+        ];
+        const betaDifficulties = [
+            {{- range $idx, $d := .beta_difficulties -}}
+            {{- if $idx}}, {{- end -}}
+            "{{ js $d }}"
+            {{- end -}}
+        ];
+
         const initialVersionKey = {{if .server.Beta}}"beta"{{else}}"release"{{end}};
         const initialWorld = {{if .server.World}}"{{js .server.World}}"{{else}}""{{end}};
         const initialStartLocation = {{if .server.StartLocation}}"{{js .server.StartLocation}}"{{else}}""{{end}};
         const initialStartCondition = {{if .server.StartCondition}}"{{js .server.StartCondition}}"{{else}}""{{end}};
+        const initialDifficulty = {{if .server.Difficulty}}"{{js .server.Difficulty}}"{{else}}""{{end}};
 
         const versionState = {
             release: {
@@ -1397,10 +1418,35 @@
             selectOptionWithFallback(condSelect, state.startCondition);
         }
 
+        function populateDifficultyOptions() {
+            const diffSelect = document.getElementById('difficulty');
+            const versionKey = currentVersionKey();
+            const diffs = versionKey === 'beta' ? betaDifficulties : releaseDifficulties;
+            const previous = diffSelect ? diffSelect.value : '';
+            if (!diffSelect) return;
+            diffSelect.innerHTML = '';
+            if (!diffs || !diffs.length) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'No difficulties';
+                diffSelect.appendChild(opt);
+                return;
+            }
+            diffs.forEach((d) => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                diffSelect.appendChild(opt);
+            });
+            const desired = diffs.includes(initialDifficulty) ? initialDifficulty : (diffs.includes(previous) ? previous : diffs[0]);
+            diffSelect.value = desired;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const worldSelect = document.getElementById('world');
             const locSelect = document.getElementById('start_location');
             const condSelect = document.getElementById('start_condition');
+            const difficultySelect = document.getElementById('difficulty');
             const versionRadios = document.querySelectorAll('input[name="beta"]');
             const paramsForm = document.getElementById('startup-params-form');
             const updateParamsBtn = document.getElementById('btn-update-params');
@@ -1410,6 +1456,7 @@
             const confirmFlag = document.getElementById('confirm-reset-saves-flag');
 
             populateWorldOptions();
+            populateDifficultyOptions();
 
             const tabButtons = document.querySelectorAll('.tab-set .tab-btn');
             const tabContents = document.querySelectorAll('.tab-panel');
@@ -1440,8 +1487,16 @@
             versionRadios.forEach(radio => {
                 radio.addEventListener('change', () => {
                     populateWorldOptions();
+                    populateDifficultyOptions();
                 });
             });
+
+            if (difficultySelect) {
+                difficultySelect.addEventListener('change', () => {
+                    // Keep initialDifficulty aligned only for UX fallback decisions
+                    // Not used as destructive param, so no modal involvement
+                });
+            }
 
             if (locSelect) {
                 locSelect.addEventListener('change', () => {

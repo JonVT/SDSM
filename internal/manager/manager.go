@@ -785,6 +785,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 		}
 		s.SetProgressReporter("", nil)
 		m.invalidateRocketStationVersionCache(false)
+		m.invalidateGameDataCaches(false)
 	}
 
 	if deployType == DeployTypeBeta || deployType == DeployTypeAll {
@@ -805,6 +806,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 		}
 		s.SetProgressReporter("", nil)
 		m.invalidateRocketStationVersionCache(true)
+		m.invalidateGameDataCaches(true)
 	}
 
 	if deployType == DeployTypeBepInEx || deployType == DeployTypeAll {
@@ -1047,6 +1049,15 @@ func (m *Manager) GetDifficulties() []string {
 	return []string{"Creative", "Easy", "Normal", "Stationeer"}
 }
 
+// GetDifficultiesForVersion returns difficulty IDs for the specified channel.
+func (m *Manager) GetDifficultiesForVersion(beta bool) []string {
+	if difficulties := m.getDifficultiesFromXML(beta); len(difficulties) > 0 {
+		return difficulties
+	}
+	// Fallback defaults mirror GetDifficulties behavior
+	return []string{"Creative", "Easy", "Normal", "Stationeer"}
+}
+
 func (m *Manager) GetStartConditions() []string {
 	if conditions := m.getStartConditionsFromXML(false); len(conditions) > 0 {
 		return conditions
@@ -1057,6 +1068,51 @@ func (m *Manager) GetStartConditions() []string {
 func (m *Manager) GetLanguages() []string {
 	// Pull language options directly from the Stationeers language directory.
 	return m.getLanguagesFromFolder()
+}
+
+// GetLanguagesForVersion returns available languages for release/beta independently.
+// It prefers the RocketStation language scan, falling back to folder scanning.
+func (m *Manager) GetLanguagesForVersion(beta bool) []string {
+	base := m.getGameDataPathForVersion(beta)
+	// Try RS scanner first
+	if langs, err := ScanLanguages(base); err == nil && len(langs) > 0 {
+		out := make([]string, 0, len(langs))
+		for _, l := range langs {
+			name := strings.TrimSuffix(l.FileName, ".xml")
+			if name != "" && !strings.Contains(name, "_") {
+				out = append(out, name)
+			}
+		}
+		sort.Strings(out)
+		return out
+	}
+	// Fallback to legacy folder scan with channel-specific base path
+	langPath := filepath.Join(base, "StreamingAssets", "Language")
+	entries, err := os.ReadDir(langPath)
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".xml") || strings.Contains(name, "_") {
+			continue
+		}
+		trimmed := strings.TrimSuffix(name, ".xml")
+		if trimmed == "" {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+	}
+	var result []string
+	for k := range seen {
+		result = append(result, k)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // XML parsing structures
@@ -1475,95 +1531,67 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 
 	paths := []string{m.getGameDataPathForVersion(beta)}
 	if beta {
+		// When beta is requested, include release as a fallback source
 		paths = append(paths, m.getGameDataPathForVersion(false))
 	}
 
 	uniquePaths := uniqueStrings(paths)
 	byDisplay := make(map[string]worldDefinition)
 
+	// Determine language file to use for translations
+	language := m.Language
+	if strings.TrimSpace(language) == "" {
+		language = "english"
+	}
+	langFile := language + ".xml"
+
 	for _, root := range uniquePaths {
 		if root == "" {
 			continue
 		}
-		worldsPath := filepath.Join(root, "StreamingAssets", "Worlds")
-		entries, err := os.ReadDir(worldsPath)
-		if err != nil {
+		worlds, err := ScanWorldDefinitions(root, langFile)
+		if err != nil || len(worlds) == 0 {
 			continue
 		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
+		for _, w := range worlds {
+			// Skip hidden worlds to match previous behavior
+			if w.Hidden {
 				continue
 			}
-			dirName := entry.Name()
-			xmlFiles, err := filepath.Glob(filepath.Join(worldsPath, dirName, "*.xml"))
-			if err != nil || len(xmlFiles) == 0 {
-				continue
+			display := w.Name
+			if strings.TrimSpace(display) == "" {
+				display = w.ID
+			}
+			def := worldDefinition{
+				Directory:           w.Directory,
+				ID:                  w.ID,
+				DisplayName:         strings.TrimSpace(display),
+				Priority:            w.Priority,
+				Root:                root,
+				NameFallback:        strings.TrimSpace(w.Name),
+				DescriptionFallback: strings.TrimSpace(w.Description),
+			}
+			if def.ID == "" {
+				def.ID = def.Directory
+			}
+			if def.DisplayName == "" {
+				def.DisplayName = def.ID
 			}
 
-			for _, xmlPath := range xmlFiles {
-				data, err := os.ReadFile(xmlPath)
-				if err != nil {
+			canonicalKeys := []string{def.DisplayName, def.ID, def.Directory}
+			for _, key := range canonicalKeys {
+				canonical := canonicalWorldIdentifier(key)
+				if canonical == "" {
 					continue
 				}
+				if existing, ok := cache.byCanonical[canonical]; !ok || def.preferredOver(existing) {
+					cache.byCanonical[canonical] = def
+				}
+			}
 
-				meta, err := extractWorldMetadata(data)
-				if err != nil {
-					continue
-				}
-				if meta.ShouldSkip {
-					continue
-				}
-
-				def := worldDefinition{
-					Directory: dirName,
-					ID:        meta.ID,
-					Priority:  meta.Priority,
-					Root:      root,
-				}
-				if def.ID == "" {
-					def.ID = dirName
-				}
-
-				nameKey, nameFallback, descKey, descFallback := extractWorldLocalizationKeys(data)
-				def.NameKey = nameKey
-				def.NameFallback = nameFallback
-				def.DescriptionKey = descKey
-				def.DescriptionFallback = descFallback
-
-				displayName := def.ID
-				if def.NameKey != "" {
-					if value := strings.TrimSpace(m.lookupLanguageValue(beta, def.NameKey)); value != "" {
-						displayName = value
-					} else if def.NameFallback != "" {
-						displayName = def.NameFallback
-					}
-				} else if def.NameFallback != "" {
-					displayName = def.NameFallback
-				}
-				def.DisplayName = strings.TrimSpace(displayName)
-				if def.DisplayName == "" {
-					def.DisplayName = def.ID
-				}
-
-				canonicalKeys := []string{def.DisplayName, def.ID, def.Directory}
-				for _, key := range canonicalKeys {
-					canonical := canonicalWorldIdentifier(key)
-					if canonical == "" {
-						continue
-					}
-					if existing, ok := cache.byCanonical[canonical]; !ok || def.preferredOver(existing) {
-						cache.byCanonical[canonical] = def
-					}
-				}
-
-				displayKey := canonicalWorldIdentifier(def.DisplayName)
-				if existing, ok := byDisplay[displayKey]; !ok || def.preferredOver(existing) {
-					byDisplay[displayKey] = def
-				}
-
-				// Prefer the first successful XML for this directory
-				break
+			displayKey := canonicalWorldIdentifier(def.DisplayName)
+			if existing, ok := byDisplay[displayKey]; !ok || def.preferredOver(existing) {
+				byDisplay[displayKey] = def
 			}
 		}
 	}
@@ -1730,6 +1758,24 @@ func (m *Manager) getConditionLocalizationFromXML(conditionID string, beta bool)
 }
 
 func (m *Manager) getDifficultiesFromXML(beta bool) []string {
+	// Prefer RocketStation XML parsing for difficulties and fall back to legacy scan if needed
+	base := m.getGameDataPathForVersion(beta)
+	language := m.Language
+	if strings.TrimSpace(language) == "" {
+		language = "english"
+	}
+	if diffs, err := ScanDifficulties(base, language+".xml"); err == nil && len(diffs) > 0 {
+		ids := make([]string, 0, len(diffs))
+		for _, d := range diffs {
+			if d.ID != "" {
+				ids = append(ids, d.ID)
+			}
+		}
+		sort.Strings(ids)
+		return ids
+	}
+
+	// Legacy fallback (kept for robustness)
 	roots := []string{m.getGameDataPathForVersion(beta)}
 	if beta {
 		roots = append(roots, m.getGameDataPathForVersion(false))
@@ -1952,50 +1998,44 @@ func (m *Manager) GetStartConditionsForWorld(worldID string) []ConditionInfo {
 }
 
 func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) []ConditionInfo {
+	// Prefer RocketStation XML parsing for start conditions instead of manual line parsing
 	technicalID := m.resolveWorldTechnicalID(worldID, beta)
-
-	worldXMLPath := filepath.Join(m.getGameDataPathForVersion(beta), "StreamingAssets", "Worlds", technicalID, technicalID+".xml")
-
-	data, err := os.ReadFile(worldXMLPath)
-	if err != nil {
+	if technicalID == "" {
 		return []ConditionInfo{}
 	}
 
-	content := string(data)
-	var conditions []ConditionInfo
-	seen := make(map[string]bool)
-
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "<!--") {
-			continue
-		}
-		if !strings.Contains(line, "<StartCondition Id=") {
-			continue
-		}
-
-		start := strings.Index(line, "Id=\"")
-		if start == -1 {
-			continue
-		}
-		start += 4
-
-		end := strings.Index(line[start:], "\"")
-		if end <= 0 {
-			continue
-		}
-
-		conditionID := line[start : start+end]
-		if conditionID == "" || seen[conditionID] {
-			continue
-		}
-
-		seen[conditionID] = true
-		conditionInfo := m.GetConditionInfo(conditionID, worldID, beta)
-		conditions = append(conditions, conditionInfo)
+	base := m.getGameDataPathForVersion(beta)
+	language := m.Language
+	if strings.TrimSpace(language) == "" {
+		language = "english"
+	}
+	worlds, err := ScanWorldDefinitions(base, language+".xml")
+	if err != nil || len(worlds) == 0 {
+		return []ConditionInfo{}
 	}
 
-	return conditions
+	var target *RSWorldDefinition
+	for i := range worlds {
+		w := &worlds[i]
+		if strings.EqualFold(w.Directory, technicalID) || strings.EqualFold(w.ID, technicalID) {
+			target = w
+			break
+		}
+	}
+	if target == nil {
+		return []ConditionInfo{}
+	}
+
+	seen := make(map[string]bool)
+	out := make([]ConditionInfo, 0, len(target.StartConditions))
+	for _, sc := range target.StartConditions {
+		if sc.ID == "" || seen[sc.ID] {
+			continue
+		}
+		seen[sc.ID] = true
+		out = append(out, m.GetConditionInfo(sc.ID, worldID, beta))
+	}
+	return out
 }
 
 func uniqueStrings(values []string) []string {
@@ -2214,6 +2254,21 @@ func (m *Manager) invalidateLaunchPadVersionCache() {
 	m.launchPadVersion = ""
 	m.launchPadChecked = time.Time{}
 	m.launchPadMu.Unlock()
+}
+
+// invalidateGameDataCaches clears any cached game data (worlds, languages, difficulties)
+// so that subsequent requests recollect fresh data from disk after an update.
+func (m *Manager) invalidateGameDataCaches(beta bool) {
+	// Invalidate world definition cache for the specified channel
+	m.worldIndexMu.Lock()
+	if m.worldIndex != nil {
+		delete(m.worldIndex, beta)
+	}
+	m.worldIndexMu.Unlock()
+
+	// Note: RS XML scanners (ScanWorldDefinitions/ScanDifficulties/ScanLanguages)
+	// are currently invoked on-demand without an internal cache. If we add
+	// explicit caching for them in the future, hook invalidation here as well.
 }
 
 func (m *Manager) invalidateRocketStationVersionCache(beta bool) {

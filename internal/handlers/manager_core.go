@@ -63,8 +63,11 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		"worldInfo":  worldInfo,
 		"worldLists": worldLists,
 		"worldData":  worldData,
-		"serverPath": h.manager.Paths.ServerDir(s.ID),
-		"banned":     s.BannedEntries(),
+		// Per-channel difficulties for live switching on the status page
+		"release_difficulties": h.manager.GetDifficultiesForVersion(false),
+		"beta_difficulties":    h.manager.GetDifficultiesForVersion(true),
+		"serverPath":           h.manager.Paths.ServerDir(s.ID),
+		"banned":               s.BannedEntries(),
 	}
 
 	if errMsg != "" {
@@ -157,11 +160,14 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 	}
 
 	payload := gin.H{
-		"username":     username,
-		"worldLists":   worldLists,
-		"worldData":    worldData,
-		"difficulties": h.manager.GetDifficulties(),
-		"form":         formDefaults,
+		"username":   username,
+		"worldLists": worldLists,
+		"worldData":  worldData,
+		// Keep default difficulties for initial render (release by default)
+		"difficulties":         h.manager.GetDifficulties(),
+		"release_difficulties": h.manager.GetDifficultiesForVersion(false),
+		"beta_difficulties":    h.manager.GetDifficultiesForVersion(true),
+		"form":                 formDefaults,
 	}
 
 	for k, v := range overrides {
@@ -246,12 +252,15 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	lastLogLine := h.manager.LastUpdateLogLine()
 
 	data := gin.H{
-		"username":            username,
-		"steam_id":            h.manager.SteamID,
-		"root_path":           h.manager.Paths.RootPath,
-		"port":                h.manager.Port,
-		"language":            h.manager.Language,
+		"username":  username,
+		"steam_id":  h.manager.SteamID,
+		"root_path": h.manager.Paths.RootPath,
+		"port":      h.manager.Port,
+		"language":  h.manager.Language,
+		// Provide both release and beta languages for live switching in the UI
 		"languages":           h.manager.GetLanguages(),
+		"release_languages":   h.manager.GetLanguagesForVersion(false),
+		"beta_languages":      h.manager.GetLanguagesForVersion(true),
 		"auto_update":         h.manager.UpdateTime.Format("15:04:05"),
 		"start_update":        h.manager.StartupUpdate,
 		"release_latest":      h.manager.ReleaseLatest(),
