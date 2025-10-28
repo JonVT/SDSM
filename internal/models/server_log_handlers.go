@@ -3,6 +3,7 @@ package models
 import (
 	"regexp"
 	"strings"
+	"time"
 )
 
 type logLineHandler struct {
@@ -17,6 +18,13 @@ var (
 	worldLoadedRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+loaded\s+(\S+)\s+things in`)
 	adminCommandRegex     = regexp.MustCompile(`(?i)client\s+'(.+?)\s+\(([^)]+)\)'\s+ran\s+command`)
 	chatMessageRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:\s+([^:]+?):\s*(.+)$`)
+	// Example line:
+	//   file: [No such world name: Europa. Valid worlds: Europa3, Lunar, Mars2, ...]
+	// Be lenient about casing and trailing bracket.
+	noSuchWorldRegex = regexp.MustCompile(`(?i)no\s+such\s+world\s+name:\s*['"]?([^\]'"\.]+)['"]?\.?\s+valid\s+worlds:\s*(.*)`)
+	// Example lines (variants observed):
+	//   file: [No such world name: 'Europa3'. Valid worlds: Europa3, Lunar, Mars2, ...
+	// Be lenient about quotes, trailing bracket, and any trailing characters on the line.
 
 	logLineHandlers = []logLineHandler{
 		{
@@ -98,7 +106,12 @@ var (
 			},
 			handle: func(s *Server, line string, matches []string) {
 				extract := func(raw string) string {
-					return strings.TrimSpace(raw)
+					raw = strings.TrimSpace(raw)
+					// Some logs wrap world IDs in quotes, e.g., 'Europa3'. Strip surrounding quotes/brackets and stray punctuation.
+					raw = strings.Trim(raw, "'\"")
+					raw = strings.Trim(raw, "[]()")
+					raw = strings.TrimRight(raw, ".,;]")
+					return raw
 				}
 				worldID := ""
 				if len(matches) > 1 {
@@ -192,6 +205,51 @@ var (
 			handle: func(s *Server, _ string, _ []string) {
 				s.Starting = false
 				s.Running = true
+			},
+		},
+		// Fatal startup error: invalid world name
+		{
+			match: func(line string) []string {
+				// Quick pre-filter to avoid regex on every line
+				if !strings.Contains(strings.ToLower(line), "no such world name") {
+					return nil
+				}
+				if m := noSuchWorldRegex.FindStringSubmatch(line); m != nil {
+					return m
+				}
+				// Fall back to a synthetic non-empty slice to trigger handler even if regex didn't match structure
+				return []string{"no such world name"}
+			},
+			handle: func(s *Server, line string, matches []string) {
+				// matches[0] = full match, [1] = bad world (optional), [2] = valid worlds (optional)
+				var bad, valids string
+				if len(matches) >= 2 {
+					bad = strings.TrimSpace(matches[1])
+				}
+				if len(matches) >= 3 {
+					valids = strings.TrimSpace(matches[2])
+				}
+				// Build a concise error message; if parsing failed, include the raw line
+				msg := "Invalid world name detected"
+				if bad != "" {
+					msg += ": " + bad
+				}
+				if valids != "" {
+					msg += ". Valid worlds: " + valids
+				} else if bad == "" {
+					msg += ": see log line — " + line
+				}
+				// Record and log the error
+				now := time.Now()
+				s.LastError = msg
+				s.LastErrorAt = &now
+				if s.Logger != nil {
+					s.Logger.Write("Startup error: " + msg)
+				}
+				// Stop the server if it's starting/running
+				if s.Running || s.Starting {
+					s.Stop()
+				}
 			},
 		},
 	}

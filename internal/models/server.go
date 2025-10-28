@@ -125,6 +125,14 @@ type Server struct {
 	Starting            bool          `json:"-"`
 	Running             bool          `json:"-"`
 	LastLogLine         string        `json:"-"`
+	// LastError is a human-readable description of the last fatal/startup error detected from logs.
+	LastError string `json:"last_error,omitempty"`
+	// LastErrorAt records when LastError was updated.
+	LastErrorAt *time.Time `json:"last_error_at,omitempty"`
+	// PendingSavePurge is set when core start parameters (world/start location/start condition)
+	// have changed and we plan to purge saves before next start. This is currently a stub and
+	// does not perform deletion until implemented.
+	PendingSavePurge    bool `json:"pending_save_purge,omitempty"`
 	progressReporter    func(stage string, processed, total int64)
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
@@ -1119,6 +1127,16 @@ func (s *Server) Start() {
 		s.Proc = nil
 	}
 
+	// Clear previous error state on a new start attempt
+	s.LastError = ""
+	s.LastErrorAt = nil
+
+	// Stubbed save purge hook: if core parameters changed previously, we would purge saves here.
+	// For now, just log intent and proceed without deleting anything.
+	if s.PendingSavePurge && s.Logger != nil {
+		s.Logger.Write("Pending save purge flagged due to core parameter change (stub: no deletion performed)")
+	}
+
 	var executableName string
 	if runtime.GOOS == "windows" {
 		executableName = "rocketstation_DedicatedServer.exe"
@@ -1143,6 +1161,8 @@ func (s *Server) Start() {
 	if worldIdentifier == "" {
 		worldIdentifier = s.World
 	}
+
+	s.Logger.Write(fmt.Sprintf("World: %s  -  WorldId: %s", s.World, s.WorldID))
 
 	args := []string{
 		"-file",
@@ -1271,11 +1291,7 @@ func (s *Server) tailServerLog(path string, stop <-chan bool) {
 				}
 				continue
 			}
-			if _, err := file.Seek(0, io.SeekEnd); err != nil {
-				if s.Logger != nil {
-					s.Logger.Write(fmt.Sprintf("Failed to seek server log: %v", err))
-				}
-			}
+			// Start reading from the beginning to catch early startup errors written before the tailer attached.
 			reader = bufio.NewReader(file)
 		}
 
@@ -1325,10 +1341,12 @@ func (s *Server) tailServerLog(path string, stop <-chan bool) {
 func (s *Server) processLine(line string) {
 	s.LastLogLine = line
 
+	// Allow multiple handlers to react to a single line. This avoids
+	// early-greedy matches (e.g., a loose chat pattern) from masking
+	// more specific detectors like fatal startup errors.
 	for _, handler := range logLineHandlers {
 		if matches := handler.match(line); matches != nil {
 			handler.handle(s, line, matches)
-			break
 		}
 	}
 }

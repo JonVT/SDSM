@@ -92,7 +92,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"id":             s.ID,
 		"name":           s.Name,
 		"running":        s.IsRunning(),
@@ -107,7 +107,17 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"clients":        history,
 		"chat_messages":  chatMessages,
 		"banned":         banned,
-	})
+	}
+	if s.PendingSavePurge {
+		resp["pending_save_purge"] = true
+	}
+	if strings.TrimSpace(s.LastError) != "" {
+		resp["last_error"] = s.LastError
+		if s.LastErrorAt != nil {
+			resp["last_error_at"] = s.LastErrorAt.Format(time.RFC3339)
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *ManagerHandlers) APIServerStart(c *gin.Context) {

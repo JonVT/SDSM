@@ -238,6 +238,10 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		return
 	case c.PostForm("update") != "":
 		originalBeta := s.Beta
+		// Capture originals for core start parameters to decide if we need a (future) save purge
+		origWorld := s.World
+		origStartLoc := s.StartLocation
+		origStartCond := s.StartCondition
 
 		if name := middleware.SanitizeString(c.PostForm("name")); name != "" {
 			if !h.manager.IsServerNameAvailable(name, s.ID) {
@@ -303,6 +307,18 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		s.AutoSave = c.PostForm("auto_save") == "on"
 		s.AutoPause = c.PostForm("auto_pause") == "on"
 		s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
+
+		// Determine if core start parameters changed
+		coreChanged := (strings.TrimSpace(origWorld) != strings.TrimSpace(s.World)) ||
+			(strings.TrimSpace(origStartLoc) != strings.TrimSpace(s.StartLocation)) ||
+			(strings.TrimSpace(origStartCond) != strings.TrimSpace(s.StartCondition))
+		if coreChanged {
+			// Stub: mark pending purge but do not delete saves yet
+			s.PendingSavePurge = true
+			if s.Logger != nil {
+				s.Logger.Write("Core start parameters changed; pending save purge flagged (stub, no deletion yet)")
+			}
+		}
 
 		if s.Beta != originalBeta {
 			h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) game version changed; redeploying...", s.Name, s.ID))
