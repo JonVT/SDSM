@@ -1182,6 +1182,7 @@ func (s *Server) Start() {
 		"ServerMaxPlayers", strconv.Itoa(s.MaxClients),
 		"AutoSave", strconv.FormatBool(s.AutoSave),
 		"SaveInterval", strconv.Itoa(s.SaveInterval),
+		"SavePath", s.Paths.ServerSavesDir(s.ID),
 		"AutoPauseServer", strconv.FormatBool(s.AutoPause),
 		"StartLocalHost", "true",
 		"LocalIpAddress", "0.0.0.0",
