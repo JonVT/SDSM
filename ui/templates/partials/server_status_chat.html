@@ -1,0 +1,31 @@
+<div class="card card-chat">
+    <div class="card-header">
+        <h2 class="card-title">Chat</h2>
+        <span class="pill">Live Stream</span>
+    </div>
+    <div class="chat-section">
+        <div class="chat-messages" id="chat-messages">
+            {{if gt (len .server.Chat) 0}}
+                {{range .server.Chat}}
+                <div class="chat-message">
+                    <span class="chat-time">{{.Datetime.Format "15:04"}}</span>
+                    <span class="chat-player">{{.Name}}:</span>
+                    <span class="chat-text">{{.Message}}</span>
+                </div>
+                {{end}}
+            {{end}}
+        </div>
+        <div class="empty-state" id="chat-empty" {{if gt (len .server.Chat) 0}}style="display:none;"{{end}}>No chat messages</div>
+        <form method="POST" class="chat-input-form" id="chat-send-form">
+            <label for="chat-input" class="sr-only">Chat message</label>
+            <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
+            <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                </svg>
+                Send
+            </button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,122 @@
+<div class="card card-config">
+    <div class="card-header">
+        <h2 class="card-title">Startup Parameters</h2>
+    </div>
+    <form method="POST" id="startup-params-form">
+        <input type="hidden" name="confirm_reset_saves" id="confirm-reset-saves-flag" value="0" />
+        <div class="form-grid-compact">
+            <div class="form-row form-row-full">
+                <label>Server Path:</label>
+                <span class="readonly-field">{{.serverPath}}</span>
+            </div>
+            <div class="form-row">
+                <label for="name">Name:</label>
+                <input type="text" id="name" name="name" value="{{.server.Name}}" class="form-input-inline" placeholder="Server Name" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="world">World:</label>
+                <select name="world" id="world" class="form-select-inline" aria-label="World">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="start_location">Start Location:</label>
+                <select name="start_location" id="start_location" class="form-select-inline" aria-label="Start Location">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="start_condition">Start Condition:</label>
+                <select name="start_condition" id="start_condition" class="form-select-inline" aria-label="Start Condition">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="difficulty">Difficulty:</label>
+                <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="port">Port:</label>
+                <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="save_interval">Save Interval (sec):</label>
+                <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-input-inline" placeholder="300" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="restart_delay_seconds">Restart Delay (sec):</label>
+                <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="auth_secret">Auth Secret:</label>
+                <input type="text" id="auth_secret" name="auth_secret" value="{{.server.AuthSecret}}" class="form-input-inline" placeholder="Auth Secret" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="password">Server Password:</label>
+                <input type="password" id="password" name="password" value="{{.server.Password}}" class="form-input-inline" placeholder="Password" autocomplete="current-password">
+            </div>
+            <div class="form-row">
+                <label for="max_clients">Max Players:</label>
+                <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-input-inline" placeholder="8" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label>Release:</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="beta" value="false" {{if not .server.Beta}}checked{{end}}> Release
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="beta" value="true" {{if .server.Beta}}checked{{end}}> Beta
+                    </label>
+                </div>
+            </div>
+            <div class="form-row">
+                <label for="server_visible">Server Visible:</label>
+                <div class="checkbox-inline">
+                    <input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}>
+                    <span>Public</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <label for="auto_update">Auto Update:</label>
+                <div class="checkbox-inline">
+                    <input type="checkbox" id="auto_update" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}>
+                    <span>Enable</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <label for="auto_save">Auto Save:</label>
+                <div class="checkbox-inline">
+                    <input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}>
+                    <span>Enable</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <label for="auto_pause">Auto Pause:</label>
+                <div class="checkbox-inline">
+                    <input type="checkbox" id="auto_pause" name="auto_pause" {{if .server.AutoPause}}checked{{end}}>
+                    <span>Enable</span>
+                </div>
+            </div>
+            <div class="form-row">
+                <label for="auto_start">Auto Start:</label>
+                <div class="checkbox-inline">
+                    <input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}>
+                    <span>Enable</span>
+                </div>
+            </div>
+        </div>
+        <div class="update-button-container">
+            <button type="button" id="btn-update-params" class="btn btn-primary btn-min-lg" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}}>
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                Update
+            </button>
+        </div>
+    </form>
+</div>
