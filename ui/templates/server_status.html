@@ -9,25 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/ui-theme.css">
-    <style>
-        /* Lightweight modal styles (scoped to this page) */
-        .confirm-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:1000}
-        .confirm-modal.active{display:flex}
-        .confirm-modal .modal-card{max-width:520px;width:92%;background:var(--card-bg, #111);color:var(--text-color, #fff);border:1px solid var(--border-color, #333);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-        .confirm-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--border-color, #333);display:flex;align-items:center;gap:10px}
-        .confirm-modal .modal-header .icon{width:20px;height:20px;color:var(--danger, #e74c3c)}
-        .confirm-modal .modal-title{font-size:16px;font-weight:600;margin:0}
-        .confirm-modal .modal-body{padding:16px 20px;line-height:1.5}
-        .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--border-color, #333);display:flex;gap:10px;justify-content:flex-end}
-        .btn-danger-ghost{background:transparent;border:1px solid var(--danger, #e74c3c);color:var(--danger, #e74c3c)}
-
-        /* More/expand section for Server Control card */
-        .card-control .card-more-footer{display:flex;justify-content:flex-start;align-items:center;margin-top:var(--space-2)}
-        .card-control .card-more-link{background:none;border:none;color:var(--text-muted,#9aa0a6);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
-        .card-control .card-more-link:hover{color:var(--text-color,#eaeaea)}
-        .card-control .card-more-section{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-color,#333)}
-        .card-control.expanded .card-more-section{display:block}
-    </style>
+    {{ template "server_status_styles.html" . }}
     
     </head>
     <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}">
@@ -635,41 +617,7 @@
     </div>
     </div>
 
-    <!-- Confirm Modal for destructive Startup Parameters change -->
-    <div id="paramChangeModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="paramChangeModalTitle" aria-describedby="paramChangeModalDesc">
-        <div class="modal-card">
-            <div class="modal-header">
-                <svg class="icon-inline icon-danger icon modal-icon icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12" y2="16"></line>
-                </svg>
-                <h3 id="paramChangeModalTitle" class="modal-title">This will reset your saves</h3>
-            </div>
-            <div id="paramChangeModalDesc" class="modal-body">
-                Changing World, Start Location, or Start Condition will cause existing saves for this server to be purged on the next start. This cannot be undone.
-                <br><br>
-                Do you want to continue?
-            </div>
-            <div class="modal-actions">
-                <button type="button" id="paramChangeCancel" class="btn btn-secondary">Cancel</button>
-                <button type="button" id="paramChangeConfirm" class="btn btn-danger btn-danger-ghost">Continue</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Log Popup -->
-    <div id="logPopup" class="log-popup" title="Server Log" aria-label="Server log popup">
-        <div class="log-popup-content">
-            <div class="log-popup-header">
-                <h2 class="log-popup-title">Server Log</h2>
-                <button class="btn btn-secondary" onclick="closeLogPopup()">Close</button>
-            </div>
-            <div id="logPopupBody" class="log-popup-body">
-                Loading...
-            </div>
-        </div>
-    </div>
+    {{ template "server_status_modals.html" . }}
 
     <script>
         // Global guard to prevent ReferenceError if handlers run before DOMContentLoaded sets locals

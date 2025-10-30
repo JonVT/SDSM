@@ -1,0 +1,35 @@
+<!-- Confirm Modal for destructive Startup Parameters change -->
+<div id="paramChangeModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="paramChangeModalTitle" aria-describedby="paramChangeModalDesc">
+    <div class="modal-card">
+        <div class="modal-header">
+            <svg class="icon-inline icon-danger icon modal-icon icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12" y2="16"></line>
+            </svg>
+            <h3 id="paramChangeModalTitle" class="modal-title">This will reset your saves</h3>
+        </div>
+        <div id="paramChangeModalDesc" class="modal-body">
+            Changing World, Start Location, or Start Condition will cause existing saves for this server to be purged on the next start. This cannot be undone.
+            <br><br>
+            Do you want to continue?
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="paramChangeCancel" class="btn btn-secondary">Cancel</button>
+            <button type="button" id="paramChangeConfirm" class="btn btn-danger btn-danger-ghost">Continue</button>
+        </div>
+    </div>
+</div>
+
+<!-- Log Popup -->
+<div id="logPopup" class="log-popup" title="Server Log" aria-label="Server log popup">
+    <div class="log-popup-content">
+        <div class="log-popup-header">
+            <h2 class="log-popup-title">Server Log</h2>
+            <button class="btn btn-secondary" onclick="closeLogPopup()">Close</button>
+        </div>
+        <div id="logPopupBody" class="log-popup-body">
+            Loading...
+        </div>
+    </div>
+</div>
