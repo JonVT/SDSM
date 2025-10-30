@@ -1,3 +1,10 @@
+{{/* Compute local variables within this partial's scope */}}
+{{ $live := .server.LiveClients }}
+{{ $liveCount := len $live }}
+{{ $history := .server.Clients }}
+{{ $historyCount := len $history }}
+{{ $banned := .server.Banned }}
+
 <div class="card card-players">
     <div class="card-header">
         <h2 class="card-title">Players Online</h2>
@@ -101,7 +108,6 @@
             <div class="empty-state" id="players-history-empty" {{if gt $historyCount 0}}style="display:none;"{{end}}>No player sessions recorded</div>
         </div>
         <div class="tab-panel" id="players-banned">
-            {{ $banned := .banned }}
             <table class="players-table" id="players-banned-table" {{if or (not $banned) (eq (len $banned) 0)}}style="display:none;"{{end}}>
                 <thead>
                     <tr>
