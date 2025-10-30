@@ -600,25 +600,26 @@
         serverIsStarting = starting;
     }
 
-    let worldLists = {"release": [], "beta": []};
+    // Worlds and data keyed by stable world IDs; names are localized for display
+    let worldsByVersion = {"release": [], "beta": []};
     let worldDataByVersion = {"release": {}, "beta": {}};
 
-    {{ if and .worldLists .worldData }}
-    {{ $worldLists := .worldLists }}
+    {{ if and .worlds .worldData }}
+    {{ $worlds := .worlds }}
     {{ $worldData := .worldData }}
-    worldLists = {
+    worldsByVersion = {
         "release": [
-            {{ $release := index $worldLists "release" }}
-            {{ range $idx, $world := $release }}
+            {{ $release := index $worlds "release" }}
+            {{ range $idx, $w := $release }}
             {{ if $idx}}, {{ end }}
-            "{{js $world}}"
+            {"id": '{{js (index $w "id")}}', "name": '{{js (index $w "name")}}'}
             {{ end }}
         ],
         "beta": [
-            {{ $beta := index $worldLists "beta" }}
-            {{ range $idx, $world := $beta }}
+            {{ $beta := index $worlds "beta" }}
+            {{ range $idx, $w := $beta }}
             {{ if $idx}}, {{ end }}
-            "{{js $world}}"
+            {"id": '{{js (index $w "id")}}', "name": '{{js (index $w "name")}}'}
             {{ end }}
         ]
     };
@@ -626,12 +627,12 @@
     worldDataByVersion = {
         "release": {
             {{ $releaseData := index $worldData "release" }}
-            {{ $releaseList := index $worldLists "release" }}
-            {{ range $idx, $world := $releaseList }}
+            {{ $releaseWorlds := index $worlds "release" }}
+            {{ range $idx, $w := $releaseWorlds }}
             {{ if $idx}}, {{ end }}
-            "{{js $world}}": {
+            "{{js (index $w "id")}}": {
                 "locations": [
-                    {{ with index $releaseData $world }}
+                    {{ with index $releaseData (index $w "id") }}
                     {{ range $locIdx, $loc := index . "locations" }}
                     {{ if $locIdx}}, {{ end }}
                     {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
@@ -639,7 +640,7 @@
                     {{ end }}
                 ],
                 "conditions": [
-                    {{ with index $releaseData $world }}
+                    {{ with index $releaseData (index $w "id") }}
                     {{ range $condIdx, $cond := index . "conditions" }}
                     {{ if $condIdx}}, {{ end }}
                     {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
@@ -651,12 +652,12 @@
         },
         "beta": {
             {{ $betaData := index $worldData "beta" }}
-            {{ $betaList := index $worldLists "beta" }}
-            {{ range $idx, $world := $betaList }}
+            {{ $betaWorlds := index $worlds "beta" }}
+            {{ range $idx, $w := $betaWorlds }}
             {{ if $idx}}, {{ end }}
-            "{{js $world}}": {
+            "{{js (index $w "id")}}": {
                 "locations": [
-                    {{ with index $betaData $world }}
+                    {{ with index $betaData (index $w "id") }}
                     {{ range $locIdx, $loc := index . "locations" }}
                     {{ if $locIdx}}, {{ end }}
                     {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
@@ -664,7 +665,7 @@
                     {{ end }}
                 ],
                 "conditions": [
-                    {{ with index $betaData $world }}
+                    {{ with index $betaData (index $w "id") }}
                     {{ range $condIdx, $cond := index . "conditions" }}
                     {{ if $condIdx}}, {{ end }}
                     {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
@@ -706,7 +707,9 @@
     ];
 
     const initialVersionKey = {{if .server.Beta}}"beta"{{else}}"release"{{end}};
-    const initialWorld = {{if .server.World}}"{{js .server.World}}"{{else}}""{{end}};
+    const __resolvedWorldId = "{{js .resolved_world_id}}";
+    const __serverWorldId = "{{js .server.WorldID}}";
+    const initialWorldID = (__resolvedWorldId && __resolvedWorldId.trim()) || (__serverWorldId && __serverWorldId.trim()) || "";
     const initialStartLocation = {{if .server.StartLocation}}"{{js .server.StartLocation}}"{{else}}""{{end}};
     const initialStartCondition = {{if .server.StartCondition}}"{{js .server.StartCondition}}"{{else}}""{{end}};
     const initialDifficulty = {{if .server.Difficulty}}"{{js .server.Difficulty}}"{{else}}""{{end}};
@@ -714,12 +717,12 @@
 
     const versionState = {
         release: {
-            world: initialVersionKey === 'release' ? initialWorld : '',
+            world: initialVersionKey === 'release' ? initialWorldID : '',
             startLocation: initialVersionKey === 'release' ? initialStartLocation : '',
             startCondition: initialVersionKey === 'release' ? initialStartCondition : ''
         },
         beta: {
-            world: initialVersionKey === 'beta' ? initialWorld : '',
+            world: initialVersionKey === 'beta' ? initialWorldID : '',
             startLocation: initialVersionKey === 'beta' ? initialStartLocation : '',
             startCondition: initialVersionKey === 'beta' ? initialStartCondition : ''
         }
@@ -730,26 +733,45 @@
         return checked && checked.value === "true" ? "beta" : "release";
     }
 
-    function selectOptionWithFallback(select, value, fallbackLabel = ' (configured)') {
-        if (!select) {
-            return;
+    // Validation helpers: do not create fallback options. Instead, flag errors.
+    function markInvalid(select, message) {
+        if (!select) return;
+        select.setAttribute('aria-invalid', 'true');
+        // Inline highlight to avoid theme dependency
+        select.style.outline = '2px solid var(--danger, #d93025)';
+        if (message) select.title = message;
+    }
+
+    function clearInvalid(select) {
+        if (!select) return;
+        select.removeAttribute('aria-invalid');
+        select.style.removeProperty('outline');
+        select.title = '';
+    }
+
+    function notifyError(msg) {
+        try {
+            if (typeof window.showToast === 'function') {
+                window.showToast({ type: 'error', title: 'Invalid configuration', message: msg });
+            }
+        } catch(_) {}
+    }
+
+    function updateParamsValidity() {
+        const worldSelect = document.getElementById('world');
+        const locSelect = document.getElementById('start_location');
+        const condSelect = document.getElementById('start_condition');
+        const updateBtn = document.getElementById('btn-update-params');
+        let invalid = false;
+        if (worldSelect && !worldSelect.value) invalid = true;
+        if (locSelect && locSelect.getAttribute('aria-invalid') === 'true') invalid = true;
+        if (condSelect && condSelect.getAttribute('aria-invalid') === 'true') invalid = true;
+        if (updateBtn) {
+            updateBtn.disabled = invalid || updateBtn.hasAttribute('aria-disabled');
+            if (invalid) updateBtn.setAttribute('aria-disabled', 'true');
+            else updateBtn.removeAttribute('aria-disabled');
         }
-        if (!value) {
-            select.value = '';
-            return;
-        }
-        const existing = Array.from(select.options).find(opt => opt.value === value);
-        if (existing) {
-            existing.selected = true;
-            select.value = value;
-            return;
-        }
-        const option = document.createElement('option');
-        option.value = value;
-        option.textContent = fallbackLabel ? value + fallbackLabel : value;
-        option.dataset.fallback = 'true';
-        select.appendChild(option);
-        select.value = value;
+        return !invalid;
     }
 
     function populateWorldOptions() {
@@ -766,37 +788,56 @@
             });
         }
         const versionKey = currentVersionKey();
-        const worlds = worldLists[versionKey] || [];
+        const worlds = worldsByVersion[versionKey] || [];
         const state = versionState[versionKey];
 
         worldSelect.innerHTML = '';
 
         if (!worlds.length) {
             worldSelect.innerHTML = '<option value="">No worlds available</option>';
-            selectOptionWithFallback(worldSelect, state.world, ' (configured)');
+            // No fallback: force empty and error
+            if (state.world) {
+                notifyError('Configured world \'' + state.world + '\' is not available for this language/channel. Please choose a valid world.');
+            }
+            worldSelect.value = '';
+            markInvalid(worldSelect, 'World not available for this language/channel');
             updateWorldOptions();
             updateWorldThumb();
+            updateParamsValidity();
             return;
         }
 
-        if (!state.world) {
-            state.world = worlds[0];
+        // If current configured world is not available, do not fallback; require user selection
+        const worldIDs = new Set(worlds.map(w => w.id));
+        if (state.world && !worldIDs.has(state.world)) {
+            notifyError('Configured world \'' + state.world + '\' is not available for this language/channel. Please choose a valid world.');
+            state.world = '';
             state.startLocation = '';
             state.startCondition = '';
         }
 
-        worlds.forEach(world => {
+        worlds.forEach(w => {
             const option = document.createElement('option');
-            option.value = world;
-            option.textContent = world;
+            option.value = w.id;
+            option.textContent = w.name || w.id;
             worldSelect.appendChild(option);
         });
 
-        selectOptionWithFallback(worldSelect, state.world, ' (configured)');
+        // Select current value only if valid; otherwise leave empty and mark invalid
+        if (state.world && worldIDs.has(state.world)) {
+            worldSelect.value = state.world;
+            clearInvalid(worldSelect);
+        } else {
+            worldSelect.value = '';
+            if (!worldSelect.value) {
+                markInvalid(worldSelect, 'World not available for this language/channel');
+            }
+        }
         state.world = worldSelect.value;
 
         updateWorldOptions();
         updateWorldThumb();
+        updateParamsValidity();
     }
 
     function updateWorldOptions() {
@@ -804,7 +845,7 @@
         const locSelect = document.getElementById('start_location');
         const condSelect = document.getElementById('start_condition');
         const versionKey = currentVersionKey();
-        const world = worldSelect.value;
+        const world = worldSelect.value; // world ID
         const worldData = (worldDataByVersion[versionKey] || {})[world];
         const state = versionState[versionKey];
 
@@ -832,8 +873,34 @@
             condSelect.appendChild(option);
         });
         }
-        selectOptionWithFallback(locSelect, state.startLocation);
-        selectOptionWithFallback(condSelect, state.startCondition);
+        // Validate selections without fallbacks
+        const locIDs = new Set(Array.from(locSelect.options).map(o => o.value).filter(v => v));
+        const condIDs = new Set(Array.from(condSelect.options).map(o => o.value).filter(v => v));
+        clearInvalid(locSelect);
+        clearInvalid(condSelect);
+        if (state.startLocation) {
+            if (locIDs.has(state.startLocation)) {
+                locSelect.value = state.startLocation;
+            } else {
+                locSelect.value = '';
+                markInvalid(locSelect, 'Start Location not available for this world/language');
+                notifyError('Configured Start Location is not available for this world/language. Please choose a valid location.');
+            }
+        } else {
+            locSelect.value = '';
+        }
+        if (state.startCondition) {
+            if (condIDs.has(state.startCondition)) {
+                condSelect.value = state.startCondition;
+            } else {
+                condSelect.value = '';
+                markInvalid(condSelect, 'Start Condition not available for this world/language');
+                notifyError('Configured Start Condition is not available for this world/language. Please choose a valid condition.');
+            }
+        } else {
+            condSelect.value = '';
+        }
+        updateParamsValidity();
     }
 
     function updateWorldThumb() {
@@ -850,6 +917,7 @@
             worldThumb.style.removeProperty('display');
             const betaFlag = currentVersionKey() === 'beta';
             const v = encodeURIComponent((betaFlag ? 'beta' : 'release') + '-' + world);
+            // Send world ID; server resolves IDs directly
             const url = `/server/${serverId}/world-image?world=${encodeURIComponent(world)}&beta=${betaFlag}&v=${v}`;
             // Force reload if src is same string
             if (worldThumb.src !== window.location.origin + url) {
@@ -915,6 +983,9 @@
         const condSelect = document.getElementById('start_condition');
         const difficultySelect = document.getElementById('difficulty');
         const languageSelect = document.getElementById('language');
+        const langBtn = document.getElementById('btn-language');
+        const langMenu = document.getElementById('language-menu');
+        const currLangLabel = document.getElementById('current-language');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
         const updateParamsBtn = document.getElementById('btn-update-params');
@@ -960,6 +1031,7 @@
 
         populateWorldOptions();
         populateDifficultyOptions();
+        // Language is no longer a startup parameter; dropdown remains for backward compatibility only if present
         populateLanguageOptions();
         updateWorldThumb();
 
@@ -987,6 +1059,8 @@
                 state.startCondition = '';
                 updateWorldOptions();
                 updateWorldThumb();
+                clearInvalid(worldSelect);
+                updateParamsValidity();
             });
         }
 
@@ -994,7 +1068,8 @@
             radio.addEventListener('change', () => {
                 populateWorldOptions();
                 populateDifficultyOptions();
-                populateLanguageOptions();
+                // Do not repopulate startup language; instead update language control options
+                try { buildLanguageMenu(); } catch(_) {}
                 updateWorldThumb();
             });
         });
@@ -1006,16 +1081,106 @@
             });
         }
 
-        if (languageSelect) {
-            languageSelect.addEventListener('change', () => {
-                // No destructive behavior tied to language currently
+        // Language control (top-right in Server Info card)
+        function getAvailableLanguages() {
+            const versionKey = currentVersionKey();
+            return versionKey === 'beta' ? betaLanguages : releaseLanguages;
+        }
+
+        function closeLanguageMenu() {
+            if (!langMenu) return;
+            langMenu.classList.remove('active');
+            if (langBtn) langBtn.setAttribute('aria-expanded', 'false');
+        }
+
+        function buildLanguageMenu() {
+            if (!langMenu) return;
+            const langs = getAvailableLanguages();
+            langMenu.textContent = '';
+            if (!langs || !langs.length) {
+                const empty = document.createElement('div');
+                empty.textContent = 'No languages available';
+                empty.style.padding = '6px 8px';
+                empty.style.color = 'var(--text-muted, #999)';
+                langMenu.appendChild(empty);
+                return;
+            }
+            langs.forEach(l => {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'menu-item';
+                item.setAttribute('role', 'menuitem');
+                item.textContent = l;
+                item.addEventListener('click', function(){
+                    if (!l) return;
+                    // POST set_language asynchronously
+                    const sid = Number(rootEl.dataset.serverId || '0');
+                    if (!sid) return;
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: 'set_language=1&language=' + encodeURIComponent(l),
+                        credentials: 'same-origin'
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'success', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        if (res.ok) {
+                            // Update the inline label immediately for feedback
+                            if (currLangLabel) currLangLabel.textContent = l;
+                            // Reload the page to hydrate all language-dependent data (worlds, locations,
+                            // conditions, difficulties, world image) without requiring manual refresh
+                            // so the new language takes full effect across the UI.
+                            window.location.reload();
+                        }
+                    }).catch(() => {}).finally(() => {
+                        closeLanguageMenu();
+                    });
+                });
+                langMenu.appendChild(item);
             });
+        }
+
+        if (langBtn && langMenu) {
+            buildLanguageMenu();
+            function openLanguageMenu(){
+                // With absolute positioning in CSS, just toggle visibility under the button
+                langMenu.classList.add('active');
+                langBtn.setAttribute('aria-expanded', 'true');
+            }
+            langBtn.addEventListener('click', function(e){
+                e.stopPropagation();
+                if (!langMenu.classList.contains('active')) {
+                    buildLanguageMenu();
+                    openLanguageMenu();
+                } else {
+                    closeLanguageMenu();
+                }
+            });
+            document.addEventListener('click', function(e){
+                if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) {
+                    closeLanguageMenu();
+                }
+            });
+            // No reposition needed with absolute anchoring
+            window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeLanguageMenu(); });
         }
 
         if (locSelect) {
             locSelect.addEventListener('change', () => {
                 const state = versionState[currentVersionKey()];
                 state.startLocation = locSelect.value;
+                if (locSelect.value) clearInvalid(locSelect);
+                updateParamsValidity();
             });
         }
 
@@ -1023,6 +1188,8 @@
             condSelect.addEventListener('change', () => {
                 const state = versionState[currentVersionKey()];
                 state.startCondition = condSelect.value;
+                if (condSelect.value) clearInvalid(condSelect);
+                updateParamsValidity();
             });
         }
 
@@ -1412,7 +1579,7 @@
             const currWorld = (document.getElementById('world') && document.getElementById('world').value) || '';
             const currLoc = (document.getElementById('start_location') && document.getElementById('start_location').value) || '';
             const currCond = (document.getElementById('start_condition') && document.getElementById('start_condition').value) || '';
-            const initWorldRef = (rootEl && rootEl.dataset && rootEl.dataset.world) ? rootEl.dataset.world : (typeof initialWorld !== 'undefined' ? initialWorld : '');
+                const initWorldRef = (typeof initialWorldID !== 'undefined' ? initialWorldID : '');
             const initLocRef = (rootEl && rootEl.dataset && rootEl.dataset.startLocation) ? rootEl.dataset.startLocation : (typeof initialStartLocation !== 'undefined' ? initialStartLocation : '');
             const initCondRef = (rootEl && rootEl.dataset && rootEl.dataset.startCondition) ? rootEl.dataset.startCondition : (typeof initialStartCondition !== 'undefined' ? initialStartCondition : '');
             return (currWorld !== initWorldRef) || (currLoc !== initLocRef) || (currCond !== initCondRef);
@@ -1441,6 +1608,12 @@
         if (paramsForm && updateParamsBtn) {
             paramsForm.addEventListener('submit', function(e){
                 if (window.__sdsmPendingSubmit) return; // allow the second submit after confirm
+                const valid = updateParamsValidity();
+                if (!valid) {
+                    e.preventDefault();
+                    notifyError('Cannot apply changes: fix invalid startup parameters highlighted above.');
+                    return;
+                }
                 const changed = coreParamsChanged();
                 if (!changed) {
                     return; // allow submit
@@ -1475,6 +1648,11 @@
             // Also intercept direct button clicks (some browsers may bypass submit listener in edge cases)
             updateParamsBtn.addEventListener('click', function(e){
                 if (window.__sdsmPendingSubmit) return;
+                if (!updateParamsValidity()) {
+                    e.preventDefault();
+                    notifyError('Cannot apply changes: fix invalid startup parameters highlighted above.');
+                    return;
+                }
                 const changed = coreParamsChanged();
                 if (!changed) {
                     // No confirmation needed; submit the form with update=true

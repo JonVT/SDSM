@@ -82,14 +82,22 @@ type Manager struct {
 	betaVersion       string           `json:"-"`
 	betaCheckedAt     time.Time        `json:"-"`
 	// Latest available (Steam) build IDs cache
-	releaseLatestMu  sync.RWMutex `json:"-"`
-	releaseLatest    string       `json:"-"`
-	releaseLatestAt  time.Time    `json:"-"`
-	betaLatestMu     sync.RWMutex `json:"-"`
-	betaLatest       string       `json:"-"`
-	betaLatestAt     time.Time    `json:"-"`
-	worldIndexMu     sync.RWMutex `json:"-"`
-	worldIndex       map[bool]*worldDefinitionCache
+	releaseLatestMu sync.RWMutex `json:"-"`
+	releaseLatest   string       `json:"-"`
+	releaseLatestAt time.Time    `json:"-"`
+	betaLatestMu    sync.RWMutex `json:"-"`
+	betaLatest      string       `json:"-"`
+	betaLatestAt    time.Time    `json:"-"`
+	worldIndexMu    sync.RWMutex `json:"-"`
+	worldIndex      map[bool]*worldDefinitionCache
+	// Per-language caches to avoid rebuilding world/difficulty data on every request
+	worldIndexByLangMu sync.RWMutex `json:"-"`
+	worldIndexByLang   map[bool]map[string]*worldDefinitionCache
+	diffByLangMu       sync.RWMutex `json:"-"`
+	diffByLang         map[bool]map[string]struct {
+		list        []string
+		generatedAt time.Time
+	}
 	progressMu       sync.RWMutex
 	progressByType   map[DeployType]*UpdateProgress
 	serverProgressMu sync.RWMutex
@@ -1009,6 +1017,23 @@ func (m *Manager) GetWorldsByVersion(beta bool) []string {
 	return worlds
 }
 
+// GetWorldIDsByVersion returns the stable technical world IDs for either release or beta.
+// These IDs are language-independent and safe for configuration and lookups.
+func (m *Manager) GetWorldIDsByVersion(beta bool) []string {
+	cache := m.worldDefinitionsCache(beta)
+	if cache == nil || len(cache.definitions) == 0 {
+		return []string{}
+	}
+	ids := make([]string, 0, len(cache.definitions))
+	for _, def := range cache.definitions {
+		if def.ID != "" {
+			ids = append(ids, def.ID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // ResolveWorldID returns the technical world identifier (directory name) for a given world display name.
 func (m *Manager) ResolveWorldID(world string, beta bool) string {
 	if strings.TrimSpace(world) == "" {
@@ -1217,6 +1242,45 @@ func (m *Manager) worldDefinitionsCache(beta bool) *worldDefinitionCache {
 	return cache
 }
 
+// worldDefinitionsCacheFor returns a cached worldDefinitionCache for the given
+// channel and language. It builds and stores a new cache when missing or stale.
+func (m *Manager) worldDefinitionsCacheFor(beta bool, language string) *worldDefinitionCache {
+	lang := strings.TrimSpace(language)
+	if lang == "" {
+		lang = strings.TrimSpace(m.Language)
+	}
+	if lang == "" {
+		lang = "english"
+	}
+	key := strings.ToLower(lang)
+
+	// Fast path: read lock lookup
+	m.worldIndexByLangMu.RLock()
+	byLang := m.worldIndexByLang[beta]
+	var cached *worldDefinitionCache
+	if byLang != nil {
+		cached = byLang[key]
+	}
+	m.worldIndexByLangMu.RUnlock()
+
+	if cached != nil {
+		return cached
+	}
+
+	// Build fresh and cache
+	built := m.buildWorldDefinitionCacheFor(beta, key)
+	m.worldIndexByLangMu.Lock()
+	if m.worldIndexByLang == nil {
+		m.worldIndexByLang = make(map[bool]map[string]*worldDefinitionCache)
+	}
+	if m.worldIndexByLang[beta] == nil {
+		m.worldIndexByLang[beta] = make(map[string]*worldDefinitionCache)
+	}
+	m.worldIndexByLang[beta][key] = built
+	m.worldIndexByLangMu.Unlock()
+	return built
+}
+
 // buildWorldDefinitionCacheFor builds an in-memory world definition cache for a specific
 // game channel and language without mutating any global state. This is safe to call for
 // per-request language overrides.
@@ -1225,12 +1289,8 @@ func (m *Manager) buildWorldDefinitionCacheFor(beta bool, language string) *worl
 		byCanonical: make(map[string]worldDefinition),
 	}
 
+	// Only use a single install path based on the selected channel (server configuration)
 	paths := []string{m.getGameDataPathForVersion(beta)}
-	if beta {
-		// When beta is requested, include release as a fallback source
-		paths = append(paths, m.getGameDataPathForVersion(false))
-	}
-
 	uniquePaths := uniqueStrings(paths)
 	byDisplay := make(map[string]worldDefinition)
 
@@ -1352,8 +1412,14 @@ func (m *Manager) GetWorldImage(worldId string, beta bool) ([]byte, error) {
 func (m *Manager) resolveWorldTechnicalID(worldID string, beta bool) string {
 	canonical := canonicalWorldIdentifier(worldID)
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
-		if def, ok := cache.byCanonical[canonical]; ok && def.Directory != "" {
-			return def.Directory
+		if def, ok := cache.byCanonical[canonical]; ok {
+			// Prefer stable world ID for linkage and server args
+			if strings.TrimSpace(def.ID) != "" {
+				return def.ID
+			}
+			if strings.TrimSpace(def.Directory) != "" {
+				return def.Directory
+			}
 		}
 	}
 	return worldID
@@ -1435,7 +1501,7 @@ func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) [
 
 // Language-aware variants used for per-server localization
 func (m *Manager) GetWorldsByVersionWithLanguage(beta bool, language string) []string {
-	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	cache := m.worldDefinitionsCacheFor(beta, language)
 	if cache == nil || len(cache.definitions) == 0 {
 		return []string{}
 	}
@@ -1448,7 +1514,7 @@ func (m *Manager) GetWorldsByVersionWithLanguage(beta bool, language string) []s
 
 func (m *Manager) GetWorldInfoWithLanguage(worldID string, beta bool, language string) WorldInfo {
 	canonical := canonicalWorldIdentifier(worldID)
-	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	cache := m.worldDefinitionsCacheFor(beta, language)
 	if cache != nil {
 		if def, ok := cache.byCanonical[canonical]; ok {
 			name := strings.TrimSpace(def.DisplayName)
@@ -1467,7 +1533,7 @@ func (m *Manager) GetWorldInfoWithLanguage(worldID string, beta bool, language s
 
 func (m *Manager) GetStartLocationsForWorldVersionWithLanguage(worldID string, beta bool, language string) []LocationInfo {
 	canonical := canonicalWorldIdentifier(worldID)
-	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	cache := m.worldDefinitionsCacheFor(beta, language)
 	if cache != nil {
 		if def, ok := cache.byCanonical[canonical]; ok {
 			out := make([]LocationInfo, 0, len(def.StartLocations))
@@ -1486,7 +1552,7 @@ func (m *Manager) GetStartLocationsForWorldVersionWithLanguage(worldID string, b
 
 func (m *Manager) GetStartConditionsForWorldVersionWithLanguage(worldID string, beta bool, language string) []ConditionInfo {
 	canonical := canonicalWorldIdentifier(worldID)
-	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	cache := m.worldDefinitionsCacheFor(beta, language)
 	if cache != nil {
 		if def, ok := cache.byCanonical[canonical]; ok {
 			seen := make(map[string]bool)
@@ -1517,6 +1583,22 @@ func (m *Manager) GetDifficultiesForVersionWithLanguage(beta bool, language stri
 	if lang == "" {
 		lang = "english"
 	}
+	key := strings.ToLower(lang)
+
+	// Cached lookup
+	m.diffByLangMu.RLock()
+	if m.diffByLang != nil && m.diffByLang[beta] != nil {
+		if entry, ok := m.diffByLang[beta][key]; ok {
+			if len(entry.list) > 0 {
+				out := make([]string, len(entry.list))
+				copy(out, entry.list)
+				m.diffByLangMu.RUnlock()
+				return out
+			}
+		}
+	}
+	m.diffByLangMu.RUnlock()
+
 	diffs, err := ScanDifficulties(base, lang+".xml")
 	if err != nil || len(diffs) == 0 {
 		return []string{}
@@ -1528,6 +1610,27 @@ func (m *Manager) GetDifficultiesForVersionWithLanguage(beta bool, language stri
 		}
 	}
 	sort.Strings(ids)
+
+	// Store in cache
+	m.diffByLangMu.Lock()
+	if m.diffByLang == nil {
+		m.diffByLang = make(map[bool]map[string]struct {
+			list        []string
+			generatedAt time.Time
+		})
+	}
+	if m.diffByLang[beta] == nil {
+		m.diffByLang[beta] = make(map[string]struct {
+			list        []string
+			generatedAt time.Time
+		})
+	}
+	m.diffByLang[beta][key] = struct {
+		list        []string
+		generatedAt time.Time
+	}{list: append([]string(nil), ids...), generatedAt: time.Now()}
+	m.diffByLangMu.Unlock()
+
 	return ids
 }
 
@@ -1674,6 +1777,20 @@ func (m *Manager) invalidateGameDataCaches(beta bool) {
 		delete(m.worldIndex, beta)
 	}
 	m.worldIndexMu.Unlock()
+
+	// Invalidate per-language world caches for the specified channel
+	m.worldIndexByLangMu.Lock()
+	if m.worldIndexByLang != nil {
+		delete(m.worldIndexByLang, beta)
+	}
+	m.worldIndexByLangMu.Unlock()
+
+	// Invalidate per-language difficulties cache for the specified channel
+	m.diffByLangMu.Lock()
+	if m.diffByLang != nil {
+		delete(m.diffByLang, beta)
+	}
+	m.diffByLangMu.Unlock()
 
 	// Note: RS XML scanners (ScanWorldDefinitions/ScanDifficulties/ScanLanguages)
 	// are currently invoked on-demand without an internal cache. If we add

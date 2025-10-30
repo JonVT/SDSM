@@ -55,32 +55,59 @@ func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[st
 
 // buildWorldSelectionDataForLanguage mirrors buildWorldSelectionData but localizes
 // world names and option lists using the provided language.
-func (h *ManagerHandlers) buildWorldSelectionDataForLanguage(language string) (map[string][]string, map[string]map[string]gin.H) {
-	worldLists := map[string][]string{
-		"release": h.manager.GetWorldsByVersionWithLanguage(false, language),
-		"beta":    h.manager.GetWorldsByVersionWithLanguage(true, language),
+func (h *ManagerHandlers) buildWorldSelectionDataForLanguage(language string) (
+	map[string][]string, // worldIDs by version
+	map[string][]gin.H, // world displays [{id,name}] by version
+	map[string]map[string]gin.H, // worldData by version keyed by worldID
+) {
+	// Always use stable world IDs for linkage
+	// Use stable world IDs (language-independent) to avoid mismatches after localization
+	worldIDs := map[string][]string{
+		"release": h.manager.GetWorldIDsByVersion(false),
+		"beta":    h.manager.GetWorldIDsByVersion(true),
 	}
 
+	// Build display metadata per world ID using the requested language
+	worldDisplays := map[string][]gin.H{
+		"release": {},
+		"beta":    {},
+	}
+	for _, id := range worldIDs["release"] {
+		info := h.manager.GetWorldInfoWithLanguage(id, false, language)
+		name := id
+		if info.Name != "" {
+			name = info.Name
+		}
+		worldDisplays["release"] = append(worldDisplays["release"], gin.H{"id": id, "name": name})
+	}
+	for _, id := range worldIDs["beta"] {
+		info := h.manager.GetWorldInfoWithLanguage(id, true, language)
+		name := id
+		if info.Name != "" {
+			name = info.Name
+		}
+		worldDisplays["beta"] = append(worldDisplays["beta"], gin.H{"id": id, "name": name})
+	}
+
+	// Build per-world option data (locations/conditions) keyed by ID
 	worldData := map[string]map[string]gin.H{
 		"release": {},
 		"beta":    {},
 	}
-
-	for _, world := range worldLists["release"] {
-		worldData["release"][world] = gin.H{
-			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(world, false, language),
-			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(world, false, language),
+	for _, id := range worldIDs["release"] {
+		worldData["release"][id] = gin.H{
+			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(id, false, language),
+			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(id, false, language),
+		}
+	}
+	for _, id := range worldIDs["beta"] {
+		worldData["beta"][id] = gin.H{
+			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(id, true, language),
+			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(id, true, language),
 		}
 	}
 
-	for _, world := range worldLists["beta"] {
-		worldData["beta"][world] = gin.H{
-			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(world, true, language),
-			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(world, true, language),
-		}
-	}
-
-	return worldLists, worldData
+	return worldIDs, worldDisplays, worldData
 }
 
 func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models.Server, username interface{}, errMsg string) {
@@ -88,16 +115,22 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	s.IsRunning()
 
 	// Localize to the server's configured language when building world/difficulty lists
-	worldLists, worldData := h.buildWorldSelectionDataForLanguage(s.Language)
+	worldIDs, worldDisplays, worldData := h.buildWorldSelectionDataForLanguage(s.Language)
 	worldInfo := h.manager.GetWorldInfoWithLanguage(s.World, s.Beta, s.Language)
+	// Resolve the server's configured world reference to a canonical technical ID for this channel
+	resolvedWorldID := h.manager.ResolveWorldID(s.WorldID, s.Beta)
 
 	payload := gin.H{
-		"server":     s,
-		"manager":    h.manager,
-		"username":   username,
-		"worldInfo":  worldInfo,
-		"worldLists": worldLists,
-		"worldData":  worldData,
+		"server":    s,
+		"manager":   h.manager,
+		"username":  username,
+		"worldInfo": worldInfo,
+		// Canonical world ID used by the client as initial selection
+		"resolved_world_id": resolvedWorldID,
+		// Stable world IDs and localized display names
+		"worldIds":  worldIDs,
+		"worlds":    worldDisplays,
+		"worldData": worldData,
 		// Per-channel difficulties for live switching on the status page (localized)
 		"release_difficulties": h.manager.GetDifficultiesForVersionWithLanguage(false, s.Language),
 		"beta_difficulties":    h.manager.GetDifficultiesForVersionWithLanguage(true, s.Language),

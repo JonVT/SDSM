@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/ui-theme.css">
+    <link rel="icon" href="/sdsm.png" type="image/png">
     {{ template "server_status_styles.html" . }}
     
     </head>
@@ -85,24 +86,33 @@
             </div>
             {{ end }}
             <div class="glass-card">
-                <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}">
-                    {{ if .server.Beta }}
-                    <!-- Beta icon: lab flask (matches dashboard) -->
-                    <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
-                        <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
-                        <path d="M7 14h10"/>
-                    </svg>
-                    {{ else }}
-                    <!-- Release icon: server stack (matches dashboard) -->
-                    <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
-                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                        <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                        <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                    </svg>
-                    {{ end }}
-                    {{.server.Name}}
-                </h3>
+                <div class="server-title-bar" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
+                    <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}" style="margin:0;">
+                        {{ if .server.Beta }}
+                        <!-- Beta icon: lab flask (matches dashboard) -->
+                        <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
+                            <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
+                            <path d="M7 14h10"/>
+                        </svg>
+                        {{ else }}
+                        <!-- Release icon: server stack (matches dashboard) -->
+                        <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                        </svg>
+                        {{ end }}
+                        {{.server.Name}}
+                    </h3>
+                    <div class="lang-control" style="position:relative;">
+                        <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
+                            <span aria-hidden="true">🌐</span>
+                            <span id="current-language" style="margin-left:6px;">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
+                        </button>
+                        <div id="language-menu" class="lang-dropdown" role="menu" aria-label="Languages"></div>
+                    </div>
+                </div>
 
                 <div class="server-info-row">
                     <img 
@@ -120,7 +130,7 @@
                         {{ end }}
                         <div class="info-inline-row">
                             <span class="info-label">World</span>
-                            <span class="info-value world" title="{{.server.World}}">{{.server.World}}</span>
+                            <span class="info-value world" title="{{.server.WorldID}}">{{ if .worldInfo }}{{ .worldInfo.Name }}{{ else }}{{ .server.WorldID }}{{ end }}</span>
                             <span class="info-sep" aria-hidden="true">•</span>
                             <span class="info-label">Port</span>
                             <span class="info-value port">{{.server.Port}}</span>

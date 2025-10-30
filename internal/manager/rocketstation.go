@@ -132,13 +132,19 @@ func LoadStartConditionDefs(basePath string) (map[string]struct {
 func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefinition, error) {
 	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
 	if err != nil {
-		return nil, err
+		// Gracefully degrade: proceed with empty translations so IDs are used as names
+		translations = make(map[string]string)
 	}
 
 	// Name and Description are localized if available.
 	scDefs, err := LoadStartConditionDefs(basePath)
 	if err != nil {
-		return nil, err
+		// If start condition defs are missing, continue with an empty map
+		scDefs = make(map[string]struct {
+			Name          string
+			Description   string
+			PreviewButton string
+		})
 	}
 
 	// with ID being the value the dedicated server accepts.
@@ -319,7 +325,8 @@ func ScanLanguages(basePath string) ([]RSLanguage, error) {
 func ScanDifficulties(basePath string, languageFile string) ([]RSDifficulty, error) {
 	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
 	if err != nil {
-		return nil, err
+		// Degrade gracefully: proceed with empty translations so IDs are still returned
+		translations = make(map[string]string)
 	}
 
 	var data struct {
@@ -363,7 +370,8 @@ func ScanDifficulties(basePath string, languageFile string) ([]RSDifficulty, err
 func ScanStartLocations(basePath string, languageFile string, worldDir string) ([]RSStartLocation, error) {
 	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
 	if err != nil {
-		return nil, err
+		// Proceed with empty translations so IDs are usable as names
+		translations = make(map[string]string)
 	}
 
 	// Look for primary world XML first; if not present, any XML under the worldDir

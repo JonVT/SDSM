@@ -308,10 +308,6 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			s.Difficulty = difficulty
 		}
 
-		if lang := middleware.SanitizeString(c.PostForm("language")); lang != "" {
-			s.Language = lang
-		}
-
 		if portStr := c.PostForm("port"); portStr != "" {
 			if port, err := middleware.ValidatePort(portStr); err == nil {
 				if h.manager.IsPortAvailable(port, s.ID) {
@@ -375,6 +371,45 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 
 		h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) configuration updated.", s.Name, s.ID))
 		h.manager.Save()
+	case c.PostForm("set_language") != "":
+		// Language is no longer a startup parameter; handle dedicated async change
+		lang := middleware.SanitizeString(c.PostForm("language"))
+		if lang == "" {
+			if acceptsJSON {
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Language Not Set")
+				c.Header("X-Toast-Message", "No language provided.")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "missing language"})
+				return
+			}
+		} else {
+			allowed := h.manager.GetLanguagesForVersion(s.Beta)
+			ok := false
+			for _, a := range allowed {
+				if strings.EqualFold(a, lang) {
+					ok = true
+					break
+				}
+			}
+			if !ok && len(allowed) > 0 {
+				if acceptsJSON {
+					c.Header("X-Toast-Type", "error")
+					c.Header("X-Toast-Title", "Invalid Language")
+					c.Header("X-Toast-Message", "Selected language is not available for this version.")
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid language"})
+					return
+				}
+			}
+			s.Language = lang
+			h.manager.Save()
+			if acceptsJSON {
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Language Updated")
+				c.Header("X-Toast-Message", fmt.Sprintf("Language set to %s", lang))
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+				return
+			}
+		}
 	}
 
 	c.Redirect(http.StatusFound, fmt.Sprintf("/server/%d", serverID))

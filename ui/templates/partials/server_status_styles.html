@@ -16,4 +16,44 @@
     .card-control .card-more-link:hover{color:var(--text-color,#eaeaea)}
     .card-control .card-more-section{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-color,#333)}
     .card-control.expanded .card-more-section{display:block}
+
+    /* Language dropdown anchored to the language button; ensure it can layer over other cards */
+    .lang-dropdown {
+        position: absolute; /* anchored to .lang-control wrapper */
+        right: 0;
+        top: calc(100% + 6px);
+        display: none;
+        min-width: 180px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        padding: 6px;
+        z-index: 7000; /* ensure above standard cards; kept below global toasts (9999) */
+    }
+    .lang-dropdown.active { display: block; }
+    .lang-dropdown .menu-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font: inherit;
+        cursor: pointer;
+    }
+    .lang-dropdown .menu-item:hover {
+        background: var(--surface-soft);
+        color: var(--text-primary);
+    }
+
+    /* Lift the Server Info card's stacking context so the dropdown can overlay subsequent cards */
+    .server-content > .glass-card {
+        position: relative; /* already set globally, restated for clarity */
+        z-index: 6000; /* above other cards/grids on the page, below toasts/modals */
+        overflow: visible; /* prevent any accidental clipping around the title bar */
+    }
 </style>
