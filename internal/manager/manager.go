@@ -179,9 +179,18 @@ func NewManager() *Manager {
 		}
 	}
 
-	// Initialize paths with a safe temporary default until config is loaded
-	// Avoid creating logs in the current working directory before we know the root path.
-	m.Paths = utils.NewPaths("/tmp/sdsm")
+	// Initialize paths based on the executable directory until the config is loaded
+	// This avoids creating logs in the current working directory.
+	if exe, err := os.Executable(); err == nil {
+		if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil && resolved != "" {
+			exe = resolved
+		}
+		execDir := filepath.Dir(exe)
+		m.Paths = utils.NewPaths(execDir)
+	} else {
+		// Fallback to a safe temp location if executable path cannot be determined
+		m.Paths = utils.NewPaths("/tmp/sdsm")
+	}
 
 	// Prepare logging early so load() can report issues
 	m.startLogs()
