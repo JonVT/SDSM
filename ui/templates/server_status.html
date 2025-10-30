@@ -285,9 +285,13 @@
                     <div class="card-more-section" id="server-more-section" aria-hidden="true">
                         <div class="control-section">
                             <div class="control-row">
-                                <label>More:</label>
+                                <label title="Cleans up player bodies">Cleanup Players</label>
                                 <div class="control-actions">
-                                    <div class="empty-state">Additional server commands will appear here.</div>
+                                    <div class="button-group">
+                                        <button type="button" class="btn btn-control" id="btn-cleanup-dead" title="Cleans up player bodies">Dead</button>
+                                        <button type="button" class="btn btn-control" id="btn-cleanup-disconnected" title="Cleans up player bodies">Disconnected</button>
+                                        <button type="button" class="btn btn-control" id="btn-cleanup-all" title="Cleans up player bodies">All</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -741,6 +745,9 @@
         const pauseButton = document.getElementById('btn-pause');
         const saveButton = document.getElementById('btn-save');
         const stormButton = document.getElementById('btn-storm');
+        const cleanupDeadButton = document.getElementById('btn-cleanup-dead');
+        const cleanupDiscButton = document.getElementById('btn-cleanup-disconnected');
+        const cleanupAllButton = document.getElementById('btn-cleanup-all');
         const deleteButton = document.getElementById('btn-delete');
         const connectionBanner = document.getElementById('connection-banner');
         const connectionBannerText = document.getElementById('connection-banner-text');
@@ -1235,6 +1242,16 @@
 
             if (stormButton) {
                 setButtonDisabled(stormButton, !running || progressActive || starting);
+            }
+
+            if (cleanupDeadButton) {
+                setButtonDisabled(cleanupDeadButton, !running || progressActive || starting);
+            }
+            if (cleanupDiscButton) {
+                setButtonDisabled(cleanupDiscButton, !running || progressActive || starting);
+            }
+            if (cleanupAllButton) {
+                setButtonDisabled(cleanupAllButton, !running || progressActive || starting);
             }
 
             if (deleteButton) {
@@ -2331,6 +2348,40 @@
                         setButtonDisabled(stormButton, false);
                     });
                 });
+            })();
+
+            // Cleanup Players buttons: send CLEANUPPLAYERS {dead|disconnected|all}
+            (function(){
+                function sendCleanup(option, btn){
+                    if (!serverId || !option) return;
+                    if (btn && btn.disabled) return;
+                    if (btn) { setButtonDisabled(btn, true); toggleButtonSpinner(btn, true); }
+                    const cmd = 'CLEANUPPLAYERS ' + option;
+                    fetch(`/api/servers/${serverId}/command`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ type: 'console', payload: cmd })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchStatus();
+                    }).catch(() => {
+                        // no-op
+                    }).finally(() => {
+                        if (btn) { toggleButtonSpinner(btn, false); setButtonDisabled(btn, false); }
+                    });
+                }
+
+                if (cleanupDeadButton) cleanupDeadButton.addEventListener('click', function(e){ e.preventDefault(); sendCleanup('dead', cleanupDeadButton); });
+                if (cleanupDiscButton) cleanupDiscButton.addEventListener('click', function(e){ e.preventDefault(); sendCleanup('disconnected', cleanupDiscButton); });
+                if (cleanupAllButton) cleanupAllButton.addEventListener('click', function(e){ e.preventDefault(); sendCleanup('all', cleanupAllButton); });
             })();
 
             // Make Live/History Kick/Ban async as well (with toasts and button disable)
