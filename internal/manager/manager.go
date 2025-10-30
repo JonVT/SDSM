@@ -179,8 +179,9 @@ func NewManager() *Manager {
 		}
 	}
 
-	// Initialize paths with default values
-	m.Paths = utils.NewPaths("./") // Default fallback path
+	// Initialize paths with a safe temporary default until config is loaded
+	// Avoid creating logs in the current working directory before we know the root path.
+	m.Paths = utils.NewPaths("/tmp/sdsm")
 
 	// Prepare logging early so load() can report issues
 	m.startLogs()
