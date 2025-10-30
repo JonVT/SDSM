@@ -20,6 +20,13 @@
         .confirm-modal .modal-body{padding:16px 20px;line-height:1.5}
         .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--border-color, #333);display:flex;gap:10px;justify-content:flex-end}
         .btn-danger-ghost{background:transparent;border:1px solid var(--danger, #e74c3c);color:var(--danger, #e74c3c)}
+
+        /* More/expand section for Server Control card */
+        .card-control .card-more-footer{display:flex;justify-content:flex-start;align-items:center;margin-top:var(--space-2)}
+        .card-control .card-more-link{background:none;border:none;color:var(--text-muted,#9aa0a6);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+        .card-control .card-more-link:hover{color:var(--text-color,#eaeaea)}
+        .card-control .card-more-section{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-color,#333)}
+        .card-control.expanded .card-more-section{display:block}
     </style>
     
     </head>
@@ -272,6 +279,23 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Expandable More section placeholder -->
+                    <div class="card-more-section" id="server-more-section" aria-hidden="true">
+                        <div class="control-section">
+                            <div class="control-row">
+                                <label>More:</label>
+                                <div class="control-actions">
+                                    <div class="empty-state">Additional server commands will appear here.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer with More/Less toggle at bottom-left -->
+                    <div class="card-more-footer">
+                        <button type="button" id="control-more-toggle" class="card-more-link" aria-expanded="false">More</button>
                     </div>
                 </form>
             </div>
@@ -1493,6 +1517,30 @@
             const modalConfirm = document.getElementById('paramChangeConfirm');
             const modalCancel = document.getElementById('paramChangeCancel');
             const confirmFlag = document.getElementById('confirm-reset-saves-flag');
+            // More/Less toggle for Server Control card
+            const controlCard = document.querySelector('.card.card-control');
+            const moreToggle = document.getElementById('control-more-toggle');
+            const moreSection = document.getElementById('server-more-section');
+            if (controlCard && moreToggle && moreSection) {
+                try {
+                    const key = `sdsm:server:${rootEl.dataset.serverId}:control:more`;
+                    const savedState = sessionStorage.getItem(key);
+                    const initiallyExpanded = savedState === '1';
+                    if (initiallyExpanded) {
+                        controlCard.classList.add('expanded');
+                        moreToggle.setAttribute('aria-expanded', 'true');
+                        moreToggle.textContent = 'Less';
+                        moreSection.setAttribute('aria-hidden', 'false');
+                    }
+                    moreToggle.addEventListener('click', function(){
+                        const expanded = controlCard.classList.toggle('expanded');
+                        this.textContent = expanded ? 'Less' : 'More';
+                        this.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                        moreSection.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                        try { sessionStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
+                    });
+                } catch(_) { /* non-fatal */ }
+            }
 
             populateWorldOptions();
             populateDifficultyOptions();
