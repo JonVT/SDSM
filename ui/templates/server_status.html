@@ -208,7 +208,7 @@
                                         <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
                                         <polyline points="13 11 9 17 15 17 11 23"/>
                                     </svg>
-                                    Storm Start/Stop
+                                    Start
                                 </button>
                                 {{else}}
                                 <button type="button" class="btn btn-control btn-storm" id="btn-storm" disabled aria-disabled="true">
@@ -216,7 +216,7 @@
                                         <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
                                         <polyline points="13 11 9 17 15 17 11 23"/>
                                     </svg>
-                                    Storm Start/Stop
+                                    Start
                                 </button>
                                 {{end}}
                             </div>
@@ -1786,7 +1786,7 @@
                 try {
                     serverIsStorming = !!data.storming;
                     if (stormButton) {
-                        const label = serverIsStorming ? 'Stop Storm' : 'Start Storm';
+                        const label = serverIsStorming ? 'Stop' : 'Start';
                         // Preserve icon markup while updating label
                         stormButton.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/><polyline points="13 11 9 17 15 17 11 23"/></svg>' + label;
                     }
