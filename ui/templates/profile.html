@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - Stationeers Server Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/ui-theme.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    .profile-form { max-width: 520px; }
+    .profile-form .form-group { display: grid; grid-template-columns: 160px 1fr; align-items: center; gap: var(--space-3); }
+    .profile-form .form-group label { margin: 0; color: var(--text-secondary); font-weight: 600; }
+    @media (max-width: 640px) { .profile-form .form-group { grid-template-columns: 1fr; } }
+    .hint { font-size: var(--text-sm); margin-top: 4px; }
+    .hint.ok { color: #16a34a; }
+    .hint.bad { color: #dc2626; }
+  </style>
+</head>
+<body class="page-shell">
+  <div class="container">
+    <header class="hero-card">
+      <div class="hero-main">
+        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+        <div class="hero-heading">
+          <h1 class="hero-title">Your Profile</h1>
+          <p class="hero-subtitle">Manage your account and password.</p>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="hero-meta-title">Signed in</div>
+        <p class="hero-meta-text">
+          <strong>{{ .username }}</strong> • <span class="pill">{{ if .role }}{{ .role }}{{ else }}user{{ end }}</span>
+        </p>
+      </div>
+      <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
+        <div style="display: flex; align-items: center; gap: var(--space-2);">
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+            <span id="theme-icon">🌙</span>
+          </button>
+          <a href="/dashboard" class="btn btn-secondary" title="Go to Dashboard">
+            {{ template "icon_dashboard" . }}
+            Dashboard
+          </a>
+          <a href="/manager" class="btn btn-secondary" title="Go to Manager">
+            {{ template "icon_manager" . }}
+            Manager
+          </a>
+          {{ template "user_menu" . }}
+        </div>
+        <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+      </div>
+    </header>
+  </div>
+
+  <main class="container">
+    <div class="glass-card profile-form">
+      <h3>Change Password</h3>
+      <div id="profile-flags" data-success="{{ if .success }}{{ .success }}{{ end }}" data-error="{{ if .error }}{{ .error }}{{ end }}" hidden></div>
+      {{ if .error }}
+        <div class="alert alert-error" role="alert" style="margin-bottom: var(--space-3);">
+          <div class="alert-content">
+            <div class="alert-title">Update Failed</div>
+            <div class="alert-message">{{ .error }}</div>
+          </div>
+        </div>
+      {{ end }}
+      {{ if .success }}
+        <div class="alert alert-success" role="status" style="margin-bottom: var(--space-3);">
+          <div class="alert-content">
+            <div class="alert-title">Success</div>
+            <div class="alert-message">{{ .success }}</div>
+          </div>
+        </div>
+      {{ end }}
+      <form action="/profile" method="POST">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" value="{{ .username }}" disabled>
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <input type="text" value="{{ if .role }}{{ .role }}{{ else }}user{{ end }}" disabled>
+        </div>
+        <div class="form-group">
+          <label for="current_password">Current Password</label>
+          <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label for="new_password">New Password</label>
+          <input id="new_password" name="new_password" type="password" minlength="8" required autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="confirm_password">Confirm Password</label>
+          <input id="confirm_password" name="confirm_password" type="password" minlength="8" required autocomplete="new-password">
+        </div>
+        <div class="form-group" style="grid-template-columns: 160px 1fr;">
+          <label></label>
+          <div id="password-hint" class="hint" aria-live="polite"></div>
+        </div>
+        <div class="form-group" style="grid-template-columns: 1fr; justify-items: end;">
+          <button type="submit" class="btn btn-primary">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+    function getStoredTheme() { return localStorage.getItem('theme') || 'dark'; }
+    function setTheme(theme) {
+      const html = document.documentElement; html.setAttribute('data-theme', theme); localStorage.setItem('theme', theme);
+      const icon = document.getElementById('theme-icon'); if (icon) { icon.textContent = theme === 'dark' ? '☀️' : '🌙'; }
+    }
+    function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); const next = current === 'dark' ? 'light' : 'dark'; setTheme(next); }
+    setTheme(getStoredTheme());
+
+    // Password match hint + success toast
+    document.addEventListener('DOMContentLoaded', function(){
+      const np = document.getElementById('new_password');
+      const cp = document.getElementById('confirm_password');
+      const hint = document.getElementById('password-hint');
+      const flags = document.getElementById('profile-flags');
+
+      function updateHint(){
+        if (!np || !cp || !hint) return;
+        const a = np.value || '';
+        const b = cp.value || '';
+        hint.classList.remove('ok','bad');
+        if (!a && !b) { hint.textContent = ''; return; }
+        if (b.length === 0) { hint.textContent = ''; return; }
+        if (a === b) { hint.textContent = 'Passwords match'; hint.classList.add('ok'); }
+        else { hint.textContent = 'Passwords do not match'; hint.classList.add('bad'); }
+      }
+      if (np) np.addEventListener('input', updateHint);
+      if (cp) cp.addEventListener('input', updateHint);
+      updateHint();
+
+      // Success toast after POST
+      try {
+        const success = flags && flags.dataset ? (flags.dataset.success || '').trim() : '';
+        if (success && window.showToast) {
+          window.showToast({ type: 'success', title: 'Profile Updated', message: success });
+        }
+      } catch(_) {}
+    });
+  </script>
+
+  {{ template "toast.html" . }}
+</body>
+</html>

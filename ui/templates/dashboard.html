@@ -60,10 +60,7 @@
                     {{ template "icon_manager" . }}
                     Manager
                 </a>
-                <a href="/logout" class="btn btn-secondary">
-                    {{ template "icon_logout" . }}
-                    Logout
-                </a>
+                {{ template "user_menu" . }}
                 </div>
                 <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
             </div>
@@ -281,9 +278,22 @@
             }
             const statusBadge = serverCard.querySelector('[data-status]');
             if (statusBadge) {
-                statusBadge.textContent = status.running ? 'Running' : 'Stopped';
-                statusBadge.classList.toggle('is-running', status.running);
-                statusBadge.classList.toggle('is-stopped', !status.running);
+                // Normalize classes to new variant system
+                statusBadge.classList.remove('is-running', 'is-stopped');
+                statusBadge.classList.toggle('status-running', !!status.running);
+                statusBadge.classList.toggle('status-idle', !status.running);
+                // Rebuild contents to preserve dot + label
+                statusBadge.textContent = '';
+                let dot = statusBadge.querySelector('.dot');
+                if (!dot) {
+                    dot = document.createElement('span');
+                    dot.className = 'dot';
+                } else {
+                    // Ensure dot is first
+                    dot.remove();
+                }
+                statusBadge.appendChild(dot);
+                statusBadge.append(document.createTextNode(status.running ? 'Running' : 'Stopped'));
             }
             if (status.playerCount !== undefined) {
                 const playerInfo = serverCard.querySelector('[data-player-count]');

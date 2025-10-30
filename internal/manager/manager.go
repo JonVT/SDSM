@@ -1217,7 +1217,10 @@ func (m *Manager) worldDefinitionsCache(beta bool) *worldDefinitionCache {
 	return cache
 }
 
-func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
+// buildWorldDefinitionCacheFor builds an in-memory world definition cache for a specific
+// game channel and language without mutating any global state. This is safe to call for
+// per-request language overrides.
+func (m *Manager) buildWorldDefinitionCacheFor(beta bool, language string) *worldDefinitionCache {
 	cache := &worldDefinitionCache{
 		byCanonical: make(map[string]worldDefinition),
 	}
@@ -1232,11 +1235,14 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 	byDisplay := make(map[string]worldDefinition)
 
 	// Determine language file to use for translations
-	language := m.Language
-	if strings.TrimSpace(language) == "" {
-		language = "english"
+	lang := strings.TrimSpace(language)
+	if lang == "" {
+		lang = strings.TrimSpace(m.Language)
 	}
-	langFile := language + ".xml"
+	if lang == "" {
+		lang = "english"
+	}
+	langFile := lang + ".xml"
 
 	for _, root := range uniquePaths {
 		if root == "" {
@@ -1310,6 +1316,12 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 
 	cache.generatedAt = time.Now()
 	return cache
+}
+
+// buildWorldDefinitionCache builds a cache based on the manager's current language setting
+// and stores it under the beta/non-beta key for reuse across requests.
+func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
+	return m.buildWorldDefinitionCacheFor(beta, m.Language)
 }
 
 func (m *Manager) getDifficultiesFromXML(beta bool) []string {
@@ -1419,6 +1431,104 @@ func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) [
 		}
 	}
 	return []ConditionInfo{}
+}
+
+// Language-aware variants used for per-server localization
+func (m *Manager) GetWorldsByVersionWithLanguage(beta bool, language string) []string {
+	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	if cache == nil || len(cache.definitions) == 0 {
+		return []string{}
+	}
+	worlds := make([]string, 0, len(cache.definitions))
+	for _, def := range cache.definitions {
+		worlds = append(worlds, def.DisplayName)
+	}
+	return worlds
+}
+
+func (m *Manager) GetWorldInfoWithLanguage(worldID string, beta bool, language string) WorldInfo {
+	canonical := canonicalWorldIdentifier(worldID)
+	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	if cache != nil {
+		if def, ok := cache.byCanonical[canonical]; ok {
+			name := strings.TrimSpace(def.DisplayName)
+			if name == "" {
+				name = def.NameFallback
+			}
+			if strings.TrimSpace(name) == "" {
+				name = worldID
+			}
+			desc := strings.TrimSpace(def.DescriptionFallback)
+			return WorldInfo{ID: worldID, Name: name, Description: desc, Image: def.Image}
+		}
+	}
+	return WorldInfo{ID: worldID, Name: worldID, Description: "", Image: ""}
+}
+
+func (m *Manager) GetStartLocationsForWorldVersionWithLanguage(worldID string, beta bool, language string) []LocationInfo {
+	canonical := canonicalWorldIdentifier(worldID)
+	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	if cache != nil {
+		if def, ok := cache.byCanonical[canonical]; ok {
+			out := make([]LocationInfo, 0, len(def.StartLocations))
+			for _, l := range def.StartLocations {
+				name := strings.TrimSpace(l.Name)
+				if name == "" {
+					name = l.ID
+				}
+				out = append(out, LocationInfo{ID: l.ID, Name: name, Description: l.Description})
+			}
+			return out
+		}
+	}
+	return []LocationInfo{}
+}
+
+func (m *Manager) GetStartConditionsForWorldVersionWithLanguage(worldID string, beta bool, language string) []ConditionInfo {
+	canonical := canonicalWorldIdentifier(worldID)
+	cache := m.buildWorldDefinitionCacheFor(beta, language)
+	if cache != nil {
+		if def, ok := cache.byCanonical[canonical]; ok {
+			seen := make(map[string]bool)
+			out := make([]ConditionInfo, 0, len(def.StartConditions))
+			for _, sc := range def.StartConditions {
+				if sc.ID == "" || seen[sc.ID] {
+					continue
+				}
+				seen[sc.ID] = true
+				name := strings.TrimSpace(sc.DisplayName)
+				if name == "" {
+					name = sc.ID
+				}
+				out = append(out, ConditionInfo{ID: sc.ID, Name: name, Description: sc.Description})
+			}
+			return out
+		}
+	}
+	return []ConditionInfo{}
+}
+
+func (m *Manager) GetDifficultiesForVersionWithLanguage(beta bool, language string) []string {
+	base := m.getGameDataPathForVersion(beta)
+	lang := strings.TrimSpace(language)
+	if lang == "" {
+		lang = strings.TrimSpace(m.Language)
+	}
+	if lang == "" {
+		lang = "english"
+	}
+	diffs, err := ScanDifficulties(base, lang+".xml")
+	if err != nil || len(diffs) == 0 {
+		return []string{}
+	}
+	ids := make([]string, 0, len(diffs))
+	for _, d := range diffs {
+		if d.ID != "" {
+			ids = append(ids, d.ID)
+		}
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 func uniqueStrings(values []string) []string {

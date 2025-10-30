@@ -49,8 +49,15 @@ func (h *AuthHandlers) LoginGET(c *gin.Context) {
 	}
 	// Check if already authenticated
 	if token, _ := c.Cookie(middleware.CookieName); token != "" {
-		if _, err := h.authService.ValidateToken(token); err == nil {
-			c.Redirect(http.StatusFound, "/manager")
+		if claims, err := h.authService.ValidateToken(token); err == nil {
+			// Determine default landing page based on role
+			target := "/dashboard"
+			if claims != nil && strings.TrimSpace(claims.Username) != "" {
+				if u, ok := h.users.Get(claims.Username); ok && u.Role == manager.RoleAdmin {
+					target = "/manager"
+				}
+			}
+			c.Redirect(http.StatusFound, target)
 			return
 		}
 	}
@@ -104,7 +111,11 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 	middleware.SetAuthCookie(c, token)
 
 	if redirect == "" || redirect == "/login" || redirect == "/setup" {
-		redirect = "/manager"
+		if u.Role == manager.RoleAdmin {
+			redirect = "/manager"
+		} else {
+			redirect = "/dashboard"
+		}
 	}
 
 	// Redirect to requested page or manager dashboard

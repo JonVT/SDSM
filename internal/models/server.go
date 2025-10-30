@@ -84,6 +84,7 @@ type ServerConfig struct {
 	Name                string
 	World               string
 	WorldID             string
+	Language            string
 	StartLocation       string
 	StartCondition      string
 	Difficulty          string
@@ -113,6 +114,7 @@ type Server struct {
 	Name                string        `json:"name"`
 	World               string        `json:"world"`
 	WorldID             string        `json:"world_id"`
+	Language            string        `json:"language"`
 	StartLocation       string        `json:"start_location"`
 	StartCondition      string        `json:"start_condition"`
 	Difficulty          string        `json:"difficulty"`
@@ -719,6 +721,10 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 		s.WorldID = s.World
 	}
 
+	if cfg.Language != "" {
+		s.Language = cfg.Language
+	}
+
 	if cfg.StartLocation != "" {
 		s.StartLocation = cfg.StartLocation
 	}
@@ -737,6 +743,10 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 		s.Port = cfg.Port
 	} else {
 		s.Port = 26017
+	}
+	// Default RCON port to game port + 1 unless explicitly set elsewhere
+	if s.RCONPort == 0 && s.Port > 0 {
+		s.RCONPort = s.Port + 1
 	}
 
 	if cfg.SaveInterval > 0 {
@@ -803,10 +813,15 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		if !strings.Contains(data, "restart_delay_seconds") || s.RestartDelaySeconds < 0 {
 			s.RestartDelaySeconds = DefaultRestartDelaySeconds
 		}
+		// If RCONPort wasn't persisted or was zero, derive default from game port
+		if s.RCONPort == 0 && s.Port > 0 {
+			s.RCONPort = s.Port + 1
+		}
 	} else {
 		s.Name = fmt.Sprintf("Stationeers Server %d", serverID)
 		s.World = "Mars2"
 		s.WorldID = s.World
+		s.Language = ""
 		s.Difficulty = "Normal"
 		s.Port = 26017
 		s.SaveInterval = 300
@@ -819,6 +834,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.AutoUpdate = false
 		s.AutoSave = true
 		s.AutoPause = true
+		s.RCONPort = s.Port + 1
 	}
 
 	s.Logger.Write("Server initialized.")
@@ -1089,10 +1105,7 @@ func (s *Server) installBepInEx(gameDir string) error {
 }
 
 // ToJSON marshals the server into JSON for diagnostics.
-func (s *Server) ToJSON() string {
-	data, _ := json.Marshal(s)
-	return string(data)
-}
+// ToJSON removed as it wasn't referenced; prefer explicit logging/diagnostic formatting at call sites.
 
 // Stop terminates the server process (if running), marks clients disconnected,
 // flushes logs, and resets in-memory chat when appropriate.
@@ -1483,7 +1496,12 @@ func (s *Server) SendRaw(line string) error {
 	// Use RCON HTTP API instead of stdin
 	rconPort := s.RCONPort
 	if rconPort == 0 {
-		rconPort = 8080 // Default RCON port
+		// Default RCON port follows Stationeers convention: game port + 1
+		if s.Port > 0 {
+			rconPort = s.Port + 1
+		} else {
+			rconPort = 8081 // fallback if port unknown
+		}
 	}
 
 	// Ensure single line only

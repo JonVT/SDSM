@@ -53,12 +53,43 @@ func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[st
 	return worldLists, worldData
 }
 
+// buildWorldSelectionDataForLanguage mirrors buildWorldSelectionData but localizes
+// world names and option lists using the provided language.
+func (h *ManagerHandlers) buildWorldSelectionDataForLanguage(language string) (map[string][]string, map[string]map[string]gin.H) {
+	worldLists := map[string][]string{
+		"release": h.manager.GetWorldsByVersionWithLanguage(false, language),
+		"beta":    h.manager.GetWorldsByVersionWithLanguage(true, language),
+	}
+
+	worldData := map[string]map[string]gin.H{
+		"release": {},
+		"beta":    {},
+	}
+
+	for _, world := range worldLists["release"] {
+		worldData["release"][world] = gin.H{
+			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(world, false, language),
+			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(world, false, language),
+		}
+	}
+
+	for _, world := range worldLists["beta"] {
+		worldData["beta"][world] = gin.H{
+			"locations":  h.manager.GetStartLocationsForWorldVersionWithLanguage(world, true, language),
+			"conditions": h.manager.GetStartConditionsForWorldVersionWithLanguage(world, true, language),
+		}
+	}
+
+	return worldLists, worldData
+}
+
 func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models.Server, username interface{}, errMsg string) {
 	// Refresh runtime flags so the template does not show stale state after restarts.
 	s.IsRunning()
 
-	worldLists, worldData := h.buildWorldSelectionData()
-	worldInfo := h.manager.GetWorldInfo(s.World, s.Beta)
+	// Localize to the server's configured language when building world/difficulty lists
+	worldLists, worldData := h.buildWorldSelectionDataForLanguage(s.Language)
+	worldInfo := h.manager.GetWorldInfoWithLanguage(s.World, s.Beta, s.Language)
 
 	payload := gin.H{
 		"server":     s,
@@ -67,11 +98,14 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		"worldInfo":  worldInfo,
 		"worldLists": worldLists,
 		"worldData":  worldData,
-		// Per-channel difficulties for live switching on the status page
-		"release_difficulties": h.manager.GetDifficultiesForVersion(false),
-		"beta_difficulties":    h.manager.GetDifficultiesForVersion(true),
-		"serverPath":           h.manager.Paths.ServerDir(s.ID),
-		"banned":               s.BannedEntries(),
+		// Per-channel difficulties for live switching on the status page (localized)
+		"release_difficulties": h.manager.GetDifficultiesForVersionWithLanguage(false, s.Language),
+		"beta_difficulties":    h.manager.GetDifficultiesForVersionWithLanguage(true, s.Language),
+		// Per-channel languages for per-server selection
+		"release_languages": h.manager.GetLanguagesForVersion(false),
+		"beta_languages":    h.manager.GetLanguagesForVersion(true),
+		"serverPath":        h.manager.Paths.ServerDir(s.ID),
+		"banned":            s.BannedEntries(),
 	}
 
 	if errMsg != "" {
@@ -350,14 +384,20 @@ func (h *ManagerHandlers) ServerWorldImage(c *gin.Context) {
 
 	// Allow optional preview overrides via query parameters so the UI can
 	// show a live world image when the user changes selections.
-	worldID := srv.WorldID
-	if w := strings.TrimSpace(c.Query("world")); w != "" {
-		worldID = w
-	}
+	// Parse beta first, since resolving world name may depend on it.
 	beta := srv.Beta
 	if qb := strings.TrimSpace(c.Query("beta")); qb != "" {
 		if parsed, perr := strconv.ParseBool(qb); perr == nil {
 			beta = parsed
+		}
+	}
+	worldID := srv.WorldID
+	if w := strings.TrimSpace(c.Query("world")); w != "" {
+		// If the client sent a localized display name, resolve it to the technical ID
+		if resolved := h.manager.ResolveWorldID(w, beta); strings.TrimSpace(resolved) != "" {
+			worldID = resolved
+		} else {
+			worldID = w
 		}
 	}
 

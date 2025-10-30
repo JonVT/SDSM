@@ -1,0 +1,124 @@
+{{ define "user_menu" }}
+<style>
+  .user-menu { position: relative; }
+  .avatar-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-weight: 700; font-size: 0.8rem;
+    padding: 0; cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    user-select: none;
+  }
+  .avatar-btn:hover { background: var(--surface-soft); color: var(--text-primary); }
+  .avatar-initials { letter-spacing: 0.3px; }
+  .role-badge {
+    position: absolute; right: -2px; bottom: -2px; min-width: 14px; height: 14px;
+    padding: 0 3px;
+    border-radius: 999px; background: var(--accent-600, #6366f1);
+    color: white; font-size: 9px; line-height: 14px; font-weight: 800;
+    border: 1px solid var(--bg-secondary);
+  }
+  /* Dropdown uses fixed positioning when opened to escape header overflow */
+  .user-dropdown {
+    position: fixed; /* will be placed by script on open */
+    min-width: 180px; background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    display: none; z-index: 4000; padding: 6px;
+  }
+  .user-dropdown.active { display: block; }
+  .user-dropdown a {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; text-decoration: none;
+    color: var(--text-secondary); border-radius: var(--radius-sm);
+  }
+  .user-dropdown a:hover { background: var(--surface-soft); color: var(--text-primary); }
+</style>
+<div class="user-menu" data-user-menu>
+  <button class="avatar-btn" aria-haspopup="true" aria-expanded="false" title="Account" data-user-menu-trigger>
+    <span class="avatar-initials">{{ if .username }}{{ initials (printf "%v" .username) }}{{ else }}?{{ end }}</span>
+    <span class="role-badge" title="Role">?</span>
+  </button>
+  <div class="user-dropdown" role="menu">
+    <a href="/profile" role="menuitem">
+      {{ template "icon_user" . }}
+      <span>Update Profile</span>
+    </a>
+    <a href="/logout" role="menuitem">
+      {{ template "icon_logout" . }}
+      <span>Logout</span>
+    </a>
+  </div>
+</div>
+<script>
+  (function(){
+    function setupUserMenu(root){
+      if(!root) return;
+      const trigger = root.querySelector('[data-user-menu-trigger]');
+      const menu = root.querySelector('.user-dropdown');
+      const badge = root.querySelector('.role-badge');
+      if(!trigger || !menu) return;
+      if(root.dataset.bound === 'true') return;
+      root.dataset.bound = 'true';
+      function closeMenu(){ menu.classList.remove('active'); trigger.setAttribute('aria-expanded','false'); }
+      function openMenu(){
+        // Temporarily show to measure size
+        menu.style.visibility = 'hidden';
+        menu.style.display = 'block';
+        // Compute position near trigger, aligned to right edge
+        const rect = trigger.getBoundingClientRect();
+        const menuWidth = menu.offsetWidth;
+        const padding = 6; // small gap below button
+        let left = Math.round(rect.right - menuWidth);
+        let top = Math.round(rect.bottom + padding);
+        // Keep within viewport
+        const vw = window.innerWidth, vh = window.innerHeight;
+        if (left < 8) left = 8;
+        if (left + menuWidth > vw - 8) left = Math.max(8, vw - menuWidth - 8);
+        if (top > vh - 8) top = Math.max(8, rect.top - menu.offsetHeight - padding);
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+        menu.style.visibility = '';
+        menu.classList.add('active');
+        trigger.setAttribute('aria-expanded','true');
+      }
+      trigger.addEventListener('click', function(e){
+        e.stopPropagation();
+        if (menu.classList.contains('active')) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      });
+      document.addEventListener('click', function(e){
+        if(!root.contains(e.target)) closeMenu();
+      });
+      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu(); });
+      // Keep dropdown aligned on resize/scroll if open
+      function maybeReposition(){ if(menu.classList.contains('active')) { openMenu(); } }
+      window.addEventListener('resize', maybeReposition, { passive: true });
+      window.addEventListener('scroll', maybeReposition, { passive: true });
+      // Fetch role for badge
+      try {
+        fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if(!data || !badge) return;
+            const role = (data.role || '').toLowerCase();
+            if(role === 'admin') { badge.textContent = 'A'; badge.style.background = 'var(--danger-600, #dc2626)'; badge.title = 'Admin'; }
+            else { badge.textContent = 'U'; badge.style.background = 'var(--accent-600, #6366f1)'; badge.title = 'User'; }
+          })
+          .catch(() => {});
+      } catch(_) {}
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      document.querySelectorAll('[data-user-menu]').forEach(setupUserMenu);
+    });
+  })();
+</script>
+{{ end }}

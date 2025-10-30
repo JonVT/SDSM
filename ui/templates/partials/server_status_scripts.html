@@ -56,6 +56,7 @@
     const rootEl = document.body;
     const statusIndicator = document.getElementById('status-dot-indicator');
     const statusText = document.getElementById('status-dot-text');
+    const statusContainer = document.getElementById('status-pill-container');
     const startedValueEl = document.getElementById('server-started-value');
     const savedValueEl = document.getElementById('server-saved-value');
     const lastLogLineEl = document.getElementById('last-log-line');
@@ -690,11 +691,26 @@
         {{- end -}}
     ];
 
+    // Languages per version from server payload
+    const releaseLanguages = [
+        {{- range $idx, $l := .release_languages -}}
+        {{- if $idx}}, {{- end -}}
+        "{{ js $l }}"
+        {{- end -}}
+    ];
+    const betaLanguages = [
+        {{- range $idx, $l := .beta_languages -}}
+        {{- if $idx}}, {{- end -}}
+        "{{ js $l }}"
+        {{- end -}}
+    ];
+
     const initialVersionKey = {{if .server.Beta}}"beta"{{else}}"release"{{end}};
     const initialWorld = {{if .server.World}}"{{js .server.World}}"{{else}}""{{end}};
     const initialStartLocation = {{if .server.StartLocation}}"{{js .server.StartLocation}}"{{else}}""{{end}};
     const initialStartCondition = {{if .server.StartCondition}}"{{js .server.StartCondition}}"{{else}}""{{end}};
     const initialDifficulty = {{if .server.Difficulty}}"{{js .server.Difficulty}}"{{else}}""{{end}};
+    const initialLanguage = {{if .server.Language}}"{{js .server.Language}}"{{else}}""{{end}};
 
     const versionState = {
         release: {
@@ -869,11 +885,36 @@
         diffSelect.value = desired;
     }
 
+    function populateLanguageOptions() {
+        const langSelect = document.getElementById('language');
+        if (!langSelect) return;
+        const versionKey = currentVersionKey();
+        const langs = versionKey === 'beta' ? betaLanguages : releaseLanguages;
+        const previous = langSelect.value;
+        langSelect.innerHTML = '';
+        if (!langs || !langs.length) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'No languages';
+            langSelect.appendChild(opt);
+            return;
+        }
+        langs.forEach((l) => {
+            const opt = document.createElement('option');
+            opt.value = l;
+            opt.textContent = l;
+            langSelect.appendChild(opt);
+        });
+        const desired = langs.includes(initialLanguage) ? initialLanguage : (langs.includes(previous) ? previous : langs[0]);
+        langSelect.value = desired;
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const worldSelect = document.getElementById('world');
         const locSelect = document.getElementById('start_location');
         const condSelect = document.getElementById('start_condition');
         const difficultySelect = document.getElementById('difficulty');
+        const languageSelect = document.getElementById('language');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
         const updateParamsBtn = document.getElementById('btn-update-params');
@@ -919,6 +960,7 @@
 
         populateWorldOptions();
         populateDifficultyOptions();
+        populateLanguageOptions();
         updateWorldThumb();
 
         const tabButtons = document.querySelectorAll('.tab-set .tab-btn');
@@ -952,6 +994,7 @@
             radio.addEventListener('change', () => {
                 populateWorldOptions();
                 populateDifficultyOptions();
+                populateLanguageOptions();
                 updateWorldThumb();
             });
         });
@@ -960,6 +1003,12 @@
             difficultySelect.addEventListener('change', () => {
                 // Keep initialDifficulty aligned only for UX fallback decisions
                 // Not used as destructive param, so no modal involvement
+            });
+        }
+
+        if (languageSelect) {
+            languageSelect.addEventListener('change', () => {
+                // No destructive behavior tied to language currently
             });
         }
 
@@ -1173,6 +1222,13 @@
                 statusIndicator.classList.toggle('starting', running && starting);
                 statusIndicator.classList.toggle('running', running && !serverIsPaused && !starting);
                 statusIndicator.classList.toggle('paused', serverIsPaused && !starting);
+            }
+            // Apply unified pill variant classes to container for visual styling
+            if (statusContainer) {
+                // Map: running (incl. starting) -> status-running; paused or stopped -> status-idle
+                const useRunningVariant = running && !serverIsPaused; // still consider starting as running variant
+                statusContainer.classList.toggle('status-running', useRunningVariant);
+                statusContainer.classList.toggle('status-idle', !useRunningVariant);
             }
             if (statusText) {
                 if (starting && running) {

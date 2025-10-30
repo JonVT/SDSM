@@ -1,8 +1,8 @@
 <div class="card card-control">
     <div class="card-header">
         <h2 class="card-title">Server Control</h2>
-        <span class="status-pill status-dot">
-            <span id="status-dot-indicator" class="status-dot-indicator {{if .server.Running}}running{{end}}"></span>
+        <span class="status-pill {{if .server.Running}}status-running{{else}}status-idle{{end}}" id="status-pill-container">
+            <span id="status-dot-indicator" class="dot {{if .server.Running}}running{{end}}"></span>
             <span id="status-dot-text">{{if .server.Running}}Running{{else}}Stopped{{end}}</span>
         </span>
     </div>

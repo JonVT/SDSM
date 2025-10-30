@@ -308,6 +308,10 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			s.Difficulty = difficulty
 		}
 
+		if lang := middleware.SanitizeString(c.PostForm("language")); lang != "" {
+			s.Language = lang
+		}
+
 		if portStr := c.PostForm("port"); portStr != "" {
 			if port, err := middleware.ValidatePort(portStr); err == nil {
 				if h.manager.IsPortAvailable(port, s.ID) {
@@ -547,6 +551,7 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		Name:                name,
 		World:               world,
 		WorldID:             worldID,
+		Language:            "",
 		StartLocation:       startLocation,
 		StartCondition:      startCondition,
 		Difficulty:          difficulty,
@@ -562,6 +567,12 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		AutoSave:            autoSave,
 		AutoPause:           autoPause,
 		RestartDelaySeconds: restartDelay,
+	}
+
+	// Set default language based on selected channel
+	langs := h.manager.GetLanguagesForVersion(beta)
+	if len(langs) > 0 {
+		cfg.Language = langs[0]
 	}
 
 	newServer, err := h.manager.AddServer(cfg)

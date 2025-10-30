@@ -258,6 +258,18 @@ func setupRouter() *gin.Engine {
 			}
 			return false
 		},
+		// initials returns up to the first two runes of a string in uppercase for avatar badges
+		"initials": func(s string) string {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return "?"
+			}
+			rs := []rune(s)
+			if len(rs) == 1 {
+				return strings.ToUpper(string(rs))
+			}
+			return strings.ToUpper(string(rs[0])) + strings.ToUpper(string(rs[1]))
+		},
 		"buildTime": func() string {
 			// For releases, show version number
 			if Version != "" {
@@ -316,14 +328,22 @@ func setupRouter() *gin.Engine {
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
 	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
+	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlers(app.manager)
 
 	// Public routes
 	r.GET("/", func(c *gin.Context) {
 		token, err := c.Cookie(middleware.CookieName)
 		if err == nil {
-			if _, validateErr := app.authService.ValidateToken(token); validateErr == nil {
-				c.Redirect(http.StatusFound, "/manager")
+			if claims, validateErr := app.authService.ValidateToken(token); validateErr == nil {
+				// Choose landing page by role
+				target := "/dashboard"
+				if claims != nil && strings.TrimSpace(claims.Username) != "" {
+					if u, ok := app.userStore.Get(claims.Username); ok && u.Role == manager.RoleAdmin {
+						target = "/manager"
+					}
+				}
+				c.Redirect(http.StatusFound, target)
 				return
 			}
 		}
@@ -423,7 +443,16 @@ func setupRouter() *gin.Engine {
 	{
 		protected.GET("/dashboard", managerHandlers.Dashboard)
 		protected.GET("/frame", managerHandlers.Frame)
-		protected.GET("/manager", managerHandlers.ManagerGET)
+		protected.GET("/manager", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			managerHandlers.ManagerGET(c)
+		})
+		// Profile page for self-service password change
+		protected.GET("/profile", profileHandlers.ProfileGET)
+		protected.POST("/profile", profileHandlers.ProfilePOST)
 		// Debug endpoint to verify identity and role
 		protected.GET("/whoami", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{

@@ -30,6 +30,35 @@
     --btn-w-sm: 112px;
     --btn-w-md: 128px;
     --btn-w-lg: 160px;
+
+    /* Accent/surface tokens for reusable status pills */
+    --accent-600: #6366f1; /* indigo-600 */
+    --accent-700: #4f46e5; /* indigo-700 */
+    --danger-600: #dc2626; /* red-600 */
+    --danger-700: #b91c1c; /* red-700 */
+    --success-600: #16a34a; /* green-600 */
+    --success-700: #15803d; /* green-700 */
+
+    /* Per-status computed tokens (backgrounds use light tints) */
+    --status-idle-bg: var(--bg-tertiary);
+    --status-idle-text: var(--text-tertiary);
+    --status-idle-border: var(--border-color);
+    --status-idle-dot: rgba(100, 116, 139, 0.9);
+
+    --status-running-bg: rgba(99, 102, 241, 0.12); /* indigo tint */
+    --status-running-text: var(--accent-600);
+    --status-running-border: rgba(99, 102, 241, 0.35);
+    --status-running-dot: var(--accent-600);
+
+    --status-error-bg: rgba(220, 38, 38, 0.12); /* red tint */
+    --status-error-text: var(--danger-700);
+    --status-error-border: rgba(220, 38, 38, 0.35);
+    --status-error-dot: var(--danger-600);
+
+    --status-complete-bg: rgba(22, 163, 74, 0.12); /* green tint */
+    --status-complete-text: var(--success-700);
+    --status-complete-border: rgba(22, 163, 74, 0.35);
+    --status-complete-dot: var(--success-600);
 }
 
 [data-theme="light"] {
@@ -295,6 +324,53 @@ body {
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.32);
     color: inherit;
+}
+
+/* Reusable status pill variants (global) */
+.status-pill .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-idle {
+    background: var(--status-idle-bg);
+    color: var(--status-idle-text);
+    border: 1px solid var(--status-idle-border);
+}
+.status-idle .dot { background: var(--status-idle-dot); }
+
+.status-running {
+    background: var(--status-running-bg);
+    color: var(--status-running-text);
+    border: 1px solid var(--status-running-border);
+}
+.status-running .dot {
+    background: var(--status-running-dot);
+    animation: statusPulse 1.6s ease-in-out infinite;
+}
+
+.status-error {
+    background: var(--status-error-bg);
+    color: var(--status-error-text);
+    border: 1px solid var(--status-error-border);
+}
+.status-error .dot { background: var(--status-error-dot); }
+
+.status-complete {
+    background: var(--status-complete-bg);
+    color: var(--status-complete-text);
+    border: 1px solid var(--status-complete-border);
+}
+.status-complete .dot { background: var(--status-complete-dot); }
+
+@keyframes statusPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.35); opacity: 0.75; }
+    100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .status-running .dot { animation: none; }
 }
 
 /* Ensure inline SVG icons in buttons inherit color and render consistently */

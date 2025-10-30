@@ -35,6 +35,7 @@
             gap: var(--space-3);
             justify-content: center;
             margin-top: var(--space-4);
+            flex-wrap: wrap; /* allow wrapping when space is tight */
         }
         
         #updating {
@@ -313,10 +314,19 @@
             grid-template-columns: 1fr;
             gap: var(--space-4);
         }
+        /* Allow grid children to shrink/grow without overflow affecting column sizing */
+        .manager-grid > * { min-width: 0; }
 
-        @media (min-width: 1024px) {
+        @media (min-width: 900px) {
             .manager-grid {
-                grid-template-columns: 1fr 1fr;
+                /* Keep Software a bit wider, but don't over-shrink Configuration */
+                grid-template-columns: 0.9fr 1.1fr;
+            }
+        }
+        @media (min-width: 1280px) {
+            .manager-grid {
+                /* On very wide screens, slight extra bias toward Software Versions */
+                grid-template-columns: 0.85fr 1.15fr;
             }
         }
 
@@ -329,12 +339,15 @@
             padding-right: var(--space-6);
         }
 
+        /* Status pill variants are now provided globally by ui-theme.css */
+
         /* Inline layout for Configuration form: labels left, inputs right */
         .config-form .form-group {
             display: grid;
-            grid-template-columns: 260px 1fr;
+            grid-template-columns: minmax(110px, 160px) 1fr; /* flexible label column to avoid overflow */
             align-items: center;
-            gap: var(--space-3);
+            gap: var(--space-2); /* tighter label-to-field spacing */
+            min-width: 0;
         }
 
         .config-form .form-group label {
@@ -348,6 +361,7 @@
         .config-form .form-group select {
             width: 100%;
         }
+        .config-form .form-group > * { min-width: 0; }
 
         /* Checkbox row aligns inline as well */
         .config-form .form-group input[type="checkbox"] {
@@ -358,7 +372,7 @@
 
         /* Position Update button aligned with inputs (second column), add space above */
         .config-form .form-row-full {
-            grid-template-columns: 260px 1fr;
+            grid-template-columns: minmax(110px, 160px) 1fr; /* keep consistent with label column */
             margin-top: var(--space-4);
         }
         .config-form .form-row-full > * {
@@ -367,6 +381,18 @@
             justify-self: end;
             width: auto;
         }
+
+        /* Keep inline label/select rows tidy */
+        .field-inline { display: inline-flex; align-items: center; gap: var(--space-1); }
+        .inline-controls { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+        /* Size/flow controls for Language/Source row */
+        .lang-select { flex: 0 0 160px; width: 160px; max-width: 200px; }
+        .source-select { flex: 1 1 260px; min-width: 220px; }
+        @media (max-width: 640px) {
+            .inline-controls { flex-wrap: wrap; }
+            .lang-select, .source-select { flex: 1 1 100%; width: 100%; max-width: none; }
+        }
+        .field-inline label { margin: 0; }
 
         @media (max-width: 640px) {
             .config-form .form-group {
@@ -508,15 +534,40 @@
                 }
 
                 if (text) {
-                    let status = component.stage || '';
+                    // Safe renderer for status + optional trailing text, avoids injecting arbitrary HTML
+                    const renderStatus = (kind, label, tail) => {
+                        text.innerHTML = '';
+                        const pill = document.createElement('span');
+                        pill.className = 'status-pill status-' + kind;
+                        const dot = document.createElement('span');
+                        dot.className = 'dot';
+                        dot.setAttribute('aria-hidden', 'true');
+                        pill.appendChild(dot);
+                        pill.appendChild(document.createTextNode(label));
+                        text.appendChild(pill);
+                        if (tail) {
+                            text.appendChild(document.createTextNode(' ' + tail));
+                        }
+                    };
+
+                    let status = (component.stage || '').trim();
                     if (component.error) {
-                        status = 'Error: ' + component.error;
-                    } else if (component.total > 0 && component.running) {
-                        status = status + ' (' + (component.percent || 0) + '% of ' + formatBytes(component.total) + ')';
+                        renderStatus('error', 'Error', component.error);
+                    } else if (component.running) {
+                        let tail = '';
+                        if (component.total > 0) {
+                            tail = (status ? status + ' ' : '') + '(' + (component.percent || 0) + '% of ' + formatBytes(component.total) + ')';
+                        } else {
+                            tail = status || '';
+                        }
+                        renderStatus('running', 'Running', tail);
+                    } else if (!component.running && (status === '' || /^(idle)$/i.test(status))) {
+                        renderStatus('idle', 'Idle', '');
                     } else if (!component.running && component.percent >= 100 && !component.error) {
-                        status = status || 'Completed';
+                        renderStatus('complete', 'Completed', status && !/^completed$/i.test(status) ? status : '');
+                    } else {
+                        text.textContent = status;
                     }
-                    text.textContent = status.trim();
                 }
             }
 
@@ -538,50 +589,7 @@
                 if (!pollTimer) pollTimer = setInterval(fetchProgress, 2000);
             }
 
-            // Populate Language select with per-source (Release/Beta) lists
-            // These arrays are provided by the handler payload
-            const releaseLanguages = [
-                {{- range $idx, $l := .release_languages -}}
-                {{- if $idx}}, {{- end -}}
-                "{{ js $l }}"
-                {{- end -}}
-            ];
-            const betaLanguages = [
-                {{- range $idx, $l := .beta_languages -}}
-                {{- if $idx}}, {{- end -}}
-                "{{ js $l }}"
-                {{- end -}}
-            ];
-            let selectedLanguage = "{{ js .language }}";
-
-            function populateLanguageOptions() {
-                const sourceSelect = document.getElementById('language_source');
-                const langSelect = document.getElementById('language');
-                if (!langSelect || !sourceSelect) return;
-
-                const source = sourceSelect.value === 'beta' ? 'beta' : 'release';
-                const langs = source === 'beta' ? betaLanguages : releaseLanguages;
-                const previous = langSelect.value;
-
-                langSelect.innerHTML = '';
-                if (!langs || !langs.length) {
-                    const opt = document.createElement('option');
-                    opt.value = '';
-                    opt.textContent = 'No languages';
-                    langSelect.appendChild(opt);
-                    return;
-                }
-
-                langs.forEach((l) => {
-                    const opt = document.createElement('option');
-                    opt.value = l;
-                    opt.textContent = l;
-                    langSelect.appendChild(opt);
-                });
-
-                const desired = (langs.includes(selectedLanguage) ? selectedLanguage : (langs.includes(previous) ? previous : langs[0]));
-                langSelect.value = desired;
-            }
+            // Manager-level Language removed; languages are configured per server.
 
             document.addEventListener('DOMContentLoaded', () => {
                 const buttons = Array.from(document.querySelectorAll('.update-trigger'));
@@ -590,28 +598,7 @@
                 const configBtn = document.getElementById('updateConfigBtn');
                 const shutdownBtn = document.getElementById('shutdownBtn');
                 const restartBtn = document.getElementById('restartBtn');
-                const languageSourceSelect = document.getElementById('language_source');
-                const languageSelect = document.getElementById('language');
-
-                // If the current selected language only exists in Beta, set source accordingly
-                if (languageSourceSelect && selectedLanguage) {
-                    const inRelease = releaseLanguages.includes(selectedLanguage);
-                    const inBeta = betaLanguages.includes(selectedLanguage);
-                    if (inBeta && !inRelease) {
-                        languageSourceSelect.value = 'beta';
-                    }
-                }
-
-                // Initialize language options and wire source change
-                if (languageSourceSelect && languageSelect) {
-                    populateLanguageOptions();
-                    languageSourceSelect.addEventListener('change', () => {
-                        populateLanguageOptions();
-                    });
-                    languageSelect.addEventListener('change', () => {
-                        selectedLanguage = languageSelect.value;
-                    });
-                }
+                
 
                 function showMessage(text, isError) {
                     if (!messageEl) return;
@@ -858,10 +845,7 @@
                 {{ template "icon_dashboard" . }}
                 Dashboard
             </a>
-            <a href="/logout" class="btn btn-secondary" title="Logout">
-                {{ template "icon_logout" . }}
-                Logout
-            </a>
+            {{ template "user_menu" . }}
             </div>
             <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
         </div>
@@ -902,23 +886,6 @@
                         <div class="form-group">
                             <label for="port">Port</label>
                             <input type="text" id="port" name="port" value="{{ .port }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="language">Language</label>
-                            <div style="display:flex; gap: var(--space-3); align-items:center;">
-                                <select id="language" name="language">
-                                    {{ range .languages }}
-                                    <option value="{{ . }}" {{ if eq . $.language }}selected{{ end }}>{{ . }}</option>
-                                    {{ end }}
-                                </select>
-                                <div class="field-inline">
-                                    <label for="language_source" style="white-space:nowrap;">Source</label>
-                                    <select id="language_source" aria-label="Language source">
-                                        <option value="release">Release</option>
-                                        <option value="beta">Beta</option>
-                                    </select>
-                                </div>
-                            </div>
                         </div>
                         <div class="form-group">
                             <label for="root_path">Root Path</label>

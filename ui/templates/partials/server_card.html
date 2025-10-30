@@ -24,18 +24,9 @@
       {{ end }}
       {{ $srv.Name }}
     </div>
-    <span class="status-pill {{ if $srv.IsRunning }}is-running{{ else }}is-stopped{{ end }}" data-status>
-      {{ if $srv.IsRunning }}
-        <svg class="icon-inline" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <circle cx="12" cy="12" r="10"></circle>
-        </svg>
-        Running
-      {{ else }}
-        <svg class="icon-inline" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <rect x="4" y="4" width="16" height="16" rx="2"></rect>
-        </svg>
-        Stopped
-      {{ end }}
+    <span class="status-pill {{ if $srv.IsRunning }}status-running{{ else }}status-idle{{ end }}" data-status>
+      <span class="dot"></span>
+      {{ if $srv.IsRunning }}Running{{ else }}Stopped{{ end }}
     </span>
   </div>
 
