@@ -10,10 +10,16 @@
         <h2 class="card-title">Players Online</h2>
         <span class="pill" id="players-live-count">{{if gt $liveCount 0}}{{printf "%d online" $liveCount}}{{else}}0 online{{end}}</span>
     </div>
-    <div class="tab-set">
-        <button type="button" class="tab-btn active" data-target="players-live">Live</button>
-        <button type="button" class="tab-btn" data-target="players-history">History</button>
-        <button type="button" class="tab-btn" data-target="players-banned">Banned</button>
+    <div class="players-header-bar" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
+        <div class="tab-set">
+            <button type="button" class="tab-btn active" data-target="players-live" title="View players currently online">Live</button>
+            <button type="button" class="tab-btn" data-target="players-history" title="View previous player sessions">History</button>
+            <button type="button" class="tab-btn" data-target="players-banned" title="View and manage banned players">Banned</button>
+        </div>
+        <label class="checkbox-inline" for="player-saves-toggle" title="save the game when a player connects to the server.">
+            <input type="checkbox" id="player-saves-toggle" />
+            <span>Player Saves</span>
+        </label>
     </div>
     <div class="players-section">
         <div class="tab-panel active" id="players-live">
@@ -42,7 +48,7 @@
                         <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                         <td>
                             <form method="POST" style="display: inline;">
-                                <button type="submit" name="kick" value="{{.Name}}" class="btn btn-warning btn-icon" aria-label="Kick" title="Kick">
+                                <button type="submit" name="kick" value="{{.Name}}" class="btn btn-warning btn-icon" aria-label="Kick player" title="Kick player">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
                                         <line x1="8" y1="12" x2="16" y2="12"></line>
@@ -52,7 +58,7 @@
                         </td>
                         <td>
                             <form method="POST" style="display: inline;">
-                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban" title="Ban">
+                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
                                         <line x1="5" y1="19" x2="19" y2="5"></line>
@@ -93,7 +99,7 @@
                         <td>{{.SessionDurationString}}</td>
                         <td>
                             <form method="POST" style="display: inline;">
-                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban" title="Ban">
+                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
                                         <line x1="5" y1="19" x2="19" y2="5"></line>
@@ -126,7 +132,7 @@
                             <td>{{.SteamID}}</td>
                             <td>
                                 <form method="POST" style="display: inline;">
-                                    <button type="submit" name="unban" value="{{.SteamID}}" class="btn btn-success btn-icon" aria-label="Unban" title="Unban">
+                                    <button type="submit" name="unban" value="{{.SteamID}}" class="btn btn-success btn-icon" aria-label="Unban player" title="Unban Steam ID">
                                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                             <circle cx="12" cy="12" r="9"></circle>
                                             <polyline points="9 12 12 15 17 10"></polyline>
@@ -144,7 +150,7 @@
             <form method="POST" id="banned-add-form" class="form-inline" style="margin-top: var(--space-3);">
                 <label for="ban_steam_id" class="sr-only">Steam ID</label>
                 <input type="text" id="ban_steam_id" name="ban_steam_id" placeholder="Enter Steam ID" class="form-input-inline" style="min-width: 240px;" autocomplete="off">
-                <button type="submit" name="add_ban" value="true" class="btn btn-primary btn-min-sm">
+                <button type="submit" name="add_ban" value="true" class="btn btn-primary btn-min-sm" title="Ban the entered Steam ID">
                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="12" cy="12" r="9"></circle>
                         <line x1="12" y1="8" x2="12" y2="16"></line>

@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// JWTSecret is the HMAC signing secret for auth tokens. Override via environment in production.
+	// JWTSecret is the default HMAC signing secret for auth tokens. Override via environment in production.
 	JWTSecret = "your-secret-key-change-in-production"
 	// TokenExpiry controls how long issued tokens remain valid.
 	TokenExpiry = 24 * time.Hour
@@ -45,8 +45,12 @@ type apiFailure struct {
 
 // NewAuthService creates an AuthService using the default JWTSecret.
 func NewAuthService() *AuthService {
+	secret := os.Getenv("SDSM_JWT_SECRET")
+	if strings.TrimSpace(secret) == "" {
+		secret = JWTSecret
+	}
 	return &AuthService{
-		secret:      []byte(JWTSecret),
+		secret:      []byte(secret),
 		apiFailures: make(map[string]*apiFailure),
 	}
 }

@@ -113,6 +113,8 @@
     let startStatusUpdates = function() {};
 
     let serverIsStorming = false;
+    let knownLiveSteam = new Set();
+    let playerSavesToggle = null;
 
     updateControlButtons({ running: serverIsRunning, paused: serverIsPaused, starting: serverIsStarting });
 
@@ -267,15 +269,22 @@
         // Assign color by action: ban=red, unban=green, kick=amber
         if (action === 'ban') {
             button.className = 'btn btn-danger btn-icon';
+            button.title = 'Ban Steam ID';
+            button.setAttribute('aria-label', 'Ban player');
         } else if (action === 'unban') {
             button.className = 'btn btn-success btn-icon';
+            button.title = 'Unban Steam ID';
+            button.setAttribute('aria-label', 'Unban player');
         } else if (action === 'kick') {
             button.className = 'btn btn-warning btn-icon';
+            button.title = 'Kick player';
+            button.setAttribute('aria-label', 'Kick player');
         } else {
             button.className = 'btn btn-secondary btn-icon';
+            const label = action.charAt(0).toUpperCase() + action.slice(1);
+            button.title = label;
+            button.setAttribute('aria-label', label);
         }
-        button.setAttribute('aria-label', action.charAt(0).toUpperCase() + action.slice(1));
-        button.title = action.charAt(0).toUpperCase() + action.slice(1);
         if (action === 'ban') {
             button.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><line x1="5" y1="19" x2="19" y2="5"></line></svg>';
         } else if (action === 'unban') {
@@ -423,8 +432,8 @@
             btn.name = 'unban';
             btn.value = (entry && entry.steam_id) ? entry.steam_id : '';
             btn.className = 'btn btn-success btn-icon';
-            btn.setAttribute('aria-label', 'Unban');
-            btn.title = 'Unban';
+            btn.setAttribute('aria-label', 'Unban player');
+            btn.title = 'Unban Steam ID';
             btn.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><polyline points="9 12 12 15 17 10"></polyline></svg>';
             form.appendChild(btn);
             actionTd.appendChild(form);
@@ -729,6 +738,17 @@
 
     function populateWorldOptions() {
         const worldSelect = document.getElementById('world');
+        playerSavesToggle = document.getElementById('player-saves-toggle');
+        const playerSavesKey = `sdsm:server:${rootEl.dataset.serverId}:player-saves`;
+        if (playerSavesToggle) {
+            try {
+                const saved = localStorage.getItem(playerSavesKey);
+                playerSavesToggle.checked = saved === '1';
+            } catch(_) {}
+            playerSavesToggle.addEventListener('change', function(){
+                try { localStorage.setItem(playerSavesKey, this.checked ? '1' : '0'); } catch(_) {}
+            });
+        }
         const versionKey = currentVersionKey();
         const worlds = worldLists[versionKey] || [];
         const state = versionState[versionKey];
@@ -870,16 +890,27 @@
                 const key = `sdsm:server:${rootEl.dataset.serverId}:control:more`;
                 const savedState = sessionStorage.getItem(key);
                 const initiallyExpanded = savedState === '1';
+
+                const chevronDown = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                const chevronUp = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>';
+
+                function renderMoreToggle(expanded) {
+                    if (!moreToggle) return;
+                    moreToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    moreToggle.innerHTML = (expanded ? chevronUp : chevronDown) + '<span style="margin-left:6px;">' + (expanded ? 'Less' : 'More') + '</span>';
+                    moreToggle.title = expanded ? 'Hide advanced actions' : 'Show advanced actions';
+                }
+
                 if (initiallyExpanded) {
                     controlCard.classList.add('expanded');
-                    moreToggle.setAttribute('aria-expanded', 'true');
-                    moreToggle.textContent = 'Less';
+                    renderMoreToggle(true);
                     moreSection.setAttribute('aria-hidden', 'false');
+                } else {
+                    renderMoreToggle(false);
                 }
                 moreToggle.addEventListener('click', function(){
                     const expanded = controlCard.classList.toggle('expanded');
-                    this.textContent = expanded ? 'Less' : 'More';
-                    this.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    renderMoreToggle(expanded);
                     moreSection.setAttribute('aria-hidden', expanded ? 'false' : 'true');
                     try { sessionStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
                 });
@@ -1178,17 +1209,49 @@
             try {
                 serverIsStorming = !!data.storming;
                 if (stormButton) {
-                    const label = serverIsStorming ? 'Stop' : 'Start';
+                    const label = serverIsStorming ? 'Storm Stop' : 'Storm Start';
                     // Preserve icon markup while updating label
                     stormButton.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/><polyline points="13 11 9 17 15 17 11 23"/></svg>' + label;
+                    stormButton.title = serverIsStorming ? 'Stop the storm event' : 'Start a storm event';
                 }
             } catch (_) {}
 
-            if (Array.isArray(data.players)) {
-                renderLivePlayers(data.players);
-            } else {
-                renderLivePlayers([]);
-            }
+            // Detect new player connections and optionally trigger saveas
+            const playersArr = Array.isArray(data.players) ? data.players : [];
+            try {
+                const currentSet = new Set(playersArr.map(p => (p && (p.steam_id || p.SteamID)) ? String(p.steam_id || p.SteamID) : '').filter(Boolean));
+                const enabled = !!(playerSavesToggle && playerSavesToggle.checked);
+                if (enabled && serverIsRunning && !serverIsStarting) {
+                    const newIds = [];
+                    currentSet.forEach(id => { if (!knownLiveSteam.has(id)) newIds.push(id); });
+                    if (newIds.length && Number(rootEl.dataset.serverId || '0')) {
+                        const sid = Number(rootEl.dataset.serverId);
+                        newIds.forEach(id => {
+                            const now = new Date();
+                            const ts = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
+                            const filename = `${id}-${ts}`;
+                            fetch(`/api/servers/${sid}/command`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                                body: JSON.stringify({ type: 'console', payload: 'FILE saveas ' + filename })
+                            }).then((res) => {
+                                try {
+                                    if (typeof window.showToast === 'function') {
+                                        const type = res.headers.get('X-Toast-Type');
+                                        const title = res.headers.get('X-Toast-Title');
+                                        const message = res.headers.get('X-Toast-Message');
+                                        if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                                    }
+                                } catch(_) {}
+                            }).catch(() => {});
+                        });
+                    }
+                }
+                knownLiveSteam = currentSet;
+            } catch(_) { knownLiveSteam = new Set(); }
+
+            renderLivePlayers(playersArr);
 
             // Keep banned set updated before rendering History rows so we can annotate
             if (Array.isArray(data.banned)) {

@@ -57,18 +57,11 @@
                     Refresh
                 </button>
                 <a href="/manager" class="btn btn-secondary">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 8.62 4.6 1.65 1.65 0 0 0 10.13 3H10a2 2 0 1 1 4 0v.09c0 .66.38 1.26.98 1.54.2.1.41.17.63.2.53.08 1.06-.07 1.46-.47l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.4.4-.55.93-.47 1.46.03.22.1.43.2.63.28.6.88.98 1.54.98H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
+                    {{ template "icon_manager" . }}
                     Manager
                 </a>
                 <a href="/logout" class="btn btn-secondary">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
+                    {{ template "icon_logout" . }}
                     Logout
                 </a>
                 </div>

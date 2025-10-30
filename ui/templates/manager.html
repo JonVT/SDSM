@@ -834,7 +834,7 @@
             <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
         </div>
         <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-            <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                 <span id="theme-icon">🌙</span>
             </button>
@@ -854,6 +854,14 @@
                 <span id="manager-refresh-indicator" class="hidden">⟳</span>
                 Refresh
             </button>
+            <a href="/dashboard" class="btn btn-secondary" title="Go to Dashboard">
+                {{ template "icon_dashboard" . }}
+                Dashboard
+            </a>
+            <a href="/logout" class="btn btn-secondary" title="Logout">
+                {{ template "icon_logout" . }}
+                Logout
+            </a>
             </div>
             <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
         </div>

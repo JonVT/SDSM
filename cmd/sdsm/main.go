@@ -35,6 +35,7 @@ type App struct {
 	authService *middleware.AuthService
 	wsHub       *middleware.Hub
 	rateLimiter *middleware.RateLimiter
+	userStore   *manager.UserStore
 	tlsEnabled  bool
 	tlsCertPath string
 	tlsKeyPath  string
@@ -108,10 +109,17 @@ func main() {
 		authService: middleware.NewAuthService(),
 		wsHub:       middleware.NewHub(mgr.Log),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Minute/100), 10),
+		userStore:   manager.NewUserStore(mgr.Paths),
 		tlsEnabled:  envBool(envUseTLS),
 		tlsCertPath: os.Getenv(envTLSCert),
 		tlsKeyPath:  os.Getenv(envTLSKey),
 	}
+
+	// Ensure config directories exist and load users
+	if app.manager.Paths != nil {
+		_ = os.MkdirAll(app.manager.Paths.ConfigDir(), 0o755)
+	}
+	_ = app.userStore.Load()
 
 	if !app.manager.IsActive() {
 		logStuff("Manager failed to initialize")
@@ -306,7 +314,8 @@ func setupRouter() *gin.Engine {
 	})
 
 	// Initialize handlers
-	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager)
+	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
+	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlers(app.manager)
 
 	// Public routes
@@ -339,12 +348,30 @@ func setupRouter() *gin.Engine {
 		auth.GET("/logout", authHandlers.Logout)
 	}
 
+	// First-run admin setup routes (public until initialized)
+	r.GET("/admin/setup", authHandlers.AdminSetupGET)
+	r.POST("/admin/setup", authHandlers.AdminSetupPOST)
+
 	// API login (public - does not require token)
 	r.POST("/api/login", authHandlers.APILogin)
 
 	// API routes (require token authentication)
 	api := r.Group("/api")
 	api.Use(app.authService.RequireAPIAuth())
+	api.Use(func(c *gin.Context) {
+		// Attach role for API requests
+		username, _ := c.Get("username")
+		role := "user"
+		if uname, ok := username.(string); ok {
+			if u, ok := app.userStore.Get(uname); ok {
+				if string(u.Role) != "" {
+					role = string(u.Role)
+				}
+			}
+		}
+		c.Set("role", role)
+		c.Next()
+	})
 	{
 		api.GET("/stats", managerHandlers.APIStats)
 		api.GET("/servers", managerHandlers.APIServers)
@@ -354,7 +381,14 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
 		api.POST("/servers/:server_id/command", managerHandlers.APIServerCommand)
-		api.POST("/servers/:server_id/delete", managerHandlers.APIServerDelete)
+		// Admin-only delete via API
+		api.POST("/servers/:server_id/delete", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServerDelete(c)
+		})
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)
 	}
@@ -362,20 +396,76 @@ func setupRouter() *gin.Engine {
 	// Protected web routes
 	protected := r.Group("/")
 	protected.Use(app.authService.RequireAuth())
+	// Attach user role to context for downstream checks
 	protected.Use(func(c *gin.Context) {
+		usernameVal, _ := c.Get("username")
+		role := "user"
+		if uname, ok := usernameVal.(string); ok {
+			if u, ok := app.userStore.Get(uname); ok {
+				if string(u.Role) != "" {
+					role = string(u.Role)
+				}
+			}
+			// Safety net: if there are zero admin users but a user named "admin" exists,
+			// promote them to admin to prevent lockout (and persist the change).
+			if app.userStore.AdminCount() == 0 && strings.EqualFold(uname, "admin") {
+				if err := app.userStore.SetRole("admin", manager.RoleAdmin); err == nil {
+					role = "admin"
+					if app.manager != nil && app.manager.Log != nil {
+						app.manager.Log.Write("No admin found; auto-promoted 'admin' to admin role.")
+					}
+				}
+			}
+		}
+		c.Set("role", role)
 		c.Next()
 	})
 	{
 		protected.GET("/dashboard", managerHandlers.Dashboard)
 		protected.GET("/frame", managerHandlers.Frame)
 		protected.GET("/manager", managerHandlers.ManagerGET)
+		// Debug endpoint to verify identity and role
+		protected.GET("/whoami", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"username": c.GetString("username"),
+				"role":     c.GetString("role"),
+			})
+		})
+		// Admin-only user management
+		protected.GET("/users", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			userHandlers.UsersGET(c)
+		})
+		protected.POST("/users", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			userHandlers.UsersPOST(c)
+		})
 		protected.POST("/update", managerHandlers.UpdatePOST)
 		protected.GET("/update/progress", managerHandlers.UpdateProgressGET)
 		protected.GET("/updating", managerHandlers.UpdateStream)
 		protected.GET("/logs/updates", managerHandlers.UpdateLogGET)
 		protected.GET("/logs/sdsm", managerHandlers.ManagerLogGET)
-		protected.GET("/server/new", managerHandlers.NewServerGET)
-		protected.POST("/server/new", managerHandlers.NewServerPOST)
+		// Admin-only: server creation
+		protected.GET("/server/new", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
+				return
+			}
+			managerHandlers.NewServerGET(c)
+		})
+		protected.POST("/server/new", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
+				return
+			}
+			managerHandlers.NewServerPOST(c)
+		})
 		protected.GET("/server/:server_id/status.json", managerHandlers.APIServerStatus)
 		protected.GET("/server/:server_id/log", managerHandlers.APIServerLog)
 		protected.GET("/server/:server_id", managerHandlers.ServerGET)

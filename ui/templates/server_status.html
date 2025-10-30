@@ -51,30 +51,18 @@
                         </svg>
                         Manager
                     </a>
+                    <a href="/dashboard" class="btn btn-secondary">
+                        {{ template "icon_dashboard" . }}
+                        Dashboard
+                    </a>
+                    <a href="/manager" class="btn btn-secondary">
+                        {{ template "icon_manager" . }}
+                        Manager
+                    </a>
                     <a href="/logout" class="btn btn-secondary">
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                            <polyline points="16 17 21 12 16 7"/>
-                            <line x1="21" y1="12" x2="9" y2="12"/>
-                        </svg>
+                        {{ template "icon_logout" . }}
                         Logout
                     </a>
-                    </div>
-                    <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
-                </div>
-            </header>
-
-            <!-- Server information moved out of the header into a dedicated card -->
-            <div class="server-content">
-            {{ if .server.LastError }}
-            <div id="server-error-banner" class="alert alert-danger" role="alert" aria-live="polite">
-                <div class="alert-icon" aria-hidden="true">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12" y2="16"></line>
-                    </svg>
-                </div>
                 <div class="alert-content">
                     <div class="alert-title">Startup error detected</div>
                     <div class="alert-message" id="server-error-text">{{ .server.LastError }}</div>
@@ -162,13 +150,13 @@
             <!-- Top Right: Chat -->
             {{ template "server_status_chat.html" . }}
 
-            <!-- Bottom Left: Backups (placeholder where Control used to be) -->
-            <div class="card card-backups">
+            <!-- Bottom Left: Saves (placeholder where Control used to be) -->
+            <div class="card card-saves">
                 <div class="card-header">
-                    <h2 class="card-title">Backups</h2>
+                    <h2 class="card-title">Saves</h2>
                     <span class="pill">Coming Soon</span>
                 </div>
-                <div class="empty-state">Backup management will appear here.</div>
+                <div class="empty-state">Save management will appear here.</div>
             </div>
 
             <!-- Bottom Right: Startup Parameters -->

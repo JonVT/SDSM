@@ -36,6 +36,7 @@ func (h *ManagerHandlers) ServerGET(c *gin.Context) {
 
 func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	username, _ := c.Get("username")
+	role := c.GetString("role")
 
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -192,6 +193,10 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			return
 		}
 	case c.PostForm("deploy") != "":
+		if role != "admin" {
+			c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required to deploy servers."})
+			return
+		}
 		if err := s.Deploy(); err != nil {
 			errMsg := fmt.Sprintf("Deploy failed: %v", err)
 			if isAsync {
@@ -212,6 +217,17 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			return
 		}
 	case c.PostForm("update_server") != "":
+		if role != "admin" {
+			c.Header("X-Toast-Type", "error")
+			c.Header("X-Toast-Title", "Permission Denied")
+			c.Header("X-Toast-Message", "Admin privileges required to update server files.")
+			if isAsync {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
+			h.renderServerPage(c, http.StatusForbidden, s, username, "Admin privileges required.")
+			return
+		}
 		if s.Logger != nil {
 			s.Logger.Write("Update Server requested via UI; redeploying server files.")
 		}
@@ -236,6 +252,10 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			return
 		}
 	case c.PostForm("delete") != "":
+		if role != "admin" {
+			c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required to delete servers."})
+			return
+		}
 		if s.Running {
 			s.Stop()
 		}
@@ -254,6 +274,10 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/dashboard")
 		return
 	case c.PostForm("update") != "":
+		if role != "admin" {
+			h.renderServerPage(c, http.StatusForbidden, s, username, "Admin privileges required to change startup parameters.")
+			return
+		}
 		originalBeta := s.Beta
 		// Capture originals for core start parameters to decide if we need a (future) save purge
 		origWorld := s.World

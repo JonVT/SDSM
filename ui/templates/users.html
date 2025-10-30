@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management - SDSM</title>
+  <link rel="stylesheet" href="/static/modern.css">
+  <link rel="stylesheet" href="/static/ui-theme.css">
+</head>
+<body>
+  <div class="container" style="max-width: 1000px; margin: 32px auto;">
+    <header style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
+      <h1 class="h2">User Management</h1>
+      <a href="/manager" class="btn btn-secondary">Back to Manager</a>
+    </header>
+
+    {{ if .error }}
+    <div class="alert alert-danger" role="alert">{{ .error }}</div>
+    {{ end }}
+
+    <section class="card" style="padding: 16px; margin-bottom: 16px;">
+      <h2 class="h4" style="margin-bottom: 12px;">Create User</h2>
+      <form method="POST" action="/users" class="grid" style="grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items:end;">
+        <input type="hidden" name="create" value="1" />
+        <div>
+          <label class="form-label">Username</label>
+          <input name="new_username" class="form-input" placeholder="username" required />
+        </div>
+        <div>
+          <label class="form-label">Password</label>
+          <input name="new_password" type="password" class="form-input" placeholder="password" required />
+        </div>
+        <div>
+          <label class="form-label">Role</label>
+          <select name="new_role" class="form-input">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div>
+          <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" style="padding: 16px;">
+      <h2 class="h4" style="margin-bottom: 12px;">Users</h2>
+      <div class="table-responsive">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th style="width: 380px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {{ range .users }}
+            <tr>
+              <td>{{ .Username }}</td>
+              <td>{{ .Role }}</td>
+              <td>{{ .CreatedAt }}</td>
+              <td>
+                <form method="POST" action="/users" style="display:inline-flex; gap: 8px; align-items: center;">
+                  <input type="hidden" name="set_role_user" value="{{ .Username }}" />
+                  <select name="set_role_value" class="form-input" style="width: 140px;">
+                    <option value="user" {{ if eq .Role "user" }}selected{{ end }}>User</option>
+                    <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
+                  </select>
+                  <button type="submit" class="btn btn-secondary">Update Role</button>
+                </form>
+                <form method="POST" action="/users" style="display:inline-flex; gap: 8px; align-items: center; margin-left: 8px;">
+                  <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
+                  <input name="reset_password_value" type="password" class="form-input" placeholder="new password" style="width: 160px;" />
+                  <button type="submit" class="btn btn-secondary">Set Password</button>
+                </form>
+                <form method="POST" action="/users" style="display:inline; margin-left: 8px;" onsubmit="return confirm('Delete user {{ .Username }}?');">
+                  <button name="delete" value="{{ .Username }}" type="submit" class="btn btn-danger">Delete</button>
+                </form>
+              </td>
+            </tr>
+          {{ end }}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

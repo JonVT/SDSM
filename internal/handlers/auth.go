@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
@@ -14,6 +14,7 @@ import (
 type AuthHandlers struct {
 	authService *middleware.AuthService
 	manager     *manager.Manager
+	users       *manager.UserStore
 }
 
 type LoginRequest struct {
@@ -21,36 +22,14 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required" validate:"required,min=6"`
 }
 
-// User credentials (in production, this should be from a database)
-var userCredentials = map[string]string{
-	"admin": "", // This will be set with hashed password
-	"user1": "", // Add more users here
-	"user2": "", // Add more users here
-}
-
-func NewAuthHandlers(authService *middleware.AuthService, mgr *manager.Manager) *AuthHandlers {
+func NewAuthHandlers(authService *middleware.AuthService, mgr *manager.Manager, store *manager.UserStore) *AuthHandlers {
 	h := &AuthHandlers{
 		authService: authService,
 		manager:     mgr,
+		users:       store,
 	}
-
-	// Initialize user passwords
-	// Priority: Environment variables > Default passwords
-	userPasswords := map[string]string{
-		"admin": getEnvOrDefault("SDSM_ADMIN_PASSWORD", "admin123"),
-		"user1": getEnvOrDefault("SDSM_USER1_PASSWORD", "password1"),
-		"user2": getEnvOrDefault("SDSM_USER2_PASSWORD", "password2"),
-	}
-
-	for username, password := range userPasswords {
-		hashedPassword, err := authService.HashPassword(password)
-		if err != nil {
-			// In production, handle this error properly
-			panic(fmt.Sprintf("Failed to hash password for user %s: %v", username, err))
-		}
-		userCredentials[username] = hashedPassword
-	}
-
+	// Ensure latest on boot (ignore error if missing)
+	_ = h.users.Load()
 	return h
 }
 
@@ -63,6 +42,11 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 func (h *AuthHandlers) LoginGET(c *gin.Context) {
+	// If no users exist, redirect to admin setup
+	if h.users.IsEmpty() {
+		c.Redirect(http.StatusFound, "/admin/setup")
+		return
+	}
 	// Check if already authenticated
 	if token, _ := c.Cookie(middleware.CookieName); token != "" {
 		if _, err := h.authService.ValidateToken(token); err == nil {
@@ -79,6 +63,11 @@ func (h *AuthHandlers) LoginGET(c *gin.Context) {
 }
 
 func (h *AuthHandlers) LoginPOST(c *gin.Context) {
+	// If no users exist, direct to admin setup
+	if h.users.IsEmpty() {
+		c.Redirect(http.StatusFound, "/admin/setup")
+		return
+	}
 	username := c.PostForm("username")
 	password := c.PostForm("password")
 	redirect := c.PostForm("redirect")
@@ -91,9 +80,9 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 		return
 	}
 
-	// Validate credentials
-	hashedPassword, exists := userCredentials[username]
-	if !exists || !h.authService.CheckPassword(password, hashedPassword) {
+	// Validate credentials against user store
+	u, exists := h.users.Get(username)
+	if !exists || !h.authService.CheckPassword(password, u.PasswordHash) {
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"error":    "Invalid username or password",
 			"redirect": redirect,
@@ -141,8 +130,8 @@ func (h *AuthHandlers) APILogin(c *gin.Context) {
 	password := req.Password
 
 	// Validate credentials
-	hashedPassword, exists := userCredentials[username]
-	if !exists || !h.authService.CheckPassword(password, hashedPassword) {
+	u, exists := h.users.Get(username)
+	if !exists || !h.authService.CheckPassword(password, u.PasswordHash) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "Invalid username or password",
 		})
@@ -162,4 +151,50 @@ func (h *AuthHandlers) APILogin(c *gin.Context) {
 		"token": token,
 		"user":  username,
 	})
+}
+
+// Admin setup pages for first run
+func (h *AuthHandlers) AdminSetupGET(c *gin.Context) {
+	// If already initialized, go to login
+	if !h.users.IsEmpty() {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "admin_setup.html", gin.H{})
+}
+
+func (h *AuthHandlers) AdminSetupPOST(c *gin.Context) {
+	if !h.users.IsEmpty() {
+		c.Redirect(http.StatusFound, "/login")
+		return
+	}
+	password := strings.TrimSpace(c.PostForm("password"))
+	confirm := strings.TrimSpace(c.PostForm("confirm"))
+	if password == "" || len(password) < 8 {
+		c.HTML(http.StatusBadRequest, "admin_setup.html", gin.H{"error": "Password must be at least 8 characters."})
+		return
+	}
+	if password != confirm {
+		c.HTML(http.StatusBadRequest, "admin_setup.html", gin.H{"error": "Passwords do not match."})
+		return
+	}
+	hash, err := h.authService.HashPassword(password)
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "admin_setup.html", gin.H{"error": "Failed to set password."})
+		return
+	}
+	if _, err := h.users.CreateUser("admin", hash, manager.RoleAdmin); err != nil {
+		c.HTML(http.StatusInternalServerError, "admin_setup.html", gin.H{"error": "Failed to create admin user."})
+		return
+	}
+	// Optionally create a default non-admin viewer user if env provided
+	if viewer := strings.TrimSpace(getEnvOrDefault("SDSM_VIEWER_USERNAME", "")); viewer != "" {
+		if viewerPass := os.Getenv("SDSM_VIEWER_PASSWORD"); viewerPass != "" {
+			if viewerHash, err := h.authService.HashPassword(viewerPass); err == nil {
+				_, _ = h.users.CreateUser(viewer, viewerHash, manager.RoleUser)
+			}
+		}
+	}
+	// Redirect to login
+	c.Redirect(http.StatusFound, "/login")
 }

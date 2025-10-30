@@ -52,6 +52,16 @@ func (p *Paths) LogsDir() string {
 	return filepath.Join(p.RootPath, "logs")
 }
 
+// ConfigDir returns the application configuration directory.
+func (p *Paths) ConfigDir() string {
+	return filepath.Join(p.RootPath, "config")
+}
+
+// UsersFile returns the path to the user database file.
+func (p *Paths) UsersFile() string {
+	return filepath.Join(p.ConfigDir(), "users.json")
+}
+
 // LogFile returns the main SDSM log file path.
 func (p *Paths) LogFile() string {
 	return filepath.Join(p.LogsDir(), "sdsm.log")
@@ -90,6 +100,7 @@ func (p *Paths) DeployRoot(logger *Logger) {
 	mkdirLog(p.BepInExDir(), "BepInEx")
 	mkdirLog(p.LaunchPadDir(), "launchpad")
 	mkdirLog(p.LogsDir(), "logs")
+	mkdirLog(p.ConfigDir(), "config")
 }
 
 // ServerName returns the canonical name for a server id.

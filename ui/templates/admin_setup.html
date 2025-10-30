@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Setup - SDSM</title>
+  <link rel="stylesheet" href="/static/modern.css" />
+  <link rel="stylesheet" href="/static/ui-theme.css" />
+  <style>
+    .container { min-height: 100vh; display:flex; align-items:center; justify-content:center; background: var(--surface-100); padding: var(--space-6); }
+    .card { background: var(--surface-0); border: 1px solid var(--border-color); border-radius: var(--radius-2xl); padding: var(--space-6); width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); }
+    .title { font-size: var(--text-2xl); font-weight: 700; margin-bottom: var(--space-2); }
+    .subtitle { color: var(--text-secondary); margin-bottom: var(--space-6); }
+    .error { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); padding: var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-4); }
+    .hint { color: var(--text-secondary); font-size: var(--text-sm); margin-top: var(--space-2); }
+  </style>
+  <script>
+    function validateForm(e){
+      const p = document.getElementById('password').value;
+      const c = document.getElementById('confirm').value;
+      if(p.length < 8){
+        e.preventDefault();
+        showError('Password must be at least 8 characters.');
+        return false;
+      }
+      if(p !== c){
+        e.preventDefault();
+        showError('Passwords do not match.');
+        return false;
+      }
+      return true;
+    }
+    function showError(msg){
+      let box = document.getElementById('error-box');
+      if(!box){
+        box = document.createElement('div');
+        box.className = 'error';
+        box.id = 'error-box';
+        const form = document.getElementById('setup-form');
+        form.parentNode.insertBefore(box, form);
+      }
+      box.textContent = msg;
+    }
+  </script>
+  <meta name="robots" content="noindex" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  </head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div style="text-align:center; margin-bottom: var(--space-4);">
+        <img src="/sdsm.png" alt="SDSM" width="64" height="64" style="opacity:.9" />
+      </div>
+      <h1 class="title">Create Admin Account</h1>
+      <p class="subtitle">Welcome! Set a secure password for the built-in <strong>admin</strong> user to finish setup.</p>
+      {{ if .error }}<div class="error" role="alert">{{ .error }}</div>{{ end }}
+      <form id="setup-form" method="POST" action="/admin/setup" onsubmit="validateForm(event)">
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input class="form-input" value="admin" disabled />
+          <div class="hint">The admin username is fixed to "admin".</div>
+        </div>
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <input id="password" name="password" type="password" class="form-input" placeholder="Enter a strong password" required autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label for="confirm" class="form-label">Confirm Password</label>
+          <input id="confirm" name="confirm" type="password" class="form-input" placeholder="Re-enter your password" required autocomplete="new-password" />
+        </div>
+        <div class="form-group" style="margin-top: var(--space-4);">
+          <button type="submit" class="btn btn-primary" style="width:100%">Set Admin Password</button>
+        </div>
+      </form>
+      <p class="hint">If running headless, set env SDSM_VIEWER_USERNAME/SDSM_VIEWER_PASSWORD for an optional read-only user before first login.</p>
+    </div>
+  </div>
+</body>
+</html>
