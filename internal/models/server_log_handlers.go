@@ -159,6 +159,13 @@ var (
 					return
 				}
 				t := s.parseTime(line)
+
+				// Always accept chat messages from "Server" without checking online clients
+				if strings.EqualFold(name, "Server") {
+					s.addChatMessage(name, t, message)
+					return
+				}
+
 				for _, client := range s.LiveClients() {
 					if client == nil {
 						continue

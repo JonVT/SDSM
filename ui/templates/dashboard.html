@@ -35,7 +35,8 @@
                 </p>
                 <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
             </div>
-            <div class="hero-actions">
+            <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
+                <div style="display: flex; align-items: center; gap: var(--space-2);">
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                     <span id="theme-icon">🌙</span>
                 </button>
@@ -70,6 +71,8 @@
                     </svg>
                     Logout
                 </a>
+                </div>
+                <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
             </div>
         </header>
     </div>

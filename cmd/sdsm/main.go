@@ -24,6 +24,12 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// BuildTime is set at compile time via -ldflags for development builds
+var BuildTime string
+
+// Version is set at compile time via -ldflags for release builds
+var Version string
+
 type App struct {
 	manager     *manager.Manager
 	authService *middleware.AuthService
@@ -244,6 +250,18 @@ func setupRouter() *gin.Engine {
 			}
 			return false
 		},
+		"buildTime": func() string {
+			// For releases, show version number
+			if Version != "" {
+				return Version
+			}
+			// For dev builds, show timestamp
+			if BuildTime != "" {
+				return BuildTime
+			}
+			// Fallback for unset builds
+			return "dev"
+		},
 	}
 	r.SetFuncMap(funcMap)
 	// Build a combined template set from embedded assets so both root and subdir files are available by name
@@ -335,6 +353,7 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/log", managerHandlers.APIServerLog)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
+		api.POST("/servers/:server_id/command", managerHandlers.APIServerCommand)
 		api.POST("/servers/:server_id/delete", managerHandlers.APIServerDelete)
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)

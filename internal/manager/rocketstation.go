@@ -117,6 +117,7 @@ func LoadStartConditionDefs(basePath string) (map[string]struct {
 	})
 
 	for _, sc := range data.StartConditions {
+		// StreamingAssets/Localization. FileName is the XML filename (e.g. english.xml).
 		defs[sc.Id] = struct {
 			Name          string
 			Description   string
@@ -124,6 +125,7 @@ func LoadStartConditionDefs(basePath string) (map[string]struct {
 		}{sc.Name.Key, sc.Description.Key, sc.PreviewButton.Path}
 	}
 	return defs, nil
+	// DisplayName and Description are localized using the selected language file.
 }
 
 // Scan world definitions
@@ -133,23 +135,27 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 		return nil, err
 	}
 
+	// Name and Description are localized if available.
 	scDefs, err := LoadStartConditionDefs(basePath)
 	if err != nil {
 		return nil, err
 	}
 
+	// with ID being the value the dedicated server accepts.
 	worldsPath := filepath.Join(basePath, "StreamingAssets", "Worlds")
 	entries, err := os.ReadDir(worldsPath)
 	if err != nil {
 		return nil, err
 	}
 
+	// including localized metadata, start conditions/locations, and image path.
 	var worlds []RSWorldDefinition
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
+		// localization keys to translated strings.
 		xmlFiles, _ := filepath.Glob(filepath.Join(worldsPath, entry.Name(), "*.xml"))
 		for _, xmlFile := range xmlFiles {
 			var data struct {
@@ -182,6 +188,7 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 				} `xml:"WorldSettings"`
 			}
 
+			// data folder and returns a map keyed by condition ID.
 			if err := readXML(xmlFile, &data); err != nil || data.WorldSettings.World.Id == "" {
 				continue
 			}
@@ -199,11 +206,13 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 				RatingColor:      w.Rating.Color,
 			}
 
+			// StreamingAssets using the provided language file for localization.
 			// Attach world image relative path when known
 			if img := WorldImageFileName(world.ID); img != "" {
 				world.Image = filepath.Join("Images", "SpaceMapImages", "Planets", img)
 			}
 
+			// WorldImageFileName returns the map image file name for a world ID prefix.
 			for _, sc := range w.StartCondition {
 				if def, ok := scDefs[sc.Id]; ok {
 					world.StartConditions = append(world.StartConditions, RSStartCondition{
@@ -215,6 +224,7 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 					})
 				}
 			}
+			// from the StreamingAssets path based on its world ID.
 
 			for _, sl := range w.StartLocation {
 				id := strings.TrimSpace(sl.Id)
@@ -273,6 +283,7 @@ func GetWorldImage(basePath string, worldId string) ([]byte, error) {
 }
 
 // Scan languages
+// ScanLanguages enumerates available language XML files under Localization.
 func ScanLanguages(basePath string) ([]RSLanguage, error) {
 	languagePath := filepath.Join(basePath, "StreamingAssets", "Language")
 	xmlFiles, err := filepath.Glob(filepath.Join(languagePath, "*.xml"))
@@ -304,6 +315,7 @@ func ScanLanguages(basePath string) ([]RSLanguage, error) {
 }
 
 // Scan difficulties
+// ScanDifficulties parses difficultySettings.xml and returns localized IDs.
 func ScanDifficulties(basePath string, languageFile string) ([]RSDifficulty, error) {
 	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
 	if err != nil {
@@ -347,6 +359,7 @@ func ScanDifficulties(basePath string, languageFile string) ([]RSDifficulty, err
 }
 
 // Scan start locations for a specific world directory
+// ScanStartLocations parses the start locations for a given world directory.
 func ScanStartLocations(basePath string, languageFile string, worldDir string) ([]RSStartLocation, error) {
 	translations, err := LoadLanguageTranslations(filepath.Join(basePath, "StreamingAssets", "Language", languageFile))
 	if err != nil {

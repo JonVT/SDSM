@@ -43,7 +43,8 @@
                     <p class="hero-meta-text">Use the sections below to start, stop, and configure your server.</p>
                     <span class="pill">Real-time</span>
                 </div>
-                <div class="hero-actions">
+                <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
+                    <div style="display: flex; align-items: center; gap: var(--space-2);">
                     <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
                     <a href="/dashboard" class="btn btn-secondary">
                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -69,6 +70,8 @@
                         </svg>
                         Logout
                     </a>
+                    </div>
+                    <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
                 </div>
             </header>
 
@@ -130,7 +133,7 @@
                 <div class="server-info-row">
                     <img 
                         class="world-thumb" 
-                        src="/server/{{.server.ID}}/world-image" 
+                        src="/server/{{.server.ID}}/world-image?v={{.server.WorldID}}" 
                         alt="World image for {{.server.World}}" 
                         data-world-image="{{ if .worldInfo }}{{ .worldInfo.Image }}{{ end }}"
                         onerror="this.style.display='none'">
@@ -593,7 +596,7 @@
                                 <polyline points="17 21 17 13 7 13 7 21"/>
                                 <polyline points="7 3 7 8 15 8"/>
                             </svg>
-                            MyUpdate
+                            Update
                         </button>
                     </div>
                 </form>
@@ -725,6 +728,7 @@
         const errorTextEl = document.getElementById('server-error-text');
         const errorTimeEl = document.getElementById('server-error-time');
         let bannedSteamSet = new Set();
+        const worldThumb = document.querySelector('.world-thumb');
 
         let serverIsRunning = rootEl.dataset.serverRunning === "true";
         let serverIsPaused = rootEl.dataset.serverPaused === "true";
@@ -1360,6 +1364,7 @@
                 worldSelect.innerHTML = '<option value="">No worlds available</option>';
                 selectOptionWithFallback(worldSelect, state.world, ' (configured)');
                 updateWorldOptions();
+                updateWorldThumb();
                 return;
             }
 
@@ -1380,6 +1385,7 @@
             state.world = worldSelect.value;
 
             updateWorldOptions();
+            updateWorldThumb();
         }
 
         function updateWorldOptions() {
@@ -1417,6 +1423,31 @@
             }
             selectOptionWithFallback(locSelect, state.startLocation);
             selectOptionWithFallback(condSelect, state.startCondition);
+        }
+
+        function updateWorldThumb() {
+            try {
+                if (!worldThumb) return;
+                const worldSelect = document.getElementById('world');
+                const world = worldSelect ? (worldSelect.value || '').trim() : '';
+                const serverId = Number(rootEl.dataset.serverId || '0');
+                if (!serverId || !world) {
+                    worldThumb.style.display = 'none';
+                    return;
+                }
+                // Reset display in case a previous error hid the image
+                worldThumb.style.removeProperty('display');
+                const betaFlag = currentVersionKey() === 'beta';
+                const v = encodeURIComponent((betaFlag ? 'beta' : 'release') + '-' + world);
+                const url = `/server/${serverId}/world-image?world=${encodeURIComponent(world)}&beta=${betaFlag}&v=${v}`;
+                // Force reload if src is same string
+                if (worldThumb.src !== window.location.origin + url) {
+                    worldThumb.src = url;
+                } else {
+                    // Append a tiny nonce to bust cache if the same URL is set
+                    worldThumb.src = url + `&t=${Date.now()}`;
+                }
+            } catch (_) { /* no-op */ }
         }
 
         function populateDifficultyOptions() {
@@ -1458,6 +1489,7 @@
 
             populateWorldOptions();
             populateDifficultyOptions();
+            updateWorldThumb();
 
             const tabButtons = document.querySelectorAll('.tab-set .tab-btn');
             const tabContents = document.querySelectorAll('.tab-panel');
@@ -1482,6 +1514,7 @@
                     state.startLocation = '';
                     state.startCondition = '';
                     updateWorldOptions();
+                    updateWorldThumb();
                 });
             }
 
@@ -1489,6 +1522,7 @@
                 radio.addEventListener('change', () => {
                     populateWorldOptions();
                     populateDifficultyOptions();
+                    updateWorldThumb();
                 });
             });
 
@@ -1972,6 +2006,7 @@
                             'Content-Type': 'application/json',
                             'Accept': 'application/json'
                         },
+                        credentials: 'same-origin',
                         body: JSON.stringify({ type: 'chat', payload: message })
                     })
                     .then((res) => {
@@ -2129,6 +2164,74 @@
                 }
             })();
 
+            // Save button: sends FILE save console command via API
+            (function(){
+                if (!saveButton || !serverId) return;
+                saveButton.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (saveButton.disabled) return;
+                    setButtonDisabled(saveButton, true);
+                    toggleButtonSpinner(saveButton, true);
+                    fetch(`/api/servers/${serverId}/command`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ type: 'console', payload: 'FILE save' })
+                    })
+                    .then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchStatus();
+                    })
+                    .catch(() => { /* no-op */ })
+                    .finally(() => { toggleButtonSpinner(saveButton, false); setButtonDisabled(saveButton, false); });
+                });
+            })();
+
+            // Pause/Resume button: sends PAUSE true/false console command via API
+            (function(){
+                if (!pauseButton || !serverId) return;
+                pauseButton.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (pauseButton.disabled) return;
+                    const isPaused = serverIsPaused;
+                    const command = isPaused ? 'PAUSE false' : 'PAUSE true';
+                    setButtonDisabled(pauseButton, true);
+                    toggleButtonSpinner(pauseButton, true);
+                    fetch(`/api/servers/${serverId}/command`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ type: 'console', payload: command })
+                    })
+                    .then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchStatus();
+                    })
+                    .catch(() => { /* no-op */ })
+                    .finally(() => { toggleButtonSpinner(pauseButton, false); setButtonDisabled(pauseButton, false); });
+                });
+            })();
+
             // Make Live/History Kick/Ban async as well (with toasts and button disable)
             (function(){
                 // Local safe wrappers in case shared helpers aren't present
@@ -2162,6 +2265,29 @@
                     if (!action || !value) return;
                     if (btn && btn.disabled) return;
                     if (btn) { setBtnDisabled(btn, true); toggleBtnSpinner(btn, true); }
+                    
+                    // For kick action, send console command via API
+                    if (action === 'kick') {
+                        if (!serverId) {
+                            if (btn) { toggleBtnSpinner(btn, false); setBtnDisabled(btn, false); }
+                            return;
+                        }
+                        fetch(`/api/servers/${serverId}/command`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ type: 'console', payload: 'KICK ' + value })
+                        })
+                        .then((res) => { showToastFromResponse(res); fetchStatus(); return res.ok ? res.json().catch(() => ({})) : Promise.resolve({}); })
+                        .catch(() => { /* ignore; polling will reconcile */ })
+                        .finally(() => { if (btn) { toggleBtnSpinner(btn, false); setBtnDisabled(btn, false); } });
+                        return;
+                    }
+                    
+                    // For ban/unban, use existing form POST
                     const body = encodeURIComponent(action) + '=' + encodeURIComponent(value);
                     fetch(window.location.pathname, {
                         method: 'POST',

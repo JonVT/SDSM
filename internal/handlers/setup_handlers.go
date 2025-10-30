@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SetupGET renders the setup page with missing components and recent deploy info.
 func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 	if !h.manager.IsUpdating() {
 		h.manager.CheckMissingComponents()
@@ -21,6 +22,7 @@ func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 	})
 }
 
+// SetupSkipPOST marks setup as skipped and redirects to manager.
 func (h *ManagerHandlers) SetupSkipPOST(c *gin.Context) {
 	h.manager.NeedsUploadPrompt = false
 	h.manager.Log.Write("User skipped initial setup")
@@ -36,6 +38,8 @@ func (h *ManagerHandlers) SetupSkipPOST(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/manager")
 }
 
+// SetupInstallPOST kicks off automatic installation for missing components.
+// The work runs in the background and logs progress in the update log.
 func (h *ManagerHandlers) SetupInstallPOST(c *gin.Context) {
 	if h.manager.SetupInProgress {
 		c.JSON(http.StatusConflict, gin.H{
@@ -123,6 +127,7 @@ func (h *ManagerHandlers) SetupInstallPOST(c *gin.Context) {
 	})
 }
 
+// SetupStatusGET returns JSON with current setup state and last update line.
 func (h *ManagerHandlers) SetupStatusGET(c *gin.Context) {
 	updating := h.manager.IsUpdating()
 	if !updating {
@@ -138,6 +143,7 @@ func (h *ManagerHandlers) SetupStatusGET(c *gin.Context) {
 	})
 }
 
+// SetupUpdatePOST starts a full deployment of all components.
 func (h *ManagerHandlers) SetupUpdatePOST(c *gin.Context) {
 	h.manager.NeedsUploadPrompt = false
 	h.manager.Log.Write("User requested auto-update for missing components")
@@ -151,6 +157,8 @@ func (h *ManagerHandlers) SetupUpdatePOST(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/login?message=Update started. Please wait for components to download.")
 }
 
+// determineSetupDeployTargets maps a list of missing components to an ordered
+// list of DeployType steps, with a fallback to deploy all when detection is unclear.
 func determineSetupDeployTargets(missing []string, serverCount int) ([]manager.DeployType, bool) {
 	if len(missing) == 0 {
 		return nil, false

@@ -1,3 +1,5 @@
+// Package manager orchestrates game-data scanning, caching, deployments,
+// and server lifecycle for the Stationeers Dedicated Server Manager (SDSM).
 package manager
 
 import (
@@ -979,10 +981,12 @@ func (m *Manager) Restart() {
 	os.Exit(0)
 }
 
+// GetWorlds returns the list of world display names for the release channel.
 func (m *Manager) GetWorlds() []string {
 	return m.GetWorldsByVersion(false)
 }
 
+// GetWorldsByVersion returns world display names for either release or beta.
 func (m *Manager) GetWorldsByVersion(beta bool) []string {
 	cache := m.worldDefinitionsCache(beta)
 	if cache == nil || len(cache.definitions) == 0 {
@@ -1008,10 +1012,9 @@ func (m *Manager) ResolveWorldID(world string, beta bool) string {
 // Deprecated helper no longer used; callers should prefer getGameDataPathForVersion.
 // func (m *Manager) getGameDataPath() string { return m.getGameDataPathForVersion(false) }
 
+// getGameDataPathForVersion resolves the best game data path for the selected channel.
 func (m *Manager) getGameDataPathForVersion(beta bool) string {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
+	m.ensurePaths()
 
 	releasePath := filepath.Join(m.Paths.ReleaseDir(), "rocketstation_DedicatedServer_Data")
 	betaPath := filepath.Join(m.Paths.BetaDir(), "rocketstation_DedicatedServer_Data")
@@ -1044,6 +1047,15 @@ func (m *Manager) getGameDataPathForVersion(beta bool) string {
 	return releasePath
 }
 
+// ensurePaths guarantees that m.Paths is non-nil and returns it.
+func (m *Manager) ensurePaths() *utils.Paths {
+	if m.Paths == nil {
+		m.Paths = utils.NewPaths("/tmp/sdsm")
+	}
+	return m.Paths
+}
+
+// GetDifficulties returns difficulty IDs for the release channel.
 func (m *Manager) GetDifficulties() []string {
 	return m.GetDifficultiesForVersion(false)
 }
@@ -1056,15 +1068,14 @@ func (m *Manager) GetDifficultiesForVersion(beta bool) []string {
 	return []string{}
 }
 
-// Removed: GetStartConditions; callers should use GetStartConditionsForWorldVersion.
-
+// GetLanguages returns supported language names for the release channel.
 func (m *Manager) GetLanguages() []string {
 	// Use release channel languages via RocketStation scan
 	return m.GetLanguagesForVersion(false)
 }
 
-// GetLanguagesForVersion returns available languages for release/beta independently.
-// It prefers the RocketStation language scan, falling back to folder scanning.
+// GetLanguagesForVersion returns available languages for release/beta
+// independently using the RocketStation language scan.
 func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 	base := m.getGameDataPathForVersion(beta)
 	if langs, err := ScanLanguages(base); err == nil && len(langs) > 0 {
@@ -1081,29 +1092,8 @@ func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 	return []string{}
 }
 
-// Legacy XML structure types removed; RocketStation scanners provide structured data.
-
-// Deprecated: legacy XML helpers retained previously for world metadata booleans.
-// type boolFlagElement struct { Value string `xml:"Value,attr"`; Text string `xml:",chardata"` }
-
-// Deprecated: legacy XML helpers no longer used.
-// func attrValueIsTrue(attrs []xml.Attr) bool {
-//     for _, attr := range attrs {
-//         if strings.EqualFold(attr.Name.Local, "Value") && strings.EqualFold(attr.Value, "true") {
-//             return true
-//         }
-//     }
-//     return false
-// }
-
-// Removed: getWorldsFromXML; world list comes from cached RocketStation scan.
-
-// Removed: legacy language value lookup and ad-hoc XML parsing; RocketStation scans provide localization.
-
-// Deprecated: legacy folder scan for languages no longer used.
-// func (m *Manager) getLanguagesFromFolder() []string { return nil }
-
-// WorldInfo contains localized world name and description
+// WorldInfo contains localized world name, description, and the relative
+// image path for the world's map image (under StreamingAssets).
 type WorldInfo struct {
 	ID          string
 	Name        string
@@ -1114,14 +1104,14 @@ type WorldInfo struct {
 	Image string
 }
 
-// LocationInfo contains localized start location information
+// LocationInfo contains localized start location information for a given world.
 type LocationInfo struct {
 	ID          string
 	Name        string
 	Description string
 }
 
-// ConditionInfo contains localized start condition information
+// ConditionInfo contains localized start condition information for a given world.
 type ConditionInfo struct {
 	ID          string
 	Name        string
@@ -1184,9 +1174,6 @@ type worldDefinitionCache struct {
 
 // start locations are now part of cached world definitions; no separate cache needed
 
-// Deprecated: legacy worldMetadata structure no longer used.
-// type worldMetadata struct { ID string; Priority int; Hidden bool; AllowDedicated bool; AllowDedicatedKnown bool; ShouldSkip bool }
-
 func canonicalWorldIdentifier(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -1200,15 +1187,6 @@ func canonicalWorldIdentifier(value string) string {
 	}
 	return builder.String()
 }
-
-// Deprecated: legacy boolean parsing helper no longer used.
-// func isTrueString(value string) bool { switch strings.ToLower(strings.TrimSpace(value)) { case "true","1","yes","y": return true; default: return false } }
-
-// Deprecated: legacy XML element boolean parse no longer used.
-// func parseBooleanElement(decoder *xml.Decoder, start xml.StartElement) bool { if attrValueIsTrue(start.Attr) { return true }; var flag boolFlagElement; if err := decoder.DecodeElement(&flag, &start); err != nil { return false }; if isTrueString(flag.Value) { return true }; return isTrueString(flag.Text) }
-
-// Deprecated: legacy world metadata extraction removed.
-// func extractWorldMetadata(data []byte) (worldMetadata, error) { return worldMetadata{}, nil }
 
 func (m *Manager) worldDefinitionsCache(beta bool) *worldDefinitionCache {
 	m.worldIndexMu.RLock()
@@ -1321,23 +1299,8 @@ func (m *Manager) buildWorldDefinitionCache(beta bool) *worldDefinitionCache {
 	})
 
 	cache.generatedAt = time.Now()
-
-	if m.Log != nil {
-		var b strings.Builder
-		fmt.Fprintf(&b, "World cache built (beta=%t) with %d entries:", beta, len(cache.definitions))
-		for _, def := range cache.definitions {
-			fmt.Fprintf(&b, "\n- directory=%s id=%s display=%q priority=%d root=%s", def.Directory, def.ID, def.DisplayName, def.Priority, def.Root)
-		}
-		m.Log.Write(b.String())
-	}
 	return cache
 }
-
-// Removed: worldLocalizationFromDirectory; not needed with RocketStation scans.
-
-// Removed: extractLocalizationForElement; XML parsing now centralized.
-
-// Removed: getConditionLocalizationFromXML; condition info is derived from world scan data.
 
 func (m *Manager) getDifficultiesFromXML(beta bool) []string {
 	base := m.getGameDataPathForVersion(beta)
@@ -1358,13 +1321,11 @@ func (m *Manager) getDifficultiesFromXML(beta bool) []string {
 	return []string{}
 }
 
-// GetWorldImage returns the PNG bytes for the planet image that matches the normalized world name.
+// GetWorldImage returns the PNG bytes for the planet image that matches the world ID.
 func (m *Manager) GetWorldImage(worldId string, beta bool) ([]byte, error) {
 	base := m.getGameDataPathForVersion(beta)
 	return GetWorldImage(base, worldId)
 }
-
-// Removed: worldLocalizationKeys; world info is obtained from cached definitions directly.
 
 func (m *Manager) resolveWorldTechnicalID(worldID string, beta bool) string {
 	canonical := canonicalWorldIdentifier(worldID)
@@ -1376,6 +1337,7 @@ func (m *Manager) resolveWorldTechnicalID(worldID string, beta bool) string {
 	return worldID
 }
 
+// GetWorldInfo returns the localized name/description and image path for a world.
 func (m *Manager) GetWorldInfo(worldID string, beta bool) WorldInfo {
 	canonical := canonicalWorldIdentifier(worldID)
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
@@ -1395,10 +1357,12 @@ func (m *Manager) GetWorldInfo(worldID string, beta bool) WorldInfo {
 }
 
 // GetStartLocationsForWorld returns all start locations available for a specific world
+// GetStartLocationsForWorld returns all start locations for a world (release).
 func (m *Manager) GetStartLocationsForWorld(worldID string) []LocationInfo {
 	return m.GetStartLocationsForWorldVersion(worldID, false)
 }
 
+// GetStartLocationsForWorldVersion returns start locations for a world by channel.
 func (m *Manager) GetStartLocationsForWorldVersion(worldID string, beta bool) []LocationInfo {
 	canonical := canonicalWorldIdentifier(worldID)
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
@@ -1418,10 +1382,12 @@ func (m *Manager) GetStartLocationsForWorldVersion(worldID string, beta bool) []
 }
 
 // GetStartConditionsForWorld returns all start conditions available for a specific world
+// GetStartConditionsForWorld returns all start conditions for a world (release).
 func (m *Manager) GetStartConditionsForWorld(worldID string) []ConditionInfo {
 	return m.GetStartConditionsForWorldVersion(worldID, false)
 }
 
+// GetStartConditionsForWorldVersion returns start conditions for a world by channel.
 func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) []ConditionInfo {
 	if cache := m.worldDefinitionsCache(beta); cache != nil {
 		canonical := canonicalWorldIdentifier(worldID)
@@ -1462,12 +1428,6 @@ func uniqueStrings(values []string) []string {
 
 	return result
 }
-
-// GetLocationInfo returns localized information for a start location
-// Removed: GetLocationInfo; start locations are fully resolved via ScanStartLocations.
-
-// GetConditionInfo returns localized information for a start condition
-// Removed: GetConditionInfo; use GetStartConditionsForWorldVersion and filter by ID if needed.
 
 func (m *Manager) NextID() int {
 	maxID := 0
@@ -2438,9 +2398,7 @@ func (m *Manager) GetMissingComponents() []string {
 }
 
 func (m *Manager) hasBepInExInstall() bool {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
+	m.ensurePaths()
 
 	for _, candidate := range m.bepInExCandidateFiles() {
 		if candidate == "" {
@@ -2455,9 +2413,7 @@ func (m *Manager) hasBepInExInstall() bool {
 }
 
 func (m *Manager) bepInExCandidateFiles() []string {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
+	m.ensurePaths()
 
 	var candidates []string
 	root := m.Paths.BepInExDir()

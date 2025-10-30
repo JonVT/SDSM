@@ -117,13 +117,30 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 				return
 			}
 		} else {
-			_ = s.AddBlacklistID(steamID)
-			if isAsync {
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Player Banned")
-				c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
-				c.JSON(http.StatusOK, gin.H{"status": "ok"})
-				return
+			// If server is running, try BAN console command first
+			commandSent := false
+			if s.Running {
+				if err := s.SendCommand("console", "BAN "+steamID); err == nil {
+					commandSent = true
+					if isAsync {
+						c.Header("X-Toast-Type", "success")
+						c.Header("X-Toast-Title", "Player Banned")
+						c.Header("X-Toast-Message", fmt.Sprintf("BAN command sent for %s", steamID))
+						c.JSON(http.StatusOK, gin.H{"status": "ok"})
+						return
+					}
+				}
+			}
+			// Fallback or server not running: add to blacklist file
+			if !commandSent {
+				_ = s.AddBlacklistID(steamID)
+				if isAsync {
+					c.Header("X-Toast-Type", "success")
+					c.Header("X-Toast-Title", "Player Banned")
+					c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
+					c.JSON(http.StatusOK, gin.H{"status": "ok"})
+					return
+				}
 			}
 		}
 

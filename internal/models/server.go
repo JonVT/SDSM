@@ -1,3 +1,5 @@
+// Package models defines core runtime state for servers, clients, and
+// related data structures used by SDSM.
 package models
 
 import (
@@ -9,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	fs "io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +28,8 @@ const DefaultRestartDelaySeconds = 10
 const playersLogFileName = "players.log"
 const maxChatMessages = 200
 
+// Client represents a player connection on a server, including
+// timestamps for connect/disconnect and whether they are an admin.
 type Client struct {
 	SteamID            string     `json:"steam_id"`
 	Name               string     `json:"name"`
@@ -33,10 +38,12 @@ type Client struct {
 	IsAdmin            bool       `json:"is_admin"`
 }
 
+// IsOnline reports whether the client is currently connected.
 func (c *Client) IsOnline() bool {
 	return c != nil && c.DisconnectDatetime == nil
 }
 
+// SessionDuration returns the elapsed time of the current or last session.
 func (c *Client) SessionDuration() time.Duration {
 	if c == nil {
 		return 0
@@ -51,6 +58,7 @@ func (c *Client) SessionDuration() time.Duration {
 	return end.Sub(c.ConnectDatetime)
 }
 
+// SessionDurationString returns the duration formatted as HH:MM:SS.
 func (c *Client) SessionDurationString() string {
 	d := c.SessionDuration()
 	if d <= 0 {
@@ -63,12 +71,15 @@ func (c *Client) SessionDurationString() string {
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 }
 
+// Chat is a single chat message captured from the server log stream.
 type Chat struct {
 	Datetime time.Time `json:"datetime"`
 	Name     string    `json:"name"`
 	Message  string    `json:"message"`
 }
 
+// ServerConfig is a lightweight input model used to create a new server.
+// It mirrors fields persisted on Server for initial setup.
 type ServerConfig struct {
 	Name                string
 	World               string
@@ -91,6 +102,8 @@ type ServerConfig struct {
 	RestartDelaySeconds int
 }
 
+// Server represents a managed dedicated server instance, including
+// runtime state, settings, logs, and client/chat history.
 type Server struct {
 	ID                  int           `json:"id"`
 	Proc                *exec.Cmd     `json:"-"`
@@ -116,6 +129,7 @@ type Server struct {
 	AutoPause           bool          `json:"auto_pause"`
 	Mods                []string      `json:"mods"`
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
+	RCONPort            int           `json:"rcon_port"` // Port for StationeersRCON plugin HTTP API
 	ServerStarted       *time.Time    `json:"server_started,omitempty"`
 	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
 	Clients             []*Client     `json:"-"`
@@ -137,10 +151,6 @@ type Server struct {
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
 	playersLogDirty     bool
-	// stdin is a handle to the running server process' standard input when available.
-	// It is used to send console commands. Guard all writes with stdinMu.
-	stdin   io.WriteCloser `json:"-"`
-	stdinMu sync.Mutex     `json:"-"`
 }
 
 func (s *Server) EnsureLogger(paths *utils.Paths) {
@@ -174,14 +184,15 @@ func (s *Server) blacklistPath() string {
 }
 
 // ReadBlacklistIDs reads a comma-separated list of Steam IDs from Blacklist.txt and returns a unique, trimmed list.
+// ReadBlacklistIDs reads the server's Blacklist.txt and returns unique Steam IDs.
 func (s *Server) ReadBlacklistIDs() []string {
 	path := s.blacklistPath()
 	if path == "" {
-		return nil
+		return []string{}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return []string{}
 	}
 	raw := string(data)
 	// Support commas and newlines as separators just in case
@@ -296,10 +307,11 @@ type BannedEntry struct {
 }
 
 // BannedEntries returns the list of banned Steam IDs with best-effort names from player history.
+// BannedEntries returns banned Steam IDs with best-effort player names.
 func (s *Server) BannedEntries() []BannedEntry {
 	ids := s.ReadBlacklistIDs()
 	if len(ids) == 0 {
-		return nil
+		return []BannedEntry{}
 	}
 	result := make([]BannedEntry, 0, len(ids))
 	for _, id := range ids {
@@ -495,9 +507,10 @@ func (s *Server) rewritePlayersLog() {
 	s.playersLogDirty = false
 }
 
+// LiveClients returns currently connected clients only (empty slice if none).
 func (s *Server) LiveClients() []*Client {
 	if len(s.Clients) == 0 {
-		return nil
+		return []*Client{}
 	}
 	live := make([]*Client, 0, len(s.Clients))
 	for _, client := range s.Clients {
@@ -873,6 +886,9 @@ func (s *Server) reportProgress(stage string, processed, total int64) {
 	}
 }
 
+// Deploy copies the release/beta game files (and BepInEx/LaunchPad assets)
+// into this server's game directory. Progress is reported via the
+// progressReporter callback when set.
 func (s *Server) Deploy() error {
 	if s.Paths == nil {
 		if s.Logger != nil {
@@ -890,7 +906,7 @@ func (s *Server) Deploy() error {
 	}
 	dst := s.Paths.ServerGameDir(s.ID)
 
-	s.Logger.Write("Deploying server files...")
+	s.Logger.Write(fmt.Sprintf("Deploying server files from %s to %s", src, dst))
 	totalFiles, err := countFiles(src)
 	if err != nil {
 		s.Logger.Write(fmt.Sprintf("Failed to enumerate source files: %v", err))
@@ -997,15 +1013,110 @@ func (s *Server) deployBepInExAssets(dst string, tracker *copyTracker) error {
 		return fmt.Errorf("copying LaunchPad content: %w", err)
 	}
 
+	// After copying BepInEx files, run the installer to finalize setup.
+	if err := s.installBepInEx(dst); err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("BepInEx installation step failed: %v", err))
+		}
+		// Non-fatal; BepInEx may still work on first server start
+	}
+
 	return nil
 }
 
+// installBepInEx performs the platform-specific BepInEx installation step.
+// On Windows, it does a quick server start/stop to let BepInEx generate its config files.
+// On Linux, BepInEx is initialized on every server start via run_bepinex.sh wrapper.
+func (s *Server) installBepInEx(gameDir string) error {
+	if runtime.GOOS == "windows" {
+		if s.Logger != nil {
+			s.Logger.Write("Installing BepInEx via initial server run (Windows)")
+		}
+
+		// Determine the executable name
+		executableName := "rocketstation_DedicatedServer.exe"
+		executablePath := filepath.Join(gameDir, executableName)
+
+		if _, err := os.Stat(executablePath); os.IsNotExist(err) {
+			return fmt.Errorf("server executable not found at %s", executablePath)
+		}
+
+		// Build minimal start command to initialize BepInEx (using default world/settings)
+		// We just need the process to run briefly so BepInEx creates its config structure.
+		cmd := exec.Command(executablePath, "-batchmode", "-nographics", "-quit")
+		cmd.Dir = gameDir
+
+		if s.Logger != nil {
+			s.Logger.Write("Starting server briefly to initialize BepInEx config")
+		}
+
+		// Run with a timeout in case it doesn't quit cleanly
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to start server for BepInEx init: %w", err)
+		}
+
+		// Wait for the process to exit or kill after a short timeout
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case err := <-done:
+			// Process exited on its own
+			if err != nil && s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("BepInEx init run exited with status: %v", err))
+			}
+		case <-time.After(10 * time.Second):
+			// Timeout: kill the process
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			<-done // Wait for Wait() to return
+		}
+
+		if s.Logger != nil {
+			s.Logger.Write("BepInEx initialization run completed")
+		}
+		return nil
+	}
+
+	// Other platforms (macOS, etc.) not yet implemented
+	if s.Logger != nil {
+		s.Logger.Write(fmt.Sprintf("BepInEx installation not implemented for platform: %s", runtime.GOOS))
+	}
+	return nil
+}
+
+// ToJSON marshals the server into JSON for diagnostics.
 func (s *Server) ToJSON() string {
 	data, _ := json.Marshal(s)
 	return string(data)
 }
 
+// Stop terminates the server process (if running), marks clients disconnected,
+// flushes logs, and resets in-memory chat when appropriate.
 func (s *Server) Stop() {
+	// Send warning message to players if server is running
+	if s.Running && s.Proc != nil {
+		if err := s.SendCommand("chat", "Server is shutting down..."); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("Failed to send shutdown warning: %v", err))
+			}
+		} else {
+			// Give players a moment to see the message
+			time.Sleep(2 * time.Second)
+		}
+		// Send QUIT command for graceful shutdown
+		if err := s.SendCommand("console", "QUIT"); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("Failed to send QUIT command: %v", err))
+			}
+		}
+		// Wait briefly for graceful shutdown
+		time.Sleep(3 * time.Second)
+	}
+
 	s.Running = false
 	s.Starting = false
 	now := time.Now()
@@ -1028,6 +1139,7 @@ func (s *Server) markAllClientsDisconnected(t time.Time) {
 	}
 }
 
+// Restart stops the server, waits for a configured delay, and starts it again.
 func (s *Server) Restart() {
 	s.restartMu.Lock()
 	defer s.restartMu.Unlock()
@@ -1189,7 +1301,24 @@ func (s *Server) Start() {
 	}
 	s.Logger.Write(fmt.Sprintf("Starting server %d with command line: %v %v", s.ID, executablePath, args))
 
-	cmd := exec.Command(executablePath, args...)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "linux" {
+		// On Linux, use run_bepinex.sh as wrapper
+		scriptPath := filepath.Join(s.Paths.ServerGameDir(s.ID), "run_bepinex.sh")
+		// Make the script executable
+		if err := os.Chmod(scriptPath, 0o755); err != nil && s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Warning: failed to make run_bepinex.sh executable: %v", err))
+		}
+		// run_bepinex.sh expects: ./run_bepinex.sh <executable> [args...]
+		scriptArgs := append([]string{executablePath}, args...)
+		cmd = exec.Command(scriptPath, scriptArgs...)
+		if s.Logger != nil {
+			s.Logger.Write("Using run_bepinex.sh wrapper for BepInEx support")
+		}
+	} else {
+		// On Windows, run executable directly
+		cmd = exec.Command(executablePath, args...)
+	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
 
 	if s.Logger != nil {
@@ -1206,14 +1335,6 @@ func (s *Server) Start() {
 	}
 
 	s.Proc = cmd
-	// Attempt to capture stdin for sending console commands
-	if stdin, err := cmd.StdinPipe(); err == nil {
-		s.stdinMu.Lock()
-		s.stdin = stdin
-		s.stdinMu.Unlock()
-	} else if s.Logger != nil {
-		s.Logger.Write(fmt.Sprintf("Failed to acquire stdin for server process: %v", err))
-	}
 	s.resetChat()
 	stopChan := make(chan bool)
 	s.Thrd = stopChan
@@ -1234,13 +1355,6 @@ func (s *Server) Start() {
 		s.Running = false
 		s.Starting = false
 		s.Proc = nil
-		// Close stdin if present and clear it
-		s.stdinMu.Lock()
-		if s.stdin != nil {
-			_ = s.stdin.Close()
-			s.stdin = nil
-		}
-		s.stdinMu.Unlock()
 		close(stop)
 		if s.Thrd == stop {
 			s.Thrd = nil
@@ -1365,17 +1479,39 @@ func (s *Server) SendRaw(line string) error {
 	if !s.IsRunning() || s.Proc == nil {
 		return fmt.Errorf("server is not running")
 	}
-	s.stdinMu.Lock()
-	defer s.stdinMu.Unlock()
-	if s.stdin == nil {
-		return fmt.Errorf("stdin not available")
+
+	// Use RCON HTTP API instead of stdin
+	rconPort := s.RCONPort
+	if rconPort == 0 {
+		rconPort = 8080 // Default RCON port
 	}
+
 	// Ensure single line only
 	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
 	trimmed = strings.ReplaceAll(trimmed, "\r", " ")
-	if _, err := io.WriteString(s.stdin, trimmed+"\n"); err != nil {
-		return fmt.Errorf("failed to send command: %w", err)
+	s.Logger.Write(fmt.Sprintf("Sending: %s", trimmed))
+
+	// Create HTTP request to RCON API
+	type CommandRequest struct {
+		Command string `json:"command"`
 	}
+	reqBody, err := json.Marshal(CommandRequest{Command: trimmed})
+	if err != nil {
+		return fmt.Errorf("failed to marshal command: %w", err)
+	}
+
+	url := fmt.Sprintf("http://localhost:%d/command", rconPort)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to send command to RCON API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("RCON API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
 	return nil
 }
 

@@ -1,3 +1,5 @@
+// Package steam integrates with SteamCMD and related GitHub releases to
+// download and deploy Stationeers, BepInEx, and LaunchPad components.
 package steam
 
 import (
@@ -27,6 +29,8 @@ const (
 	bepInExVersionFile = "bepinex.version"
 )
 
+// Steam provides helpers to query Steam APIs and deploy/update components
+// such as SteamCMD, Stationeers (release/beta), BepInEx, and LaunchPad.
 type Steam struct {
 	SteamID           string
 	Logger            *utils.Logger
@@ -35,6 +39,7 @@ type Steam struct {
 	progressComponent string
 }
 
+// NewSteam constructs a Steam helper bound to a Steam app ID and environment.
 func NewSteam(steamID string, logger *utils.Logger, paths *utils.Paths) *Steam {
 	return &Steam{
 		SteamID: steamID,
@@ -43,6 +48,7 @@ func NewSteam(steamID string, logger *utils.Logger, paths *utils.Paths) *Steam {
 	}
 }
 
+// SetProgressReporter sets a callback that receives progress updates.
 func (s *Steam) SetProgressReporter(component string, reporter func(component, stage string, downloaded, total int64)) {
 	s.progressComponent = component
 	s.progressReporter = reporter
@@ -72,6 +78,7 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// SteamAPIResponse models a subset of the steamcmd info API response.
 type SteamAPIResponse struct {
 	Data map[string]struct {
 		Depots struct {
@@ -82,6 +89,7 @@ type SteamAPIResponse struct {
 	} `json:"data"`
 }
 
+// GetVersions returns the current public and beta build IDs for the Steam app.
 func (s *Steam) GetVersions() ([]string, error) {
 	url := fmt.Sprintf("https://api.steamcmd.net/v1/info/%s", s.SteamID)
 	resp, err := http.Get(url)
@@ -111,6 +119,7 @@ func (s *Steam) GetVersions() ([]string, error) {
 	return []string{releaseVersion, betaVersion}, nil
 }
 
+// UpdateSteamCMD downloads and installs SteamCMD for the current platform.
 func (s *Steam) UpdateSteamCMD() error {
 	os.MkdirAll(s.Paths.SteamDir(), os.ModePerm)
 
@@ -149,6 +158,7 @@ func (s *Steam) UpdateSteamCMD() error {
 	return nil
 }
 
+// UpdateGame installs or updates the Stationeers dedicated server (beta optional).
 func (s *Steam) UpdateGame(beta bool) error {
 	var dir string
 	if beta {
@@ -163,9 +173,12 @@ func (s *Steam) UpdateGame(beta bool) error {
 		"+force_install_dir", dir,
 		"+login", "anonymous",
 		"+app_update", s.SteamID,
+		"-beta",
 	}
 	if beta {
-		steamCmd = append(steamCmd, "-beta", "beta")
+		steamCmd = append(steamCmd, "beta")
+	} else {
+		steamCmd = append(steamCmd, "public")
 	}
 	steamCmd = append(steamCmd, "validate", "+quit")
 
@@ -206,6 +219,7 @@ func (s *Steam) UpdateGame(beta bool) error {
 	return nil
 }
 
+// UpdateBepInEx downloads and deploys BepInEx, recording its version when available.
 func (s *Steam) UpdateBepInEx() error {
 	url, archiveName, version, err := s.resolveBepInExDownload()
 	if err != nil {
@@ -302,6 +316,7 @@ func (s *Steam) resolveBepInExDownload() (string, string, string, error) {
 	return "", "", "", fmt.Errorf("no BepInEx asset found for platform suffix %s", suffix)
 }
 
+// UpdateLaunchPad fetches and deploys Stationeers LaunchPad, flattening the root folder if needed.
 func (s *Steam) UpdateLaunchPad() error {
 	s.Logger.Write("Updating Stationeers LaunchPad")
 	url, archiveName, err := s.resolveLaunchPadDownload()

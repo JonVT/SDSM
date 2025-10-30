@@ -6,11 +6,14 @@ import (
 	"time"
 )
 
+// Logger writes timestamped lines to a log file (and allows reading recent data).
 type Logger struct {
 	writeFile *os.File
 	readFile  *os.File
 }
 
+// NewLogger opens the given log file for appending and a parallel read handle.
+// If the file cannot be opened, logs will be written to stdout.
 func NewLogger(logFile string) *Logger {
 	logger := &Logger{}
 	if logFile != "" {
@@ -28,6 +31,7 @@ func NewLogger(logFile string) *Logger {
 	return logger
 }
 
+// Write appends a timestamped message to the log (or stdout when no file).
 func (l *Logger) Write(message string) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logMessage := fmt.Sprintf("%s: %s\n", timestamp, message)
@@ -39,6 +43,7 @@ func (l *Logger) Write(message string) {
 	}
 }
 
+// Read reads up to 1 KiB from the current read handle for quick previews.
 func (l *Logger) Read() string {
 	if l.readFile == nil {
 		return ""
@@ -48,6 +53,7 @@ func (l *Logger) Read() string {
 	return string(buf[:n])
 }
 
+// Close flushes and closes underlying file handles.
 func (l *Logger) Close() {
 	if l.writeFile != nil {
 		l.writeFile.Close()

@@ -1,9 +1,11 @@
+// Package handlers exposes HTTP handlers for the SDSM web UI and API.
 package handlers
 
 import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/models"
@@ -13,10 +15,12 @@ import (
 
 const updateLogFallback = "No update activity recorded yet."
 
+// ManagerHandlers wires HTTP handlers to a Manager instance.
 type ManagerHandlers struct {
 	manager *manager.Manager
 }
 
+// NewManagerHandlers constructs a handler set bound to the provided Manager.
 func NewManagerHandlers(mgr *manager.Manager) *ManagerHandlers {
 	return &ManagerHandlers{manager: mgr}
 }
@@ -184,10 +188,7 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 }
 
 func (h *ManagerHandlers) startDeployAsync(deployType manager.DeployType) error {
-	if err := h.manager.StartDeployAsync(deployType); err != nil {
-		return err
-	}
-	return nil
+	return h.manager.StartDeployAsync(deployType)
 }
 
 func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
@@ -220,10 +221,12 @@ func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
 	}()
 }
 
+// Home redirects to the login page (root entry point).
 func (h *ManagerHandlers) Home(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/login")
 }
 
+// Frame renders the outer frame shell with server list and active status.
 func (h *ManagerHandlers) Frame(c *gin.Context) {
 	username, _ := c.Get("username")
 
@@ -235,6 +238,7 @@ func (h *ManagerHandlers) Frame(c *gin.Context) {
 	c.HTML(http.StatusOK, "frame.html", data)
 }
 
+// Dashboard renders the main dashboard with server cards for quick status.
 func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	username, _ := c.Get("username")
 
@@ -244,6 +248,8 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	})
 }
 
+// ManagerGET renders the manager settings/status page with version info,
+// missing component warnings, deploy state, and game-data scanner warnings.
 func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	username, _ := c.Get("username")
 
@@ -321,6 +327,7 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	c.HTML(http.StatusOK, "manager.html", data)
 }
 
+// ServerWorldImage streams the PNG planet image for the server's configured world.
 func (h *ManagerHandlers) ServerWorldImage(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -341,7 +348,20 @@ func (h *ManagerHandlers) ServerWorldImage(c *gin.Context) {
 		return
 	}
 
-	data, readErr := h.manager.GetWorldImage(srv.WorldID, srv.Beta)
+	// Allow optional preview overrides via query parameters so the UI can
+	// show a live world image when the user changes selections.
+	worldID := srv.WorldID
+	if w := strings.TrimSpace(c.Query("world")); w != "" {
+		worldID = w
+	}
+	beta := srv.Beta
+	if qb := strings.TrimSpace(c.Query("beta")); qb != "" {
+		if parsed, perr := strconv.ParseBool(qb); perr == nil {
+			beta = parsed
+		}
+	}
+
+	data, readErr := h.manager.GetWorldImage(worldID, beta)
 	if readErr != nil {
 		c.Status(http.StatusNotFound)
 		return

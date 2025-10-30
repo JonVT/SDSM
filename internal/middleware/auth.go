@@ -1,3 +1,5 @@
+// Package middleware provides authentication helpers and Gin middlewares
+// for SDSM's UI and API endpoints.
 package middleware
 
 import (
@@ -14,16 +16,21 @@ import (
 )
 
 const (
-	JWTSecret   = "your-secret-key-change-in-production" // Should be from environment
+	// JWTSecret is the HMAC signing secret for auth tokens. Override via environment in production.
+	JWTSecret = "your-secret-key-change-in-production"
+	// TokenExpiry controls how long issued tokens remain valid.
 	TokenExpiry = 24 * time.Hour
-	CookieName  = "auth_token"
+	// CookieName is the name of the auth cookie used by the UI and API.
+	CookieName = "auth_token"
 )
 
+// Claims is the JWT claims payload used for SDSM sessions.
 type Claims struct {
 	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
 
+// AuthService generates and validates JWT tokens and provides auth middlewares.
 type AuthService struct {
 	secret      []byte
 	mu          sync.Mutex
@@ -36,6 +43,7 @@ type apiFailure struct {
 	lockoutUntil time.Time
 }
 
+// NewAuthService creates an AuthService using the default JWTSecret.
 func NewAuthService() *AuthService {
 	return &AuthService{
 		secret:      []byte(JWTSecret),
@@ -43,16 +51,19 @@ func NewAuthService() *AuthService {
 	}
 }
 
+// HashPassword returns a bcrypt hash for the provided password.
 func (a *AuthService) HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err
 }
 
+// CheckPassword verifies a plaintext password against a bcrypt hash.
 func (a *AuthService) CheckPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
 }
 
+// GenerateToken creates a signed JWT for the given username.
 func (a *AuthService) GenerateToken(username string) (string, error) {
 	claims := Claims{
 		Username: username,
@@ -67,6 +78,7 @@ func (a *AuthService) GenerateToken(username string) (string, error) {
 	return token.SignedString(a.secret)
 }
 
+// ValidateToken parses and validates a JWT, returning its claims on success.
 func (a *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -86,7 +98,7 @@ func (a *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 	return nil, fmt.Errorf("invalid token")
 }
 
-// Helper to detect if current request is effectively HTTPS (behind proxy or direct)
+// requestIsSecure reports whether the request is secure (direct TLS or X-Forwarded-Proto=https).
 func requestIsSecure(c *gin.Context) bool {
 	if c.Request.TLS != nil {
 		return true
@@ -97,10 +109,12 @@ func requestIsSecure(c *gin.Context) bool {
 	return false
 }
 
+// forceSecureCookies honors SDSM_COOKIE_FORCE_SECURE=true to always mark cookies Secure.
 func forceSecureCookies() bool {
 	return strings.EqualFold(os.Getenv("SDSM_COOKIE_FORCE_SECURE"), "true")
 }
 
+// cookieShouldBeSecure decides the Secure flag for cookies based on env and request.
 func cookieShouldBeSecure(c *gin.Context) bool {
 	if forceSecureCookies() {
 		return true
@@ -108,7 +122,7 @@ func cookieShouldBeSecure(c *gin.Context) bool {
 	return requestIsSecure(c)
 }
 
-// Resolve SameSite setting based on env; defaults to SameSiteNone for iframe compatibility
+// resolveSameSite resolves the SameSite setting from SDSM_COOKIE_SAMESITE; defaults to None.
 func resolveSameSite() http.SameSite {
 	switch strings.ToLower(os.Getenv("SDSM_COOKIE_SAMESITE")) {
 	case "lax":
@@ -123,7 +137,7 @@ func resolveSameSite() http.SameSite {
 	}
 }
 
-// Sets the auth cookie with appropriate flags for iframe environments
+// SetAuthCookie sets the auth cookie with flags compatible with iframe scenarios.
 func SetAuthCookie(c *gin.Context, token string) {
 	sameSite := resolveSameSite()
 	secure := cookieShouldBeSecure(c)
@@ -143,7 +157,7 @@ func SetAuthCookie(c *gin.Context, token string) {
 	})
 }
 
-// Clears the auth cookie using the same attributes
+// ClearAuthCookie clears the auth cookie using the same attributes.
 func ClearAuthCookie(c *gin.Context) {
 	sameSite := resolveSameSite()
 	secure := cookieShouldBeSecure(c)
@@ -162,7 +176,7 @@ func ClearAuthCookie(c *gin.Context) {
 	})
 }
 
-// Middleware to require authentication
+// RequireAuth is a UI middleware that enforces authentication via cookie or header.
 func (a *AuthService) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Try to get token from header first
@@ -193,7 +207,7 @@ func (a *AuthService) RequireAuth() gin.HandlerFunc {
 	}
 }
 
-// API Authentication middleware (returns JSON instead of redirect)
+// RequireAPIAuth is an API middleware returning JSON errors instead of redirects.
 func (a *AuthService) RequireAPIAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		key := a.apiFailureKey(c)
