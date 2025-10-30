@@ -104,6 +104,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"server_started": started,
 		"server_saved":   saved,
 		"paused":         s.Paused,
+		"storming":       s.Storming,
 		"clients":        history,
 		"chat_messages":  chatMessages,
 		"banned":         banned,

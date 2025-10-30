@@ -201,6 +201,31 @@ var (
 				s.Paused = false
 			},
 		},
+		// Weather event start/stop
+		{
+			match: func(line string) []string {
+				// Toggle storming on weather start
+				if strings.Contains(strings.ToLower(line), "started weather event") {
+					return []string{}
+				}
+				return nil
+			},
+			handle: func(s *Server, _ string, _ []string) {
+				s.Storming = true
+			},
+		},
+		{
+			match: func(line string) []string {
+				// Toggle storming off on weather stop
+				if strings.Contains(strings.ToLower(line), "stopped weather event") {
+					return []string{}
+				}
+				return nil
+			},
+			handle: func(s *Server, _ string, _ []string) {
+				s.Storming = false
+			},
+		},
 		{
 			match: func(line string) []string {
 				lower := strings.ToLower(line)

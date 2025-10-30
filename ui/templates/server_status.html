@@ -716,6 +716,7 @@
         const restartButton = document.getElementById('btn-restart');
         const pauseButton = document.getElementById('btn-pause');
         const saveButton = document.getElementById('btn-save');
+        const stormButton = document.getElementById('btn-storm');
         const deleteButton = document.getElementById('btn-delete');
         const connectionBanner = document.getElementById('connection-banner');
         const connectionBannerText = document.getElementById('connection-banner-text');
@@ -752,6 +753,8 @@
         let fetchStatus = function() {};
         let stopStatusUpdates = function() {};
         let startStatusUpdates = function() {};
+
+        let serverIsStorming = false;
 
         updateControlButtons({ running: serverIsRunning, paused: serverIsPaused, starting: serverIsStarting });
 
@@ -1204,6 +1207,10 @@
 
             if (saveButton) {
                 setButtonDisabled(saveButton, !running || progressActive || starting);
+            }
+
+            if (stormButton) {
+                setButtonDisabled(stormButton, !running || progressActive || starting);
             }
 
             if (deleteButton) {
@@ -1775,6 +1782,16 @@
                     if (errorTimeEl) setTextContent(errorTimeEl, '');
                 }
 
+                // Update storm button label/state first
+                try {
+                    serverIsStorming = !!data.storming;
+                    if (stormButton) {
+                        const label = serverIsStorming ? 'Stop Storm' : 'Start Storm';
+                        // Preserve icon markup while updating label
+                        stormButton.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/><polyline points="13 11 9 17 15 17 11 23"/></svg>' + label;
+                    }
+                } catch (_) {}
+
                 if (Array.isArray(data.players)) {
                     renderLivePlayers(data.players);
                 } else {
@@ -2229,6 +2246,42 @@
                     })
                     .catch(() => { /* no-op */ })
                     .finally(() => { toggleButtonSpinner(pauseButton, false); setButtonDisabled(pauseButton, false); });
+                });
+            })();
+
+            // Storm Start/Stop button: sends STORM start/stop via API and updates label
+            (function(){
+                if (!stormButton || !serverId) return;
+                stormButton.addEventListener('click', function(e){
+                    e.preventDefault();
+                    if (stormButton.disabled) return;
+                    const cmd = serverIsStorming ? 'STORM stop' : 'STORM start';
+                    setButtonDisabled(stormButton, true);
+                    toggleButtonSpinner(stormButton, true);
+                    fetch(`/api/servers/${serverId}/command`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ type: 'console', payload: cmd })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchStatus();
+                    }).catch(() => {
+                        // no-op; polling will reconcile
+                    }).finally(() => {
+                        toggleButtonSpinner(stormButton, false);
+                        setButtonDisabled(stormButton, false);
+                    });
                 });
             })();
 
