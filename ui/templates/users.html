@@ -34,8 +34,8 @@
         <div>
           <label class="form-label">Role</label>
           <select name="new_role" class="form-input">
-            <option value="user">User</option>
             <option value="admin">Admin</option>
+            <option value="operator" selected>Operator</option>
           </select>
         </div>
         <div>
@@ -65,9 +65,9 @@
               <td>
                 <form method="POST" action="/users" style="display:inline-flex; gap: 8px; align-items: center;">
                   <input type="hidden" name="set_role_user" value="{{ .Username }}" />
-                  <select name="set_role_value" class="form-input" style="width: 140px;">
-                    <option value="user" {{ if eq .Role "user" }}selected{{ end }}>User</option>
+                  <select name="set_role_value" class="form-input" style="width: 160px;">
                     <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
+                    <option value="operator" {{ if eq .Role "operator" }}selected{{ end }}>Operator</option>
                   </select>
                   <button type="submit" class="btn btn-secondary">Update Role</button>
                 </form>

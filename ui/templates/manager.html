@@ -7,7 +7,7 @@
     <title>Manager - Stationeers Server Manager</title>
     
     <!-- Shared UI theme for consistent styling with Dashboard/Server pages -->
-    <link rel="stylesheet" href="/static/ui-theme.css">
+    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
     <link rel="icon" href="/sdsm.png" type="image/png">
     
     <!-- HTMX for dynamic interactions -->
@@ -95,6 +95,35 @@
                 transform: translateY(0);
             }
         }
+
+        /* Software card: keep long messages and progress text from pushing layout */
+        .update-message {
+            display: none;
+            margin-bottom: var(--space-3);
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-md);
+            background: var(--surface-subtle);
+            color: var(--text-secondary);
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .update-message.active { display: block; }
+        .update-message.error {
+            border-color: rgba(239, 68, 68, 0.35);
+            background: rgba(127, 29, 29, 0.12);
+            color: var(--danger-500);
+        }
+
+        .table-container { width: 100%; overflow-x: visible; }
+        .table-container table { width: 100%; table-layout: auto; border-collapse: collapse; }
+        .table-container th, .table-container td { vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
+        /* Allow Action column to wrap controls on small screens instead of forcing horizontal scroll */
+        .table-container th:nth-child(4),
+        .table-container td:nth-child(4) { width: auto; white-space: normal; }
+        .table-container td:nth-child(4) { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+        /* Allow long titles and progress text to wrap within first column */
+        .component-title, .progress-text { overflow-wrap: anywhere; word-break: break-word; }
 
         .setup-header {
             text-align: center;
@@ -789,6 +818,329 @@
                 });
             }
 
+            // User Management collapsible toggle
+            (function(){
+                const toggle = document.getElementById('userMgmtToggle');
+                const content = document.getElementById('userMgmtContent');
+                const chevron = document.getElementById('userMgmtChevron');
+                const label = document.getElementById('userMgmtToggleLabel');
+                if (!toggle || !content || !chevron) {
+                    // Card may not be present in some builds
+                } else {
+                    const storageKey = 'sdsm:manager:user-mgmt:expanded';
+                    const setExpanded = (expanded) => {
+                        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                        content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                        content.style.display = expanded ? '' : 'none';
+                        chevron.innerHTML = expanded
+                            ? '<polyline points="18 15 12 9 6 15"></polyline>' // up
+                            : '<polyline points="6 9 12 15 18 9"></polyline>'; // down
+                        if (label) label.textContent = expanded ? 'Less' : 'More';
+                        toggle.title = expanded ? 'Collapse' : 'Expand';
+                        try { sessionStorage.setItem(storageKey, expanded ? '1' : '0'); } catch(_) {}
+                    };
+                    let initial = '0';
+                    try { initial = sessionStorage.getItem(storageKey) || '0'; } catch(_) {}
+                    setExpanded(initial === '1');
+                    toggle.addEventListener('click', () => {
+                        const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
+                        setExpanded(!isExpanded);
+                    });
+                }
+            })();
+
+            // User Management logic
+            (function(){
+                const tbody = document.getElementById('um_table_body');
+                const addBtn = document.getElementById('um_add_btn');
+                const newUser = document.getElementById('um_new_username');
+                const newPass = document.getElementById('um_new_password');
+                const newRole = document.getElementById('um_new_role');
+                const accessBtn = document.getElementById('um_access_btn');
+                const accessDrop = document.getElementById('um_access_dropdown');
+                const accessAll = document.getElementById('um_access_all');
+                const accessList = document.getElementById('um_access_list');
+                const accessSave = document.getElementById('um_access_save');
+                const accessClose = document.getElementById('um_access_close');
+                if(!tbody) return;
+
+                let listBusy = false;
+                let serversCache = null;
+                let usersData = [];
+                let sortState = { key: 'username', dir: 'asc' };
+                let newAssignAll = false;
+                let newAssignServers = new Set();
+
+                function ensureServersCache(){
+                    if (serversCache) return Promise.resolve(serversCache);
+                    return fetch('/api/servers', {headers:{'Accept':'application/json'}, credentials:'same-origin'})
+                        .then(r => r.ok ? r.json() : Promise.reject())
+                        .then(data => { serversCache = Array.isArray(data.servers) ? data.servers : []; return serversCache; })
+                        .catch(()=>{ serversCache = []; return serversCache; });
+                }
+
+                function openAssignPanel(username){
+                    const row = Array.from(tbody.querySelectorAll('tr')).find(tr => tr.firstChild && tr.firstChild.textContent === username);
+                    if (!row) return;
+                    let panelRow = row.nextElementSibling;
+                    const isPanel = panelRow && panelRow.classList && panelRow.classList.contains('um-assign-panel');
+                    if (!isPanel) {
+                        panelRow = document.createElement('tr');
+                        panelRow.className = 'um-assign-panel';
+                        const td = document.createElement('td'); td.colSpan = 4; td.style.background='var(--bg-tertiary)'; td.style.borderTop='1px solid var(--border-color)'; td.style.padding='12px 16px';
+                        td.innerHTML = '<div><strong>Server Access</strong><div class="form-group" style="margin-top:8px;"><label><input type="checkbox" id="assign_all_'+username+'"> All servers</label></div><div id="assign_list_'+username+'" class="assign-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;"></div><div style="margin-top:12px;"><button class="btn btn-primary" id="assign_save_'+username+'">Save</button> <button class="btn btn-secondary" id="assign_close_'+username+'">Close</button></div></div>';
+                        panelRow.appendChild(td);
+                        row.insertAdjacentElement('afterend', panelRow);
+                    }
+
+                    panelRow.style.display = panelRow.style.display === 'none' ? '' : '';
+
+                    ensureServersCache().then(() => {
+                        // Populate server checkboxes
+                        const list = panelRow.querySelector('#assign_list_'+CSS.escape(username)+'' );
+                        const chkAll = panelRow.querySelector('#assign_all_'+CSS.escape(username)+'' );
+                        const btnSave = panelRow.querySelector('#assign_save_'+CSS.escape(username)+'' );
+                        const btnClose = panelRow.querySelector('#assign_close_'+CSS.escape(username)+'' );
+                        if (!list || !chkAll || !btnSave || !btnClose) return;
+
+                        list.innerHTML = '';
+                        serversCache.forEach(s => {
+                            const lbl = document.createElement('label'); lbl.style.display='inline-flex'; lbl.style.alignItems='center'; lbl.style.gap='6px'; lbl.style.padding='4px 8px'; lbl.style.border='1px solid var(--border-color)'; lbl.style.borderRadius='8px';
+                            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.className='assign-cb';
+                            const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
+                            lbl.appendChild(cb); lbl.appendChild(span);
+                            list.appendChild(lbl);
+                        });
+
+                        function setListEnabled(enabled){
+                            list.querySelectorAll('.assign-cb').forEach((el)=>{ el.disabled = !enabled; });
+                        }
+
+                        // Load current assignments
+                        fetch('/api/users/'+encodeURIComponent(username)+'/assignments', {headers:{'Accept':'application/json'}, credentials:'same-origin'})
+                          .then(r=> r.ok ? r.json() : { all:false, servers:[] })
+                          .then(data => {
+                              const all = !!data.all; const servers = Array.isArray(data.servers) ? data.servers.map(Number) : [];
+                              chkAll.checked = all;
+                              setListEnabled(!all);
+                              list.querySelectorAll('.assign-cb').forEach((cb)=>{ const id = Number(cb.value); cb.checked = servers.includes(id); });
+                          });
+
+                        chkAll.addEventListener('change', ()=> setListEnabled(!chkAll.checked));
+                        btnClose.addEventListener('click', ()=> { panelRow.style.display='none'; });
+                        btnSave.addEventListener('click', ()=>{
+                            const all = chkAll.checked;
+                            const selected = Array.from(list.querySelectorAll('.assign-cb')).filter(cb=>cb.checked).map(cb=>Number(cb.value));
+                            fetch('/api/users/'+encodeURIComponent(username)+'/assignments', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({ all, servers: selected }) })
+                              .then(r=> r.ok ? r.json() : r.json().then(Promise.reject))
+                              .then(()=>{ if(window.showToast) window.showToast({type:'success', title:'Assignments Saved', message:'Updated access for '+username}); })
+                              .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Save Failed', message:(err&&err.error)||'Unable to save assignments'}); });
+                        });
+                    });
+                }
+
+                function positionDropdown(anchor, panel){
+                    if (!anchor || !panel) return;
+                    panel.style.visibility = 'hidden';
+                    panel.style.display = 'block';
+                    const rect = anchor.getBoundingClientRect();
+                    const menuWidth = panel.offsetWidth;
+                    const padding = 6;
+                    // Align to the right edge of the button
+                    let left = Math.round(rect.right - menuWidth);
+                    let top = Math.round(rect.bottom + padding);
+                    const vw = window.innerWidth; const vh = window.innerHeight;
+                    if (left + menuWidth > vw - 8) left = Math.max(8, vw - menuWidth - 8);
+                    if (left < 8) left = 8;
+                    if (top > vh - 8) top = Math.max(8, rect.top - panel.offsetHeight - padding);
+                    panel.style.left = left + 'px';
+                    panel.style.top = top + 'px';
+                    panel.style.visibility = '';
+                }
+
+                function openAccessDropdown(){
+                    if (!accessDrop) return;
+                    ensureServersCache().then(() => {
+                        accessList.innerHTML = '';
+                        serversCache.forEach(s => {
+                            const lbl = document.createElement('label'); lbl.style.display='inline-flex'; lbl.style.alignItems='center'; lbl.style.gap='6px'; lbl.style.padding='4px 8px'; lbl.style.border='1px solid var(--border-color)'; lbl.style.borderRadius='8px';
+                            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.checked = newAssignServers.has(Number(s.id)); cb.disabled = newAssignAll; cb.className='um-new-assign-cb';
+                            cb.addEventListener('change', ()=>{ const id = Number(cb.value); if (cb.checked) newAssignServers.add(id); else newAssignServers.delete(id); });
+                            const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
+                            lbl.appendChild(cb); lbl.appendChild(span);
+                            accessList.appendChild(lbl);
+                        });
+                        if (accessAll) {
+                            accessAll.checked = newAssignAll;
+                            accessAll.onchange = () => {
+                                newAssignAll = accessAll.checked;
+                                accessList.querySelectorAll('.um-new-assign-cb').forEach(el => { el.disabled = newAssignAll; });
+                            };
+                        }
+                        accessDrop.style.display = 'block';
+                        positionDropdown(accessBtn, accessDrop);
+                        function onDocClick(evt){
+                            if (!accessDrop.contains(evt.target) && evt.target !== accessBtn && !accessBtn.contains(evt.target)) {
+                                closeAccessDropdown();
+                                document.removeEventListener('mousedown', onDocClick);
+                                window.removeEventListener('resize', onResize);
+                                window.removeEventListener('scroll', onResize, { passive: true });
+                            }
+                        }
+                        function onResize(){ positionDropdown(accessBtn, accessDrop); }
+                        document.addEventListener('mousedown', onDocClick);
+                        window.addEventListener('resize', onResize);
+                        window.addEventListener('scroll', onResize, { passive: true });
+                    });
+                }
+
+                function closeAccessDropdown(){ if (accessDrop) accessDrop.style.display = 'none'; }
+
+                if (accessBtn) accessBtn.addEventListener('click', () => { if (accessDrop.style.display === 'block') closeAccessDropdown(); else openAccessDropdown(); });
+                if (accessClose) accessClose.addEventListener('click', closeAccessDropdown);
+                if (accessSave) accessSave.addEventListener('click', () => { closeAccessDropdown(); });
+
+                function sortUsers(arr){
+                    const k = sortState.key; const dir = sortState.dir === 'asc' ? 1 : -1;
+                    const copy = arr.slice();
+                    copy.sort((a,b)=>{
+                        const av = (a[k] ?? '').toString().toLowerCase();
+                        const bv = (b[k] ?? '').toString().toLowerCase();
+                        if (av < bv) return -1*dir; if (av > bv) return 1*dir; return 0;
+                    });
+                    return copy;
+                }
+
+                function renderUsers(users){
+                    tbody.innerHTML = '';
+                    if(!Array.isArray(users) || users.length === 0){
+                        const tr = document.createElement('tr');
+                        const td = document.createElement('td');
+                        td.colSpan = 4;
+                        td.textContent = 'No users found.';
+                        tr.appendChild(td); tbody.appendChild(tr); return;
+                    }
+                    sortUsers(users).forEach(u => {
+                        const tr = document.createElement('tr');
+                        const tdU = document.createElement('td'); tdU.textContent = u.username; tr.appendChild(tdU);
+                        const tdR = document.createElement('td');
+                        const sel = document.createElement('select'); sel.className='form-input'; sel.style.width='140px';
+                        ['admin','operator'].forEach(r => {
+                            const opt = document.createElement('option'); opt.value=r; opt.textContent=r.charAt(0).toUpperCase()+r.slice(1);
+                            if(String(u.role).toLowerCase()===r) opt.selected=true; sel.appendChild(opt);
+                        });
+                        sel.addEventListener('change', () => updateRole(u.username, sel.value));
+                        tdR.appendChild(sel); tr.appendChild(tdR);
+                        const tdC = document.createElement('td'); tdC.textContent = (u.created_at ? new Date(u.created_at).toLocaleString() : ''); tr.appendChild(tdC);
+                        const tdA = document.createElement('td');
+                        // Reset password button
+                        const btnPw = document.createElement('button'); btnPw.className='btn btn-secondary'; btnPw.textContent='Set Password';
+                        btnPw.addEventListener('click', () => {
+                            const p = prompt('Enter new password for '+u.username+':');
+                            if(p && p.length>=8){ resetPassword(u.username, p); }
+                            else if(p!==null){ if(window.showToast) window.showToast({type:'error', title:'Invalid', message:'Password must be at least 8 characters.'}); }
+                        });
+                        tdA.appendChild(btnPw);
+                        // Delete button
+                        const btnDel = document.createElement('button'); btnDel.className='btn btn-danger'; btnDel.style.marginLeft='8px'; btnDel.textContent='Delete';
+                        btnDel.addEventListener('click', () => { if(confirm('Delete user '+u.username+'?')) deleteUser(u.username); });
+                        tdA.appendChild(btnDel);
+                        // Assignments button (operators only)
+                        const isOperator = String(u.role).toLowerCase() === 'operator';
+                        if (isOperator) {
+                            const btnAssign = document.createElement('button'); btnAssign.className='btn btn-secondary'; btnAssign.style.marginLeft='8px'; btnAssign.textContent='Assign Servers'; btnAssign.title='Manage server access for this operator';
+                            btnAssign.addEventListener('click', () => openAssignPanel(u.username));
+                            tdA.appendChild(btnAssign);
+                        }
+                        tr.appendChild(tdA);
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                function fetchUsers(){
+                    if(listBusy) return; listBusy = true;
+                    const url = '/api/users';
+                    fetch(url, {headers:{'Accept':'application/json'}, credentials:'same-origin'})
+                        .then(r => r.ok ? r.json() : Promise.reject())
+                        .then(data => { usersData = Array.isArray(data.users)? data.users : []; renderUsers(usersData); })
+                        .catch(()=>{})
+                        .finally(()=>{ listBusy=false; });
+                }
+
+                function updateRole(username, role){
+                    fetch('/api/users/'+encodeURIComponent(username)+'/role', {
+                        method:'PATCH', credentials:'same-origin', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                        body: JSON.stringify({role})
+                    }).then(r => r.ok ? r.json() : r.json().then(Promise.reject))
+                      .then(()=>{ if(window.showToast) window.showToast({type:'success', title:'Role Updated', message: username+" → "+role}); fetchUsers(); })
+                      .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Update Failed', message: (err&&err.error)||'Unable to update role'}); fetchUsers(); });
+                }
+
+                function resetPassword(username, password){
+                    fetch('/api/users/'+encodeURIComponent(username)+'/reset-password', {
+                        method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                        body: JSON.stringify({password})
+                    }).then(r => r.ok ? r.json() : r.json().then(Promise.reject))
+                      .then(()=>{ if(window.showToast) window.showToast({type:'success', title:'Password Set', message: 'Password updated for '+username}); })
+                      .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Set Failed', message: (err&&err.error)||'Unable to set password'}); });
+                }
+
+                function deleteUser(username){
+                    fetch('/api/users/'+encodeURIComponent(username), { method:'DELETE', credentials:'same-origin', headers:{'Accept':'application/json'} })
+                      .then(r => r.ok ? r.json() : r.json().then(Promise.reject))
+                      .then(()=>{ if(window.showToast) window.showToast({type:'success', title:'User Deleted', message: username}); fetchUsers(); })
+                      .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Delete Failed', message: (err&&err.error)||'Unable to delete user'}); fetchUsers(); });
+                }
+
+                if(addBtn && newUser && newPass && newRole){
+                    addBtn.addEventListener('click', () => {
+                        const u = newUser.value.trim(); const p = newPass.value; const r = newRole.value;
+                        if(u.length < 3){ if(window.showToast) window.showToast({type:'error', title:'Invalid', message:'Username must be at least 3 characters.'}); return; }
+                        if(p.length < 8){ if(window.showToast) window.showToast({type:'error', title:'Invalid', message:'Password must be at least 8 characters.'}); return; }
+                        addBtn.disabled = true;
+                        fetch('/api/users', {
+                            method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','Accept':'application/json'},
+                            body: JSON.stringify({username:u, password:p, role:r})
+                        }).then(r => r.ok ? r.json() : r.json().then(Promise.reject))
+                          .then(()=>{
+                              const doAssign = (r === 'operator');
+                              const payload = { all: newAssignAll, servers: Array.from(newAssignServers) };
+                              const assign = doAssign ? fetch('/api/users/'+encodeURIComponent(u)+'/assignments', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify(payload) }) : Promise.resolve();
+                              return assign.then(() => {
+                                  if(window.showToast) window.showToast({type:'success', title:'User Added', message: u});
+                                  newUser.value=''; newPass.value=''; newRole.value='operator';
+                                  newAssignAll = false; newAssignServers.clear(); closeAccessDropdown();
+                                  fetchUsers();
+                              });
+                          })
+                          .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Add Failed', message: (err&&err.error)||'Unable to add user'}); })
+                          .finally(()=>{ addBtn.disabled = false; });
+                    });
+                }
+                // Toggle server access control visibility by role (optional UX)
+                if (newRole && accessBtn) {
+                    const updateAccessVisibility = () => {
+                        const isOp = newRole.value === 'operator';
+                        accessBtn.style.display = isOp ? '' : 'none';
+                        if (!isOp) closeAccessDropdown();
+                    };
+                    newRole.addEventListener('change', updateAccessVisibility);
+                    updateAccessVisibility();
+                }
+
+                // Sorting handlers
+                document.querySelectorAll('th.um-sort').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const key = th.dataset.key;
+                        if (sortState.key === key) sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
+                        else { sortState.key = key; sortState.dir = 'asc'; }
+                        renderUsers(usersData);
+                    });
+                });
+                // Initial load
+                fetchUsers();
+            })();
+
             // Initial progress fetch
             fetchProgress();
             ensurePolling();
@@ -933,6 +1285,27 @@
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        <!-- Move steamcmd to the top -->
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">steamcmd</div>
+                                                <div class="progress-row" data-progress="steamcmd">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .steamcmd_deployed }}</td>
+                                            <td>{{ .steamcmd_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn {{if eq .steamcmd_deployed .steamcmd_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
                                         <tr>
                                             <td>
                                                 <div class="component-title">rocketstation_DedicatedServer Release</div>
@@ -965,26 +1338,6 @@
                                             <td>{{ .beta_latest }}</td>
                                             <td>
                                                 <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn {{if eq .beta_deployed .beta_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
-                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-                                                        <path d="M21 3v5h-5"></path>
-                                                    </svg>
-                                                    Update
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>
-                                                <div class="component-title">steamcmd</div>
-                                                <div class="progress-row" data-progress="steamcmd">
-                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
-                                                    <div class="progress-text"></div>
-                                                </div>
-                                            </td>
-                                            <td>{{ .steamcmd_deployed }}</td>
-                                            <td>{{ .steamcmd_latest }}</td>
-                                            <td>
-                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn {{if eq .steamcmd_deployed .steamcmd_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1034,6 +1387,26 @@
                                             </td>
                                         </tr>
                                         <tr>
+                                            <td>
+                                                <div class="component-title">SCON</div>
+                                                <div class="progress-row" data-progress="scon">
+                                                    <div class="progress-bar"><div class="progress-fill"></div></div>
+                                                    <div class="progress-text"></div>
+                                                </div>
+                                            </td>
+                                            <td>{{ .scon_deployed }}</td>
+                                            <td>{{ .scon_latest }}</td>
+                                            <td>
+                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn {{if eq .scon_deployed .scon_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
                                             <td colspan="3"></td>
                                             <td>
                                                 <button type="submit" name="update_all" data-update-target="update_all" data-component="all" class="btn btn-primary update-trigger" {{if .updating}}disabled{{end}}>
@@ -1066,6 +1439,60 @@
                 </div>
             </div>
             
+            <!-- User Management (collapsible) -->
+            <div class="glass-card" id="userMgmtCard">
+                <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
+                    <h3 class="card-title" style="margin:0;">User Management</h3>
+                    <button type="button" id="userMgmtToggle" class="btn btn-secondary btn-min-sm" aria-expanded="false" aria-controls="userMgmtContent" title="Expand">
+                        <svg id="userMgmtChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <span id="userMgmtToggleLabel" style="margin-left:6px;">More</span>
+                    </button>
+                </div>
+                <div id="userMgmtContent" class="card-body" aria-hidden="true" style="display:none;">
+                    <div class="form-grid-compact" style="margin-bottom: var(--space-3);">
+                        <div class="form-group">
+                            <label>Add User</label>
+                            <div class="inline-controls" style="flex-wrap: nowrap;">
+                                <input id="um_new_username" type="text" class="form-input-inline" placeholder="username" minlength="3" required />
+                                <input id="um_new_password" type="password" class="form-input-inline" placeholder="password (min 8)" minlength="8" required />
+                                <select id="um_new_role" class="form-input-inline" style="width: 120px; min-width: 120px;">
+                                    <option value="admin">Admin</option>
+                                    <option value="operator" selected>Operator</option>
+                                </select>
+                                <button type="button" id="um_access_btn" class="btn btn-secondary" title="Choose servers for this operator" style="min-width: 120px; white-space: nowrap;">Servers ▾</button>
+                                <button type="button" id="um_add_btn" class="btn btn-primary">Add</button>
+                            </div>
+                            <div id="um_access_dropdown" class="glass-card" style="display:none; position: fixed; z-index: 5000; width: 340px; padding: 12px; border: 1px solid var(--border-color);">
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                                    <strong>Server Access</strong>
+                                    <button type="button" id="um_access_close" class="btn btn-min-sm btn-secondary">Close</button>
+                                </div>
+                                <div class="form-group" style="margin-bottom:8px;">
+                                    <label style="display:inline-flex; align-items:center; gap:8px;"><input type="checkbox" id="um_access_all"> All servers</label>
+                                </div>
+                                <div id="um_access_list" style="display:flex; flex-wrap:wrap; gap:8px; max-height: 240px; overflow:auto; padding: 4px; border: 1px dashed var(--border-color); border-radius: 8px;"></div>
+                                <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+                                    <button type="button" id="um_access_save" class="btn btn-primary">Save</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="um-sort" data-key="username" style="cursor:pointer;">Username</th>
+                                    <th class="um-sort" data-key="role" style="cursor:pointer;">Role</th>
+                                    <th class="um-sort" data-key="created_at" style="cursor:pointer;">Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="um_table_body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- Footer with Actions -->
             <div class="glass-card">
                 <p>There are <strong>{{.server_count_active}}</strong> servers currently running.</p>

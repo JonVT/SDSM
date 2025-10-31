@@ -12,6 +12,7 @@ import (
 	"sdsm/internal/handlers"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
+	"sdsm/internal/version"
 	"sdsm/ui"
 	"strconv"
 	"strings"
@@ -24,11 +25,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// BuildTime is set at compile time via -ldflags for development builds
-var BuildTime string
-
-// Version is set at compile time via -ldflags for release builds
-var Version string
+// Build and version metadata now live in sdsm/internal/version
 
 type App struct {
 	manager     *manager.Manager
@@ -270,18 +267,7 @@ func setupRouter() *gin.Engine {
 			}
 			return strings.ToUpper(string(rs[0])) + strings.ToUpper(string(rs[1]))
 		},
-		"buildTime": func() string {
-			// For releases, show version number
-			if Version != "" {
-				return Version
-			}
-			// For dev builds, show timestamp
-			if BuildTime != "" {
-				return BuildTime
-			}
-			// Fallback for unset builds
-			return "dev"
-		},
+		"buildTime": func() string { return version.String() },
 	}
 	r.SetFuncMap(funcMap)
 	// Build a combined template set from embedded assets so both root and subdir files are available by name
@@ -325,11 +311,22 @@ func setupRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Public version endpoint with build metadata
+	r.GET("/version", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"version": version.Version,
+			"commit":  version.Commit,
+			"date":    version.Date,
+			"dirty":   version.Dirty,
+			"display": version.String(),
+		})
+	})
+
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
 	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
-	managerHandlers := handlers.NewManagerHandlers(app.manager)
+	managerHandlers := handlers.NewManagerHandlers(app.manager, app.userStore)
 
 	// Public routes
 	r.GET("/", func(c *gin.Context) {
@@ -411,6 +408,57 @@ func setupRouter() *gin.Engine {
 		})
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)
+
+		// Admin-only user management API
+		api.GET("/users", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersList(c)
+		})
+		api.POST("/users", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersCreate(c)
+		})
+		api.PATCH("/users/:username/role", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersSetRole(c)
+		})
+		api.POST("/users/:username/reset-password", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersResetPassword(c)
+		})
+		api.DELETE("/users/:username", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersDelete(c)
+		})
+		api.GET("/users/:username/assignments", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersGetAssignments(c)
+		})
+		api.POST("/users/:username/assignments", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			userHandlers.APIUsersSetAssignments(c)
+		})
 	}
 
 	// Protected web routes

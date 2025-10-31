@@ -70,6 +70,10 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		actionHandled = true
 		deployType = manager.DeployTypeLaunchPad
 		deployErr = h.startDeployAsync(deployType)
+	} else if c.PostForm("update_scon") != "" {
+		actionHandled = true
+		deployType = manager.DeployTypeSCON
+		deployErr = h.startDeployAsync(deployType)
 	} else if c.PostForm("update_all") != "" {
 		actionHandled = true
 		deployType = manager.DeployTypeAll

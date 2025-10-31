@@ -929,7 +929,7 @@ func (s *Server) Deploy() error {
 		return err
 	}
 
-	additionalFiles := s.countFilesIfExists(s.Paths.BepInExDir()) + s.countFilesIfExists(s.Paths.LaunchPadDir())
+	additionalFiles := s.countFilesIfExists(s.Paths.BepInExDir()) + s.countFilesIfExists(s.Paths.LaunchPadDir()) + s.countFilesIfExists(s.Paths.SCONDir())
 	if additionalFiles > 0 {
 		totalFiles += additionalFiles
 	}
@@ -1023,10 +1023,27 @@ func (s *Server) deployBepInExAssets(dst string, tracker *copyTracker) error {
 		return fmt.Errorf("creating plugins directory: %w", err)
 	}
 	if s.Logger != nil {
-		s.Logger.Write("Copying LaunchPad files into BepInEx/plugins")
+		s.Logger.Write("Copying LaunchPad files into BepInEx/plugins/StationeersLaunchPad")
 	}
-	if err := s.copyDir(launchDir, pluginsDst, tracker); err != nil {
+	launchpadDst := filepath.Join(pluginsDst, "StationeersLaunchPad")
+	if err := os.MkdirAll(launchpadDst, os.ModePerm); err != nil {
+		return fmt.Errorf("creating StationeersLaunchPad directory: %w", err)
+	}
+	if err := s.copyDir(launchDir, launchpadDst, tracker); err != nil {
 		return fmt.Errorf("copying LaunchPad content: %w", err)
+	}
+
+	// Copy SCON into BepInEx/plugins if present
+	sconDir := s.Paths.SCONDir()
+	if sconInfo, err := os.Stat(sconDir); err == nil && sconInfo.IsDir() {
+		if s.Logger != nil {
+			s.Logger.Write("Copying SCON files into BepInEx/plugins")
+		}
+		if err := s.copyDir(sconDir, pluginsDst, tracker); err != nil {
+			return fmt.Errorf("copying SCON content: %w", err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to access SCON directory %s: %w", sconDir, err)
 	}
 
 	// After copying BepInEx files, run the installer to finalize setup.

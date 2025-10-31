@@ -1010,7 +1010,8 @@
                     if (!moreToggle) return;
                     moreToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
                     moreToggle.innerHTML = (expanded ? chevronUp : chevronDown) + '<span style="margin-left:6px;">' + (expanded ? 'Less' : 'More') + '</span>';
-                    moreToggle.title = expanded ? 'Hide advanced actions' : 'Show advanced actions';
+                    // Match User Management toggle semantics: title reflects Collapse/Expand
+                    moreToggle.title = expanded ? 'Collapse' : 'Expand';
                 }
 
                 if (initiallyExpanded) {

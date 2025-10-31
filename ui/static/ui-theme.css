@@ -1129,6 +1129,21 @@ input[type="email"]:focus {
 
 .update-progress.active { display: flex; }
 
+/* Compact inline variant for placement next to Update button */
+.update-progress.compact {
+    display: none; /* remains hidden until .active */
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0; /* remove top margin inside button row */
+    padding: 0; /* no inner padding inline */
+    background: transparent;
+    border: none;
+}
+.update-progress.compact.active { display: inline-flex; }
+.update-progress.compact .update-progress-bar { width: 120px; height: 6px; background: var(--surface-subtle); }
+.update-progress.compact .update-progress-text { font-size: var(--text-xs); color: var(--text-tertiary); }
+
 .update-progress-bar {
     width: 100%;
     height: 8px;

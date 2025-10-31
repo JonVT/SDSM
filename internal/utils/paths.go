@@ -42,6 +42,11 @@ func (p *Paths) BepInExDir() string {
 	return filepath.Join(p.RootPath, "bin", "BepInEx")
 }
 
+// SCONDir returns the directory where SCON is installed.
+func (p *Paths) SCONDir() string {
+	return filepath.Join(p.RootPath, "bin", "SCON")
+}
+
 // LaunchPadDir returns the directory where Stationeers LaunchPad is installed.
 func (p *Paths) LaunchPadDir() string {
 	return filepath.Join(p.RootPath, "bin", "launchpad")
@@ -74,7 +79,7 @@ func (p *Paths) UpdateLogFile() string {
 
 // CheckRoot verifies that core directories exist under the root path.
 func (p *Paths) CheckRoot() bool {
-	dirs := []string{p.RootPath, p.SteamDir(), p.ReleaseDir(), p.BetaDir(), p.BepInExDir(), p.LaunchPadDir(), p.LogsDir()}
+	dirs := []string{p.RootPath, p.SteamDir(), p.ReleaseDir(), p.BetaDir(), p.BepInExDir(), p.SCONDir(), p.LaunchPadDir(), p.LogsDir()}
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return false
@@ -98,6 +103,7 @@ func (p *Paths) DeployRoot(logger *Logger) {
 	mkdirLog(p.ReleaseDir(), "release")
 	mkdirLog(p.BetaDir(), "beta")
 	mkdirLog(p.BepInExDir(), "BepInEx")
+	mkdirLog(p.SCONDir(), "SCON")
 	mkdirLog(p.LaunchPadDir(), "launchpad")
 	mkdirLog(p.LogsDir(), "logs")
 	mkdirLog(p.ConfigDir(), "config")

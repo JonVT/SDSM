@@ -92,6 +92,12 @@
                 </button>
                 <div class="control-actions" style="width:auto; margin-left:auto;">
                     <div class="button-group">
+                        <div id="server-update-progress" class="update-progress compact" aria-live="polite">
+                            <div class="update-progress-bar">
+                                <div class="update-progress-fill"></div>
+                            </div>
+                            <div class="update-progress-text">Idle</div>
+                        </div>
                         <button type="submit" name="update_server" value="true" class="btn btn-primary" title="Download and install the latest server files" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}}>
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
@@ -108,12 +114,6 @@
                             </svg>
                             Delete Server
                         </button>
-                    </div>
-                    <div id="server-update-progress" class="update-progress" aria-live="polite">
-                        <div class="update-progress-bar">
-                            <div class="update-progress-fill"></div>
-                        </div>
-                        <div class="update-progress-text">Idle</div>
                     </div>
                 </div>
             </div>

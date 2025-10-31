@@ -15,8 +15,10 @@ import (
 type Role string
 
 const (
-	RoleAdmin Role = "admin"
-	RoleUser  Role = "user"
+	RoleAdmin    Role = "admin"
+	RoleOperator Role = "operator"
+	RoleViewer   Role = "viewer"
+	RoleUser     Role = "user"
 )
 
 // User holds authentication data and role for an account.
@@ -25,6 +27,9 @@ type User struct {
 	PasswordHash string    `json:"password_hash"`
 	Role         Role      `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
+	// Operator access control
+	AssignedAllServers bool  `json:"assigned_all_servers,omitempty"`
+	AssignedServers    []int `json:"assigned_servers,omitempty"`
 }
 
 // UserStore manages persistent users with a JSON file backend.
@@ -159,6 +164,72 @@ func (s *UserStore) SetRole(username string, role Role) error {
 	}
 	u.Role = role
 	return s.saveLocked()
+}
+
+// GetAssignments returns whether the user is assigned to all servers and the explicit list.
+func (s *UserStore) GetAssignments(username string) (bool, []int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	u, ok := s.users[username]
+	if !ok {
+		return false, nil, errors.New("user not found")
+	}
+	// Copy slice to avoid external mutation
+	var list []int
+	if len(u.AssignedServers) > 0 {
+		list = make([]int, len(u.AssignedServers))
+		copy(list, u.AssignedServers)
+	}
+	return u.AssignedAllServers, list, nil
+}
+
+// SetAssignments updates operator server assignments.
+func (s *UserStore) SetAssignments(username string, all bool, servers []int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[username]
+	if !ok {
+		return errors.New("user not found")
+	}
+	u.AssignedAllServers = all
+	if all {
+		u.AssignedServers = nil
+	} else {
+		// de-dup and sanitize
+		uniq := make(map[int]struct{}, len(servers))
+		out := make([]int, 0, len(servers))
+		for _, id := range servers {
+			if id <= 0 {
+				continue
+			}
+			if _, seen := uniq[id]; !seen {
+				uniq[id] = struct{}{}
+				out = append(out, id)
+			}
+		}
+		u.AssignedServers = out
+	}
+	return s.saveLocked()
+}
+
+// CanAccess reports whether an operator has access to the given server.
+// Admin checks should be handled by callers.
+func (s *UserStore) CanAccess(username string, serverID int) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	u, ok := s.users[username]
+	if !ok {
+		return false
+	}
+	if u.AssignedAllServers {
+		return true
+	}
+	for _, id := range u.AssignedServers {
+		if id == serverID {
+			return true
+		}
+	}
+	return false
 }
 
 // Users returns a snapshot list of users.

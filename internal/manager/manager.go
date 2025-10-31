@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	fs "io/fs"
 	"net/http"
 	"os"
@@ -39,6 +40,7 @@ const (
 	DeployTypeSteamCMD  DeployType = "STEAMCMD"
 	DeployTypeServers   DeployType = "SERVERS"
 	DeployTypeLaunchPad DeployType = "LAUNCHPAD"
+	DeployTypeSCON      DeployType = "SCON"
 )
 
 type Manager struct {
@@ -75,12 +77,19 @@ type Manager struct {
 	launchPadMu       sync.RWMutex     `json:"-"`
 	launchPadVersion  string           `json:"-"`
 	launchPadChecked  time.Time        `json:"-"`
-	releaseVersionMu  sync.RWMutex     `json:"-"`
-	releaseVersion    string           `json:"-"`
-	releaseCheckedAt  time.Time        `json:"-"`
-	betaVersionMu     sync.RWMutex     `json:"-"`
-	betaVersion       string           `json:"-"`
-	betaCheckedAt     time.Time        `json:"-"`
+	// SCON latest/deployed caches
+	sconLatestMu     sync.RWMutex `json:"-"`
+	sconLatest       string       `json:"-"`
+	sconLatestAt     time.Time    `json:"-"`
+	sconMu           sync.RWMutex `json:"-"`
+	sconVersion      string       `json:"-"`
+	sconChecked      time.Time    `json:"-"`
+	releaseVersionMu sync.RWMutex `json:"-"`
+	releaseVersion   string       `json:"-"`
+	releaseCheckedAt time.Time    `json:"-"`
+	betaVersionMu    sync.RWMutex `json:"-"`
+	betaVersion      string       `json:"-"`
+	betaCheckedAt    time.Time    `json:"-"`
 	// Latest available (Steam) build IDs cache
 	releaseLatestMu sync.RWMutex `json:"-"`
 	releaseLatest   string       `json:"-"`
@@ -139,6 +148,7 @@ var deployDisplayNames = map[DeployType]string{
 	DeployTypeSteamCMD:  "steamcmd",
 	DeployTypeBepInEx:   "BepInEx",
 	DeployTypeLaunchPad: "Stationeers LaunchPad",
+	DeployTypeSCON:      "SCON",
 }
 
 var progressOrder = []DeployType{
@@ -147,6 +157,7 @@ var progressOrder = []DeployType{
 	DeployTypeSteamCMD,
 	DeployTypeBepInEx,
 	DeployTypeLaunchPad,
+	DeployTypeSCON,
 }
 
 func (dt DeployType) key() string {
@@ -867,6 +878,26 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 		m.invalidateLaunchPadVersionCache()
 	}
 
+	if deployType == DeployTypeSCON || deployType == DeployTypeAll {
+		m.Log.Write("Beginning SCON deployment")
+		m.progressBegin(DeployTypeSCON, "Queued")
+		s.SetProgressReporter(string(DeployTypeSCON), m.progressReporter(DeployTypeSCON))
+		if err := s.UpdateSCON(); err != nil {
+			msg := fmt.Sprintf("SCON deployment failed: %v", err)
+			errs = append(errs, msg)
+			m.Log.Write(msg)
+			if m.UpdateLog != nil {
+				m.UpdateLog.Write(msg)
+			}
+			m.progressComplete(DeployTypeSCON, "Failed", err)
+		} else {
+			m.Log.Write("SCON deployment completed successfully")
+			m.progressComplete(DeployTypeSCON, "Completed", nil)
+		}
+		s.SetProgressReporter("", nil)
+		m.invalidateSCONVersionCache()
+	}
+
 	if deployType == DeployTypeServers || deployType == DeployTypeAll {
 		serversFailed := false
 		for _, srv := range m.Servers {
@@ -1173,6 +1204,7 @@ const launchPadVersionCacheTTL = time.Minute
 const rocketStationVersionCacheTTL = time.Minute
 const rocketStationLatestCacheTTL = time.Minute
 const bepInExVersionFile = "bepinex.version"
+const sconLatestCacheTTL = 30 * time.Minute
 
 type worldDefinition struct {
 	Directory           string
@@ -1768,6 +1800,19 @@ func (m *Manager) invalidateLaunchPadVersionCache() {
 	m.launchPadMu.Unlock()
 }
 
+// invalidateSCONVersionCache clears cached SCON deployed/latest values
+func (m *Manager) invalidateSCONVersionCache() {
+	m.sconMu.Lock()
+	m.sconVersion = ""
+	m.sconChecked = time.Time{}
+	m.sconMu.Unlock()
+
+	m.sconLatestMu.Lock()
+	m.sconLatest = ""
+	m.sconLatestAt = time.Time{}
+	m.sconLatestMu.Unlock()
+}
+
 // invalidateGameDataCaches clears any cached game data (worlds, languages, difficulties)
 // so that subsequent requests recollect fresh data from disk after an update.
 func (m *Manager) invalidateGameDataCaches(beta bool) {
@@ -2161,6 +2206,153 @@ func (m *Manager) LaunchPadDeployed() string {
 	m.launchPadMu.Unlock()
 
 	return version
+}
+
+// SCONLatest returns the latest tagged version for the SCON plugin from its GitHub repo.
+// Repo can be overridden via environment variable SDSM_SCON_REPO (format: owner/repo).
+func (m *Manager) SCONLatest() string {
+	m.sconLatestMu.RLock()
+	cached := m.sconLatest
+	cachedAt := m.sconLatestAt
+	m.sconLatestMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < sconLatestCacheTTL {
+		return cached
+	}
+
+	version, err := m.fetchSCONLatestVersion()
+	if err != nil {
+		m.safeLog(fmt.Sprintf("Failed to fetch latest SCON version: %v", err))
+		if cached != "" {
+			return cached
+		}
+		version = "Unknown"
+	} else {
+		m.safeLog(fmt.Sprintf("SCON latest version reported: %s", version))
+	}
+
+	m.sconLatestMu.Lock()
+	m.sconLatest = version
+	m.sconLatestAt = time.Now()
+	m.sconLatestMu.Unlock()
+	return version
+}
+
+// SCONDeployed returns a coarse deployed state for SCON: Installed/Missing/Error.
+func (m *Manager) SCONDeployed() string {
+	m.sconMu.RLock()
+	cached := m.sconVersion
+	cachedAt := m.sconChecked
+	m.sconMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < launchPadVersionCacheTTL {
+		return cached
+	}
+
+	state, err := m.detectSCONInstalled()
+	if err != nil {
+		state = "Error"
+		m.safeLog(fmt.Sprintf("SCON deploy check failed: %v", err))
+	}
+
+	m.sconMu.Lock()
+	m.sconVersion = state
+	m.sconChecked = time.Now()
+	m.sconMu.Unlock()
+	return state
+}
+
+func (m *Manager) detectSCONInstalled() (string, error) {
+	if m.Paths == nil {
+		m.Paths = utils.NewPaths("/tmp/sdsm")
+	}
+	sconDir := m.Paths.SCONDir()
+	entries, err := os.ReadDir(sconDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "Missing", nil
+		}
+		return "Error", err
+	}
+	if len(entries) == 0 {
+		return "Missing", nil
+	}
+	// Quick scan: any DLL with name containing "scon" or any file presence
+	for _, e := range entries {
+		if e.IsDir() {
+			// Look one level deep for DLLs in subdir that include scon
+			sub := filepath.Join(sconDir, e.Name())
+			_ = filepath.WalkDir(sub, func(path string, d fs.DirEntry, werr error) error {
+				if werr != nil || d == nil || d.IsDir() {
+					return nil
+				}
+				name := strings.ToLower(d.Name())
+				if strings.HasSuffix(name, ".dll") && strings.Contains(name, "scon") {
+					// Found a likely SCON dll
+					err = nil
+					// Use err return to short-circuit walk quietly
+					return io.EOF
+				}
+				return nil
+			})
+			if err == io.EOF {
+				return "Installed", nil
+			}
+			// If folder contains any non-dir file, consider installed
+			files, _ := os.ReadDir(sub)
+			for _, f := range files {
+				if !f.IsDir() {
+					return "Installed", nil
+				}
+			}
+		} else {
+			name := strings.ToLower(e.Name())
+			if strings.HasSuffix(name, ".dll") && strings.Contains(name, "scon") {
+				return "Installed", nil
+			}
+			// Any file counts as installed
+			return "Installed", nil
+		}
+	}
+	return "Missing", nil
+}
+
+func (m *Manager) fetchSCONLatestVersion() (string, error) {
+	repo := strings.TrimSpace(os.Getenv("SDSM_SCON_REPO"))
+	if repo == "" {
+		// Default guess; override via env var if different
+		repo = "JonVT/SCON"
+	}
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "sdsm-manager/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github responded with %s", resp.Status)
+	}
+
+	var payload struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(payload.TagName)
+	if version == "" {
+		return "", fmt.Errorf("github response missing tag_name")
+	}
+	return version, nil
 }
 
 func (m *Manager) fetchLaunchPadDeployedVersion() (string, error) {

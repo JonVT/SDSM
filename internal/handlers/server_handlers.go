@@ -14,6 +14,7 @@ import (
 
 func (h *ManagerHandlers) ServerGET(c *gin.Context) {
 	username, _ := c.Get("username")
+	role := c.GetString("role")
 
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -29,6 +30,15 @@ func (h *ManagerHandlers) ServerGET(c *gin.Context) {
 			"error": "Server not found",
 		})
 		return
+	}
+
+	if role != "admin" {
+		if user, ok := username.(string); ok {
+			if h.userStore == nil || !h.userStore.CanAccess(user, s.ID) {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "You do not have access to this server."})
+				return
+			}
+		}
 	}
 
 	h.renderServerPage(c, http.StatusOK, s, username, "")
@@ -52,6 +62,15 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			"error": "Server not found",
 		})
 		return
+	}
+
+	if role != "admin" {
+		if user, ok := username.(string); ok {
+			if h.userStore == nil || !h.userStore.CanAccess(user, s.ID) {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "You do not have access to this server."})
+				return
+			}
+		}
 	}
 
 	acceptsJSON := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json")

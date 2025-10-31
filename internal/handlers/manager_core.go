@@ -17,12 +17,13 @@ const updateLogFallback = "No update activity recorded yet."
 
 // ManagerHandlers wires HTTP handlers to a Manager instance.
 type ManagerHandlers struct {
-	manager *manager.Manager
+	manager   *manager.Manager
+	userStore *manager.UserStore
 }
 
-// NewManagerHandlers constructs a handler set bound to the provided Manager.
-func NewManagerHandlers(mgr *manager.Manager) *ManagerHandlers {
-	return &ManagerHandlers{manager: mgr}
+// NewManagerHandlers constructs a handler set bound to the provided Manager and UserStore.
+func NewManagerHandlers(mgr *manager.Manager, us *manager.UserStore) *ManagerHandlers {
+	return &ManagerHandlers{manager: mgr, userStore: us}
 }
 
 func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[string]map[string]gin.H) {
@@ -296,10 +297,23 @@ func (h *ManagerHandlers) Home(c *gin.Context) {
 // Frame renders the outer frame shell with server list and active status.
 func (h *ManagerHandlers) Frame(c *gin.Context) {
 	username, _ := c.Get("username")
+	role := c.GetString("role")
+
+	servers := h.manager.Servers
+	if role != "admin" {
+		user, _ := username.(string)
+		filtered := make([]*models.Server, 0, len(servers))
+		for _, s := range servers {
+			if h.userStore != nil && h.userStore.CanAccess(user, s.ID) {
+				filtered = append(filtered, s)
+			}
+		}
+		servers = filtered
+	}
 
 	data := gin.H{
 		"active":   h.manager.IsActive(),
-		"servers":  h.manager.Servers,
+		"servers":  servers,
 		"username": username,
 	}
 	c.HTML(http.StatusOK, "frame.html", data)
@@ -308,9 +322,22 @@ func (h *ManagerHandlers) Frame(c *gin.Context) {
 // Dashboard renders the main dashboard with server cards for quick status.
 func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	username, _ := c.Get("username")
+	role := c.GetString("role")
+
+	servers := h.manager.Servers
+	if role != "admin" {
+		user, _ := username.(string)
+		filtered := make([]*models.Server, 0, len(servers))
+		for _, s := range servers {
+			if h.userStore != nil && h.userStore.CanAccess(user, s.ID) {
+				filtered = append(filtered, s)
+			}
+		}
+		servers = filtered
+	}
 
 	c.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"servers":  h.manager.Servers,
+		"servers":  servers,
 		"username": username,
 	})
 }
@@ -375,11 +402,13 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"steamcmd_latest":     h.manager.SteamCmdLatest(),
 		"bepinex_latest":      h.manager.BepInExLatest(),
 		"launchpad_latest":    h.manager.LaunchPadLatest(),
+		"scon_latest":         h.manager.SCONLatest(),
 		"release_deployed":    h.manager.ReleaseDeployed(),
 		"beta_deployed":       h.manager.BetaDeployed(),
 		"steamcmd_deployed":   h.manager.SteamCmdDeployed(),
 		"bepinex_deployed":    h.manager.BepInExDeployed(),
 		"launchpad_deployed":  h.manager.LaunchPadDeployed(),
+		"scon_deployed":       h.manager.SCONDeployed(),
 		"server_count":        h.manager.ServerCount(),
 		"server_count_active": h.manager.ServerCountActive(),
 		"updating":            h.manager.IsUpdating(),

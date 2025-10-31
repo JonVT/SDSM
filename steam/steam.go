@@ -27,6 +27,11 @@ const (
 	launchPadAPI       = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
 	launchPadFallback  = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
 	bepInExVersionFile = "bepinex.version"
+	sconRepoEnvVar     = "SDSM_SCON_REPO" // owner/repo override
+	sconDefaultRepo    = "JonVT/SCON"     // default guess; override with env var if needed
+	// Optional environment overrides for SCON URLs
+	sconLinuxURLEnv   = "SDSM_SCON_URL_LINUX"
+	sconWindowsURLEnv = "SDSM_SCON_URL_WINDOWS"
 )
 
 // Steam provides helpers to query Steam APIs and deploy/update components
@@ -399,6 +404,158 @@ func (s *Steam) resolveLaunchPadDownload() (string, string, error) {
 
 	return launchPadFallback, "StationeersLaunchPad.zip", nil
 }
+
+// UpdateSCON downloads the latest SCON release (from GitHub) and places its contents into BepInEx/plugins.
+// The source repo can be overridden via env var SDSM_SCON_REPO (format: owner/repo).
+func (s *Steam) UpdateSCON() error {
+	repo := strings.TrimSpace(os.Getenv(sconRepoEnvVar))
+	if repo == "" {
+		repo = sconDefaultRepo
+	}
+	url, assetName, tag, err := s.resolveSCONDownload(repo)
+	if err != nil {
+		return err
+	}
+
+	// Ensure SCON directory exists
+	sconDir := s.Paths.SCONDir()
+	if err := os.MkdirAll(sconDir, os.ModePerm); err != nil {
+		return err
+	}
+
+	// Download to a temporary path outside target dir to avoid deleting the archive during cleanup
+	tmpFile, err := os.CreateTemp(s.Paths.RootPath, "SCON-*.zip")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	tmpFile.Close()
+
+	if tag != "" {
+		s.Logger.Write(fmt.Sprintf("Downloading SCON %s (%s) from %s", tag, assetName, url))
+	} else if assetName != "" {
+		s.Logger.Write(fmt.Sprintf("Downloading SCON (%s) from %s", assetName, url))
+	} else {
+		s.Logger.Write(fmt.Sprintf("Downloading SCON from %s", url))
+	}
+	if _, _, err := s.downloadFile(url, tmpPath, "Downloading"); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	// Clear existing contents before extracting new version
+	if err := os.RemoveAll(sconDir); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.MkdirAll(sconDir, os.ModePerm); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	s.reportProgress("Extracting", 0, 0)
+	if err := s.unzip(tmpPath, sconDir); err != nil {
+		s.reportProgress("Extraction failed", 0, 0)
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	_ = os.Remove(tmpPath)
+
+	// If the archive contains a single root folder, flatten it
+	if err := flattenSingleDirectory(sconDir); err != nil {
+		s.Logger.Write(fmt.Sprintf("Warning: unable to flatten SCON directory: %v", err))
+	}
+
+	s.reportProgress("Completed", 0, 0)
+	if tag != "" {
+		s.Logger.Write(fmt.Sprintf("SCON %s deployed into bin/SCON successfully", tag))
+	} else {
+		s.Logger.Write("SCON deployed into bin/SCON successfully")
+	}
+	return nil
+}
+
+func (s *Steam) resolveSCONDownload(repo string) (string, string, string, error) { // returns url, name, tag
+	// Allow explicit URL overrides via env for quick pinning/testing
+	switch runtime.GOOS {
+	case "linux":
+		if v := strings.TrimSpace(os.Getenv(sconLinuxURLEnv)); v != "" {
+			return v, filepath.Base(v), "", nil
+		}
+	case "windows":
+		if v := strings.TrimSpace(os.Getenv(sconWindowsURLEnv)); v != "" {
+			return v, filepath.Base(v), "", nil
+		}
+	default:
+		return "", "", "", fmt.Errorf("unsupported platform for SCON deployment: %s", runtime.GOOS)
+	}
+
+	// Query GitHub API for latest release assets
+	api := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
+	req, err := http.NewRequest(http.MethodGet, api, nil)
+	if err != nil {
+		return "", "", "", err
+	}
+	req.Header.Set("User-Agent", "SDSM-Manager")
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// Fallback to zipball of main branch
+		fallback := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.zip", repo)
+		return fallback, "SCON.zip", "", nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fallback := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.zip", repo)
+		return fallback, "SCON.zip", "", nil
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		Assets  []struct {
+			Name               string `json:"name"`
+			BrowserDownloadURL string `json:"browser_download_url"`
+		} `json:"assets"`
+		ZipballURL string `json:"zipball_url"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		fallback := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.zip", repo)
+		return fallback, "SCON.zip", "", nil
+	}
+
+	// Prefer OS-specific asset
+	osKey := runtime.GOOS // "linux" or "windows"
+	var genericZip string
+	var genericName string
+	for _, asset := range release.Assets {
+		nameLower := strings.ToLower(asset.Name)
+		if !strings.HasSuffix(nameLower, ".zip") || asset.BrowserDownloadURL == "" {
+			continue
+		}
+		if genericZip == "" {
+			genericZip = asset.BrowserDownloadURL
+			genericName = asset.Name
+		}
+		if strings.Contains(nameLower, osKey) {
+			return asset.BrowserDownloadURL, asset.Name, release.TagName, nil
+		}
+	}
+	if genericZip != "" {
+		return genericZip, genericName, release.TagName, nil
+	}
+	if release.ZipballURL != "" {
+		return release.ZipballURL, "SCON.zip", release.TagName, nil
+	}
+	fallback := fmt.Sprintf("https://github.com/%s/archive/refs/heads/main.zip", repo)
+	return fallback, "SCON.zip", "", nil
+}
+
+// unzipSCONToPlugins extracts only relevant plugin files into the plugins directory.
+// It handles archives that contain BepInEx/plugins paths or DLLs at root/subfolders.
+// unzipSCONToPlugins removed; using generic unzip() into bin/SCON
 
 func flattenSingleDirectory(base string) error {
 	entries, err := os.ReadDir(base)

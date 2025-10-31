@@ -111,7 +111,7 @@
             if(!data || !badge) return;
             const role = (data.role || '').toLowerCase();
             if(role === 'admin') { badge.textContent = 'A'; badge.style.background = 'var(--danger-600, #dc2626)'; badge.title = 'Admin'; }
-            else { badge.textContent = 'U'; badge.style.background = 'var(--accent-600, #6366f1)'; badge.title = 'User'; }
+            else { badge.textContent = 'O'; badge.style.background = 'var(--warning-600, #d97706)'; badge.title = 'Operator'; }
           })
           .catch(() => {});
       } catch(_) {}

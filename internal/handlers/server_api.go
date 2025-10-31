@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"sdsm/internal/models"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,19 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
+	}
+
+	// Enforce RBAC: operators must be assigned to the server
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
 	}
 
 	s := h.manager.ServerByID(serverID)
@@ -128,6 +142,18 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 		return
 	}
 
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
 	s := h.manager.ServerByID(serverID)
 	if s == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
@@ -158,6 +184,18 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 		return
 	}
 
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
 	s := h.manager.ServerByID(serverID)
 	if s == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
@@ -184,6 +222,12 @@ func (h *ManagerHandlers) APIServerDelete(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
 		return
 	}
 
@@ -245,6 +289,18 @@ func (h *ManagerHandlers) APIServerLog(c *gin.Context) {
 		return
 	}
 
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.String(http.StatusForbidden, "forbidden")
+					return
+				}
+			}
+		}
+	}
+
 	s := h.manager.ServerByID(serverID)
 	if s == nil {
 		c.String(http.StatusNotFound, "Server not found")
@@ -291,6 +347,18 @@ func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
 	}
 
 	s := h.manager.ServerByID(serverID)
@@ -366,14 +434,31 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 }
 
 func (h *ManagerHandlers) APIServers(c *gin.Context) {
+	role := c.GetString("role")
+	servers := h.manager.Servers
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			user, _ := val.(string)
+			filtered := make([]*models.Server, 0, len(servers))
+			for _, s := range servers {
+				if h.userStore != nil && h.userStore.CanAccess(user, s.ID) {
+					filtered = append(filtered, s)
+				}
+			}
+			servers = filtered
+		} else {
+			servers = []*models.Server{}
+		}
+	}
+
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		c.HTML(http.StatusOK, "server_cards.html", gin.H{
-			"servers": h.manager.Servers,
+			"servers": servers,
 		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"servers": h.manager.Servers,
+		"servers": servers,
 	})
 }
 
