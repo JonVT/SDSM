@@ -1,10 +1,4 @@
 .vscode/
 .config/
-deprecated/
-test/
-cmd/sdsm/bin/
-cmd/sdsm/logs/
 builder.config.json
 -b
-build.sh
-commands

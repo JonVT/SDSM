@@ -1,6 +1,0 @@
-{
-  "command": "SDSM_ALLOW_IFRAME=true SDSM_COOKIE_FORCE_SECURE=true ./sdsm",
-  "serverUrl": "http://localhost:5000",
-  "authenticateProxy": false,
-  "commitMode": "commits"
-}
