@@ -279,22 +279,49 @@
             }
             const statusBadge = serverCard.querySelector('[data-status]');
             if (statusBadge) {
-                // Normalize classes to new variant system
-                statusBadge.classList.remove('is-running', 'is-stopped');
-                statusBadge.classList.toggle('status-running', !!status.running);
-                statusBadge.classList.toggle('status-idle', !status.running);
-                // Rebuild contents to preserve dot + label
-                statusBadge.textContent = '';
-                let dot = statusBadge.querySelector('.dot');
-                if (!dot) {
-                    dot = document.createElement('span');
-                    dot.className = 'dot';
-                } else {
-                    // Ensure dot is first
-                    dot.remove();
+                const isRunning = !!status.running;
+                const isStarting = !!status.starting && isRunning;
+                const isPaused = !!status.paused && isRunning && !isStarting;
+
+                // Normalize pill variant classes (use running style when running and not paused)
+                statusBadge.classList.remove('status-running', 'status-idle', 'is-running', 'is-stopped');
+                statusBadge.classList.toggle('is-running', isRunning && !isPaused);
+                statusBadge.classList.toggle('is-stopped', !isRunning || isPaused);
+
+                // Ensure dot indicator + label structure
+                let indicator = statusBadge.querySelector('.status-dot-indicator');
+                if (!indicator) {
+                    indicator = document.createElement('span');
+                    indicator.className = 'status-dot-indicator';
+                    statusBadge.prepend(indicator);
+                    let sr = statusBadge.querySelector('.sr-only');
+                    if (!sr) {
+                        sr = document.createElement('span');
+                        sr.className = 'sr-only';
+                        sr.textContent = 'Status:';
+                        indicator.after(sr);
+                    }
                 }
-                statusBadge.appendChild(dot);
-                statusBadge.append(document.createTextNode(status.running ? 'Running' : 'Stopped'));
+                // Update indicator state classes
+                indicator.classList.remove('running', 'stopped', 'warning', 'starting', 'paused');
+                if (isStarting) indicator.classList.add('starting');
+                else if (!isRunning) indicator.classList.add('stopped');
+                else if (isPaused) indicator.classList.add('paused');
+                else indicator.classList.add('running');
+
+                // Update label after sr-only
+                const desiredLabel = isStarting ? 'Starting' : (!isRunning ? 'Stopped' : (isPaused ? 'Paused' : 'Running'));
+                let srOnly = statusBadge.querySelector('.sr-only');
+                if (!srOnly) {
+                    srOnly = document.createElement('span');
+                    srOnly.className = 'sr-only';
+                    srOnly.textContent = 'Status:';
+                    indicator.after(srOnly);
+                }
+                while (srOnly.nextSibling) {
+                    srOnly.nextSibling.remove();
+                }
+                statusBadge.append(document.createTextNode(desiredLabel));
             }
             if (status.playerCount !== undefined) {
                 const playerInfo = serverCard.querySelector('[data-player-count]');

@@ -1204,6 +1204,7 @@ const launchPadVersionCacheTTL = time.Minute
 const rocketStationVersionCacheTTL = time.Minute
 const rocketStationLatestCacheTTL = time.Minute
 const bepInExVersionFile = "bepinex.version"
+const sconVersionFile = "scon.version"
 const sconLatestCacheTTL = 30 * time.Minute
 
 type worldDefinition struct {
@@ -2240,6 +2241,15 @@ func (m *Manager) SCONLatest() string {
 
 // SCONDeployed returns a coarse deployed state for SCON: Installed/Missing/Error.
 func (m *Manager) SCONDeployed() string {
+	// Prefer a persisted version file if present
+	if ver := m.readPersistedSCONVersion(); ver != "" {
+		m.sconMu.Lock()
+		m.sconVersion = ver
+		m.sconChecked = time.Now()
+		m.sconMu.Unlock()
+		return ver
+	}
+
 	m.sconMu.RLock()
 	cached := m.sconVersion
 	cachedAt := m.sconChecked
@@ -2260,6 +2270,30 @@ func (m *Manager) SCONDeployed() string {
 	m.sconChecked = time.Now()
 	m.sconMu.Unlock()
 	return state
+}
+
+// readPersistedSCONVersion reads the stored SCON version from bin/SCON/scon.version when available.
+// The value is expected to match the GitHub tag (often prefixed with 'v'), which helps equality checks
+// against SCONLatest(). Returns empty string when the file does not exist or is invalid.
+func (m *Manager) readPersistedSCONVersion() string {
+	if m.Paths == nil {
+		return ""
+	}
+	versionFile := filepath.Join(m.Paths.SCONDir(), sconVersionFile)
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return ""
+	}
+	value := strings.TrimSpace(string(data))
+	if value == "" {
+		return ""
+	}
+	// Keep as-is (including a leading 'v') to match GitHub tags used by SCONLatest()
+	// Limit to a sensible single-line token
+	if idx := strings.IndexAny(value, " \t\r\n"); idx >= 0 {
+		value = strings.TrimSpace(value[:idx])
+	}
+	return value
 }
 
 func (m *Manager) detectSCONInstalled() (string, error) {
@@ -2795,6 +2829,14 @@ func (m *Manager) CheckMissingComponents() {
 	if entries, err := os.ReadDir(launchPadDir); err != nil || len(entries) == 0 {
 		m.MissingComponents = append(m.MissingComponents, "Stationeers LaunchPad")
 		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers LaunchPad expected at %s", launchPadDir))
+	}
+
+	// Check for SCON plugin presence (optional, but include in setup to avoid confusion)
+	// If SCON is missing, we surface it in missing components so setup can fetch it
+	// and redeploy servers to copy into BepInEx/plugins.
+	if state := m.SCONDeployed(); state == "Missing" {
+		m.MissingComponents = append(m.MissingComponents, "SCON")
+		missingDetails = append(missingDetails, fmt.Sprintf("SCON files expected under %s", m.Paths.SCONDir()))
 	}
 
 	changed := !reflect.DeepEqual(previous, m.MissingComponents)

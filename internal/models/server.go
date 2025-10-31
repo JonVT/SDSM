@@ -131,7 +131,7 @@ type Server struct {
 	AutoPause           bool          `json:"auto_pause"`
 	Mods                []string      `json:"mods"`
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
-	RCONPort            int           `json:"rcon_port"` // Port for StationeersRCON plugin HTTP API
+	SCONPort            int           `json:"scon_port"` // Port for SCON plugin HTTP API
 	ServerStarted       *time.Time    `json:"server_started,omitempty"`
 	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
 	Clients             []*Client     `json:"-"`
@@ -723,6 +723,9 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 
 	if cfg.Language != "" {
 		s.Language = cfg.Language
+	} else {
+		// Default language to English when unspecified
+		s.Language = "English"
 	}
 
 	if cfg.StartLocation != "" {
@@ -744,9 +747,9 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 	} else {
 		s.Port = 26017
 	}
-	// Default RCON port to game port + 1 unless explicitly set elsewhere
-	if s.RCONPort == 0 && s.Port > 0 {
-		s.RCONPort = s.Port + 1
+	// Default SCON port to game port + 1 unless explicitly set elsewhere
+	if s.SCONPort == 0 && s.Port > 0 {
+		s.SCONPort = s.Port + 1
 	}
 
 	if cfg.SaveInterval > 0 {
@@ -810,18 +813,23 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		if strings.TrimSpace(s.WorldID) == "" {
 			s.WorldID = s.World
 		}
+		// Ensure a sensible default for language if missing in stored data
+		if strings.TrimSpace(s.Language) == "" {
+			s.Language = "English"
+		}
 		if !strings.Contains(data, "restart_delay_seconds") || s.RestartDelaySeconds < 0 {
 			s.RestartDelaySeconds = DefaultRestartDelaySeconds
 		}
-		// If RCONPort wasn't persisted or was zero, derive default from game port
-		if s.RCONPort == 0 && s.Port > 0 {
-			s.RCONPort = s.Port + 1
+		// If SCONPort wasn't persisted or was zero, derive default from game port
+		if s.SCONPort == 0 && s.Port > 0 {
+			s.SCONPort = s.Port + 1
 		}
 	} else {
 		s.Name = fmt.Sprintf("Stationeers Server %d", serverID)
 		s.World = "Mars2"
 		s.WorldID = s.World
-		s.Language = ""
+		// Default language to English for new servers
+		s.Language = "English"
 		s.Difficulty = "Normal"
 		s.Port = 26017
 		s.SaveInterval = 300
@@ -834,7 +842,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.AutoUpdate = false
 		s.AutoSave = true
 		s.AutoPause = true
-		s.RCONPort = s.Port + 1
+		s.SCONPort = s.Port + 1
 	}
 
 	s.Logger.Write("Server initialized.")
@@ -1510,10 +1518,10 @@ func (s *Server) SendRaw(line string) error {
 		return fmt.Errorf("server is not running")
 	}
 
-	// Use RCON HTTP API instead of stdin
-	rconPort := s.RCONPort
+	// Use SCON HTTP API instead of stdin
+	rconPort := s.SCONPort
 	if rconPort == 0 {
-		// Default RCON port follows Stationeers convention: game port + 1
+		// Default SCON port follows Stationeers convention: game port + 1
 		if s.Port > 0 {
 			rconPort = s.Port + 1
 		} else {
@@ -1526,7 +1534,7 @@ func (s *Server) SendRaw(line string) error {
 	trimmed = strings.ReplaceAll(trimmed, "\r", " ")
 	s.Logger.Write(fmt.Sprintf("Sending: %s", trimmed))
 
-	// Create HTTP request to RCON API
+	// Create HTTP request to SCON API
 	type CommandRequest struct {
 		Command string `json:"command"`
 	}
@@ -1538,13 +1546,13 @@ func (s *Server) SendRaw(line string) error {
 	url := fmt.Sprintf("http://localhost:%d/command", rconPort)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
-		return fmt.Errorf("failed to send command to RCON API: %w", err)
+		return fmt.Errorf("failed to send command to SCON API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("RCON API returned status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("SCON API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -28,6 +29,19 @@ func SanitizeFilename(input string) string {
 	// Remove dangerous characters for filenames
 	input = regexp.MustCompile(`[<>:"/\\|?*]`).ReplaceAllString(input, "")
 	return SanitizeString(input)
+}
+
+// SanitizePath preserves directory separators and normalizes the path while
+// removing control characters and trimming whitespace. It intentionally does
+// not strip '/' or '\\' so absolute paths remain intact. Use for config fields
+// that accept filesystem paths (e.g., SDSM root_path).
+func SanitizePath(input string) string {
+	// Remove control chars and trim
+	cleaned := SanitizeString(input)
+	// Normalize path using OS-specific rules; this collapses redundant
+	// separators and ".." safely without removing leading separators.
+	// Note: we import path/filepath at top of file
+	return filepath.Clean(cleaned)
 }
 
 func ValidatePort(portStr string) (int, error) {

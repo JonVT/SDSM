@@ -1,9 +1,9 @@
 <div class="card card-control">
     <div class="card-header">
         <h2 class="card-title">Server Control</h2>
-        <span class="status-pill {{if .server.Running}}status-running{{else}}status-idle{{end}}" id="status-pill-container">
-            <span id="status-dot-indicator" class="dot {{if .server.Running}}running{{end}}"></span>
-            <span id="status-dot-text">{{if .server.Running}}Running{{else}}Stopped{{end}}</span>
+        <span class="status-pill {{ if and .server.Running (not .server.Paused) }}is-running{{ else }}is-stopped{{ end }}" id="status-pill-container">
+            <span id="status-dot-indicator" class="status-dot-indicator {{ if and .server.Running .server.Starting }}starting{{ else if not .server.Running }}stopped{{ else if .server.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
+            <span id="status-dot-text">{{ if and .server.Running .server.Starting }}Starting{{ else if not .server.Running }}Stopped{{ else if .server.Paused }}Paused{{ else }}Running{{ end }}</span>
         </span>
     </div>
     <form method="POST">

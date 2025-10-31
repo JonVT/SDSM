@@ -689,6 +689,12 @@ body {
     box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
 }
 
+/* Paused uses the same amber treatment as warning/starting for clarity */
+.status-dot-indicator.paused {
+    background: var(--warning-500);
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18);
+}
+
 .status-pill {
     display: inline-flex;
     align-items: center;

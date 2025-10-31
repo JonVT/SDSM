@@ -1390,13 +1390,14 @@
                 statusIndicator.classList.toggle('starting', running && starting);
                 statusIndicator.classList.toggle('running', running && !serverIsPaused && !starting);
                 statusIndicator.classList.toggle('paused', serverIsPaused && !starting);
+                statusIndicator.classList.toggle('stopped', !running);
             }
             // Apply unified pill variant classes to container for visual styling
             if (statusContainer) {
-                // Map: running (incl. starting) -> status-running; paused or stopped -> status-idle
+                // Map: running (incl. starting) -> is-running; paused or stopped -> is-stopped
                 const useRunningVariant = running && !serverIsPaused; // still consider starting as running variant
-                statusContainer.classList.toggle('status-running', useRunningVariant);
-                statusContainer.classList.toggle('status-idle', !useRunningVariant);
+                statusContainer.classList.toggle('is-running', useRunningVariant);
+                statusContainer.classList.toggle('is-stopped', !useRunningVariant);
             }
             if (statusText) {
                 if (starting && running) {

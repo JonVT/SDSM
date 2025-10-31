@@ -428,6 +428,11 @@
                         <strong>BepInEx</strong> - Modding framework for Stationeers
                     </li>
                     {{end}}
+                    {{if has .missingComponents "SCON"}}
+                    <li>
+                        <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)
+                    </li>
+                    {{end}}
                     {{if has .missingComponents "Stationeers LaunchPad"}}
                     <li>
                         <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup

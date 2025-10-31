@@ -24,9 +24,15 @@
       {{ end }}
       {{ $srv.Name }}
     </div>
-    <span class="status-pill {{ if $srv.IsRunning }}status-running{{ else }}status-idle{{ end }}" data-status>
-      <span class="dot"></span>
-      {{ if $srv.IsRunning }}Running{{ else }}Stopped{{ end }}
+    {{/* Determine visual variants to mirror server page semantics:
+         - Indicator classes: starting, paused, running, stopped
+         - Pill variant: is-running when running and not paused; otherwise is-stopped
+         - Text label: Starting > Stopped > Paused > Running (same precedence as server page)
+    */}}
+    <span class="status-pill {{ if and $srv.IsRunning (not $srv.Paused) }}is-running{{ else }}is-stopped{{ end }}" data-status>
+      <span class="status-dot-indicator {{ if and $srv.IsRunning $srv.Starting }}starting{{ else if not $srv.IsRunning }}stopped{{ else if $srv.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
+      <span class="sr-only">Status:</span>
+      {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}
     </span>
   </div>
 

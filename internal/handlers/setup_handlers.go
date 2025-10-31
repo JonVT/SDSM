@@ -184,6 +184,10 @@ func determineSetupDeployTargets(missing []string, serverCount int) ([]manager.D
 		case "BepInEx":
 			required[manager.DeployTypeBepInEx] = true
 			needsServerRedeploy = true
+		case "SCON":
+			// If SCON is missing, fetch it and redeploy servers to copy plugin files
+			required[manager.DeployTypeSCON] = true
+			needsServerRedeploy = true
 		default:
 			fallbackAll = true
 		}
@@ -202,6 +206,7 @@ func determineSetupDeployTargets(missing []string, serverCount int) ([]manager.D
 		manager.DeployTypeRelease,
 		manager.DeployTypeBeta,
 		manager.DeployTypeBepInEx,
+		manager.DeployTypeSCON,
 		manager.DeployTypeLaunchPad,
 		manager.DeployTypeServers,
 	}

@@ -30,7 +30,7 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		actionHandled = true
 		actionName = "update_config"
 		steamID := middleware.SanitizeString(c.PostForm("steam_id"))
-		rootPath := middleware.SanitizeFilename(c.PostForm("root_path"))
+		rootPath := middleware.SanitizePath(c.PostForm("root_path"))
 		portStr := c.PostForm("port")
 		language := middleware.SanitizeString(c.PostForm("language"))
 

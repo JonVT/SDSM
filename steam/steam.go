@@ -27,6 +27,7 @@ const (
 	launchPadAPI       = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
 	launchPadFallback  = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
 	bepInExVersionFile = "bepinex.version"
+	sconVersionFile    = "scon.version"
 	sconRepoEnvVar     = "SDSM_SCON_REPO" // owner/repo override
 	sconDefaultRepo    = "JonVT/SCON"     // default guess; override with env var if needed
 	// Optional environment overrides for SCON URLs
@@ -464,6 +465,14 @@ func (s *Steam) UpdateSCON() error {
 	// If the archive contains a single root folder, flatten it
 	if err := flattenSingleDirectory(sconDir); err != nil {
 		s.Logger.Write(fmt.Sprintf("Warning: unable to flatten SCON directory: %v", err))
+	}
+
+	// Persist the deployed version tag if available so the Manager can report it
+	if tag != "" {
+		versionPath := filepath.Join(sconDir, sconVersionFile)
+		if werr := os.WriteFile(versionPath, []byte(strings.TrimSpace(tag)+"\n"), 0o644); werr != nil {
+			s.Logger.Write(fmt.Sprintf("Warning: unable to record SCON version: %v", werr))
+		}
 	}
 
 	s.reportProgress("Completed", 0, 0)
