@@ -22,11 +22,11 @@ EXT=""
 if [[ "$GOOS" == "windows" ]]; then
   EXT=".exe"
 fi
-ARTIFACT="sdsm-${GOOS}-${GOARCH}${EXT}"
+ARTIFACT="sdsm" #-${GOOS}-${GOARCH}${EXT}"
 OUT_PATH="${OUT_DIR}/${ARTIFACT}"
 
 # Git-derived metadata (best effort; falls back to sensible dev defaults)
-VERSION=""
+VERSION="0.0.1"
 COMMIT=""
 DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 DIRTY="clean"

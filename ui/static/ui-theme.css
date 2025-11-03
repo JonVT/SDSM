@@ -565,6 +565,13 @@ body {
 .server-card {
     height: var(--server-card-height);
     overflow: hidden;
+    cursor: pointer; /* indicate click-to-navigate */
+}
+
+/* Inside server cards, controls marked to stop navigation should not show pointer */
+.server-card [data-stop-navigation="true"],
+.server-card [data-stop-navigation="true"] * {
+    cursor: default;
 }
 
 /* Inline label/value layout inside server cards */
@@ -1032,6 +1039,60 @@ input[type="email"]:focus {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
     gap: var(--space-4);
+}
+
+/* Logs card layout: left viewer, right tabs */
+.logs-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.4fr);
+    gap: var(--space-3);
+}
+
+.log-viewer {
+    min-height: 260px;
+    max-height: 460px;
+    overflow: auto;
+    font-family: 'Fira Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: var(--space-3);
+    background: var(--surface-subtle);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-md);
+}
+
+.log-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-height: 460px;
+    overflow: auto;
+}
+
+.log-tab {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--panel-border);
+    background: var(--surface-soft);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: var(--text-sm);
+}
+
+.log-tab[aria-selected="true"] {
+    background: rgba(37, 99, 235, 0.16);
+    border-color: rgba(37, 99, 235, 0.24);
+}
+
+.log-tab .filename {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .control-section {

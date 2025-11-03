@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
 	"sdsm/internal/models"
 	"strconv"
 	"strings"
@@ -308,10 +310,31 @@ func (h *ManagerHandlers) APIServerLog(c *gin.Context) {
 	}
 
 	var logPath string
-	if s.Paths != nil {
-		logPath = s.Paths.ServerOutputFile(s.ID)
-	} else if h.manager.Paths != nil {
-		logPath = h.manager.Paths.ServerOutputFile(s.ID)
+	// Optional specific log file by name (must be in server logs dir and end with .log)
+	if name := strings.TrimSpace(c.Query("name")); name != "" {
+		base := filepath.Base(name)
+		if !strings.HasSuffix(strings.ToLower(base), ".log") {
+			c.String(http.StatusBadRequest, "invalid log file")
+			return
+		}
+		var logsDir string
+		if s.Paths != nil {
+			logsDir = s.Paths.ServerLogsDir(s.ID)
+		} else if h.manager.Paths != nil {
+			logsDir = h.manager.Paths.ServerLogsDir(s.ID)
+		}
+		if logsDir == "" {
+			c.String(http.StatusNotFound, "Logs directory not available")
+			return
+		}
+		logPath = filepath.Join(logsDir, base)
+	} else {
+		// Default to combined stdout/stderr capture
+		if s.Paths != nil {
+			logPath = s.Paths.ServerOutputFile(s.ID)
+		} else if h.manager.Paths != nil {
+			logPath = h.manager.Paths.ServerOutputFile(s.ID)
+		}
 	}
 
 	if logPath == "" {
@@ -338,6 +361,221 @@ func (h *ManagerHandlers) APIServerLog(c *gin.Context) {
 
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+}
+
+// APIServerLogsList returns a JSON array of available *.log files in the server's logs directory.
+func (h *ManagerHandlers) APIServerLogsList(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC: operators must be assigned to the server
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var logsDir string
+	if s.Paths != nil {
+		logsDir = s.Paths.ServerLogsDir(s.ID)
+	} else if h.manager.Paths != nil {
+		logsDir = h.manager.Paths.ServerLogsDir(s.ID)
+	}
+	if logsDir == "" {
+		c.JSON(http.StatusOK, gin.H{"files": []string{}})
+		return
+	}
+
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"files": []string{}})
+		return
+	}
+	files := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() { continue }
+		name := e.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".log") {
+			files = append(files, name)
+		}
+	}
+	sort.Strings(files)
+	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// APIServerLogTail streams a chunk of a log starting from a byte offset. It supports:
+//  - offset >= 0: read from offset up to 'max' bytes
+//  - offset == -1: read the last 'back' bytes from end (or 0 if back not provided)
+// Returns JSON: { data: string, offset: nextOffset, size: fileSize, reset: bool }
+func (h *ManagerHandlers) APIServerLogTail(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	name := strings.TrimSpace(c.Query("name"))
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
+	}
+	base := filepath.Base(name)
+	if !strings.HasSuffix(strings.ToLower(base), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+
+	var logsDir string
+	if s.Paths != nil {
+		logsDir = s.Paths.ServerLogsDir(s.ID)
+	} else if h.manager.Paths != nil {
+		logsDir = h.manager.Paths.ServerLogsDir(s.ID)
+	}
+	if logsDir == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	logPath := filepath.Join(logsDir, base)
+
+	file, err := os.Open(logPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.JSON(http.StatusOK, gin.H{"data": "", "offset": 0, "size": 0, "reset": false})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to open log"})
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to stat log"})
+		return
+	}
+	size := info.Size()
+
+	// Parse query params
+	const defaultMax = 65536
+	const defaultBack = 8192
+	max := defaultMax
+	if m := strings.TrimSpace(c.Query("max")); m != "" {
+		if v, err := strconv.Atoi(m); err == nil && v > 0 && v <= 1_000_000 {
+			max = v
+		}
+	}
+	back := defaultBack
+	if b := strings.TrimSpace(c.Query("back")); b != "" {
+		if v, err := strconv.Atoi(b); err == nil && v >= 0 && v <= 1_000_000 {
+			back = v
+		}
+	}
+	offStr := strings.TrimSpace(c.Query("offset"))
+	var offset int64 = -1
+	if offStr != "" {
+		if v, err := strconv.ParseInt(offStr, 10, 64); err == nil {
+			offset = v
+		}
+	}
+
+	var start int64
+	var length int64
+	reset := false
+
+	switch {
+	case offset == -1:
+		if int64(back) >= size {
+			start = 0
+		} else {
+			start = size - int64(back)
+		}
+		length = size - start
+		if length > int64(max) {
+			start = size - int64(max)
+			length = int64(max)
+		}
+	case offset > size:
+		// File was truncated/rotated; read last 'back' bytes
+		reset = true
+		if int64(back) >= size {
+			start = 0
+		} else {
+			start = size - int64(back)
+		}
+		length = size - start
+		if length > int64(max) {
+			start = size - int64(max)
+			length = int64(max)
+		}
+	default:
+		start = offset
+		rem := size - start
+		if rem <= 0 {
+			c.JSON(http.StatusOK, gin.H{"data": "", "offset": start, "size": size, "reset": false})
+			return
+		}
+		if rem > int64(max) {
+			length = int64(max)
+		} else {
+			length = rem
+		}
+	}
+
+	if length < 0 {
+		length = 0
+	}
+	if start < 0 {
+		start = 0
+	}
+
+	buf := make([]byte, length)
+	if length > 0 {
+		if _, err := file.ReadAt(buf, start); err != nil {
+			// We still return what we could (buf zeroed when unread)
+		}
+	}
+
+	next := start + length
+	c.JSON(http.StatusOK, gin.H{
+		"data":  string(buf),
+		"offset": next,
+		"size":   size,
+		"reset":  reset,
+	})
 }
 
 // APIServerCommand accepts a command to be sent to the running server process via stdin.

@@ -163,6 +163,15 @@
                     <h2 class="card-title">Saves</h2>
                     <span class="pill">Coming Soon</span>
                 </div>
+                <!-- Saves filter tabs -->
+                <div class="tabs" id="saves-tabs" role="tablist" aria-label="Save types">
+                    <button class="tab active" role="tab" aria-selected="true" data-save-filter="all">All</button>
+                    <button class="tab" role="tab" aria-selected="false" data-save-filter="auto">Auto</button>
+                    <button class="tab" role="tab" aria-selected="false" data-save-filter="quick">Quick</button>
+                    <button class="tab" role="tab" aria-selected="false" data-save-filter="manual">Manual</button>
+                    <button class="tab" role="tab" aria-selected="false" data-save-filter="named">Named</button>
+                    <button class="tab" role="tab" aria-selected="false" data-save-filter="player">Player</button>
+                </div>
                 <div class="empty-state">Save management will appear here.</div>
             </div>
 
@@ -170,6 +179,19 @@
             {{ template "server_status_config.html" . }}
 
             
+        </div>
+        
+        <!-- Server Logs: full-width card under the main grid -->
+        <div class="card" id="server-logs-card">
+            <div class="card-header">
+                <h2 class="card-title">Server Logs</h2>
+            </div>
+            <div class="logs-grid">
+                <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
+                <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">
+                    <div class="empty-state" id="log-tabs-empty">No log files found</div>
+                </div>
+            </div>
         </div>
     </div>
     </div>

@@ -97,14 +97,18 @@ func SecurityHeaders() gin.HandlerFunc {
 		// HSTS header for HTTPS
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-		// Allow embedding in iframe when explicitly enabled (useful for preview environments)
+		// Allow embedding in iframe: our app uses a same-origin iframe for the content shell.
+		// By default, permit only same-origin embedding. When SDSM_ALLOW_IFRAME=true is set,
+		// relax to allow any parent (useful for preview environments). Prefer CSP frame-ancestors
+		// and set X-Frame-Options to SAMEORIGIN (not DENY) so our own iframe works.
 		allowIFrame := strings.EqualFold(os.Getenv("SDSM_ALLOW_IFRAME"), "true")
 		if allowIFrame {
-			// Use CSP frame-ancestors to allow any parent; omit X-Frame-Options
+			// Allow any parent via CSP and omit X-Frame-Options (ALLOW-FROM is deprecated and unsupported by most browsers)
 			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors *;")
 		} else {
-			c.Header("X-Frame-Options", "DENY")
-			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net;")
+			// Same-origin embedding only
+			c.Header("X-Frame-Options", "SAMEORIGIN")
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors 'self';")
 		}
 
 		// Prevent MIME type sniffing

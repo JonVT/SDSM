@@ -1,0 +1,114 @@
+help
+ACHIEVEMENTS	[None, List]		Used for debugging achievements
+ADDGAS	[Oxygen, Nitrogen, CarbonDioxide, Volatiles, Pollutant, Water, NitrousOxide]		Adds GasType to target thing of supplied ID of amount at temperature.
+ATMOS	[pipe, world, direction, room, global, thing, cleanup, count, liquid]		Enables atmosphere debugging
+BAN	[<clientId>, refresh]		Bans a client from the server (server only command)
+CAMERA	[shake]		Various camera debug functions
+CELESTIAL	[eccentricity, semimajoraxisau, semimajoraxiskm, inclination, periapsis, period, ascendingnode, rotation]		Allows editing of celestial bodies
+CLEANUPPLAYERS	[dead, disconnected, all]		Cleans up player bodies
+CLEAR		Clears all console text
+CLIENTS	[]		Lists all clients connected to the server
+DEBUGTHREADS	[GameTick, Terrain]		Show the times that the worker threads take to run
+DELETELOOSEITEMS		Removes all items in world that isn't in a slot
+DELETEOUTOFBOUNDS		Removes all objects and atmospheres in the game that are out of bounds
+DENSEPOOLS	[Null Check, Summary, Other]		List state of all dense pools
+DIFFICULTY | -DIFFICULTY	[<?difficulty>]		Prints the current difficulty setting to the console or sets a new one if provided as an argument
+DISCORD		Interaction with the Discord SDK
+DLC	[shared]		Various dlc debug functions
+EMOTE	[happy, surprised, open, none, angry, dead, reset]		Makes the player character do the requested emote for [Duration] milliseconds and at [Intensity](0-1) intensity.
+ENTITY	[state <playerName OR referenceId>]		Various entity debug functions
+EXIT		Leaves a game session and goes back to 'StartMenu'
+EXPORTWORLD		Export the world to a new WorldSettings file in Streaming Assets folder
+EXPRESSION	[list, <expressionname>]		Makes the player character do a custom facial expression
+FILE | -FILE	[start <stationname> [worldid] [difficulty] [startcondition] [startlocation] : Tries to load the latest save for a station. If not found, starts a new world with the given params and saves.
+new <stationname> : Creates a new station save in the root save directory with the given name.
+save : Saves the current game into the head save of the currently loaded station.
+saveas <savename> : Creates a new manual save for the currently loaded station.
+quicksave : Creates a new quick save for the currently loaded station.
+deletesave <fullpath> : Deletes the save file at the path.
+deletestation <fullpath> : Deletes the station and all its saves at the path.
+list : List all saves.
+info : Show current station and save directory information.
+load <fullpath> : Loads the save at the path. Assumes the save is inside a save folder in the save directory.
+loadlatest <stationname> [savetype] : Loads the latest save for a station. Optionally specify savetype as 'auto' or 'quick'. Defaults to any save type if omitted.
+forceallowsave : Forces the 'is already saving' check to false. Can be used as a last resort if saving gets stuck.]		Save and load functions.
+GEYSER	[export <directory> : Exports geyser locations to a text file in the given directory.]		Functions to help with geyser placement.
+HELP	[commands, list (l), <key>, tofile: prints the help output to file]		Displays helpful stuff
+HELPERHINTS	[Dismiss, Complete, Trigger]		Dev tools for testing world objectives
+JOIN | -JOIN	[[address]:[port]]		Joins a client to the server
+JOINGAME | -JOINGAME	[[address]:[port]]		Joins a client to the server
+KEYBINDINGS	[reset (Resets the keybindings stack. Can help solve input issues)]		Displays all the keybindings bound to LocalHuman
+KICK	[<clientId>]		Kick clients from server commands
+LEAVE		Leaves a game session and goes back to 'StartMenu'
+LEGACYCPU	[enable, disable]		Enables Legacy Cpu mode. Recommended for users with cpus below the recommended spec
+LIQUID	[show, renderer, solver, WorldVolume]		for debugging liquid solver
+LISTNETWORKDEVICES	[id]		Lists all devices on a network. Includes: PipeNetwork, CableNetwork, ChuteNetwork
+LOAD | -LOAD	[list, <filename>, <filename> (optional)<worldname>]		Loads a saved world file. This can also be used to start a new game via launch command. e.g -load "my game save" moon
+LOADGAME | -LOADGAME	[list, <filename>, <filename> (optional)<worldname>]		Loads a saved world file. This can also be used to start a new game via launch command. e.g -load "my game save" moon
+LOADLATEST | -LOADLATEST	[list, <filename>, <filename> (optional)<worldname>]		Loads the latest saved file, including auto saves
+LOCALIZATION	[None, WordCount, Generate, Refresh, CheckKeys, CheckFonts]		Display localization information
+LOD		Lod debug information
+LOG	[<logname> (optional), clear]		Dumps all the logs to a file
+LOGTOCLIPBOARD		Copies the content of the console buffer to the system clipboard buffer
+MAP		Debug Minimap
+MASTERSERVER	[refresh]		Commands to help with interacting with the Master Server
+MINABLES	[range]		Toggles Imgui Minable debug visualiser
+NETCONFIG | -NETCONFIG	[list, print, <PropertyName> <Value>]		Change the NetConfig.xml. e.g netconfig ip 127.0.0.1
+NETWORK		returns the current network status
+NETWORKDEBUG		Displays network debug window.
+NEW | -NEW	[worldname, difficulty, startcondition]		Starts a new game at specific world automatically from launch.Must provide world name as argument
+NEWGAME | -NEWGAME	[worldname, difficulty, startcondition]		Starts a new game at specific world automatically from launch.Must provide world name as argument
+ORBIT	[debug, view, celestials, simulate, set, timescale, makeoffset]		Controls orbital simulation, can use timespans <Seconds>, <Minutes>, <Hours>, <Days>, <Weeks>, <Months>, <Years>
+PAUSE	[true, false]		will pause/unpause the game (including for clients)
+PHYSICS	[]		Physics debug commands
+PLANT	[grow <parent thing id>]		Various plant debug functions
+POWER		Debug commands for power management
+PREFABS	[Thumbnails]		Validation scripts for source prefabs
+PRINTGASINFO		Print Triple and Critical points from Coefficients
+PROFILER	[enable, disable]		Enables or disables the profiler
+QUIT		immediately quits the game without any prompts
+REGENERATEROOMS		Regenerates all rooms for the world
+REGION	[debug]		Terrain region debugging
+RELOADTERRAINTEXTURE		Reloads the terrain textures from streaming assets
+RESET		Restarts the application
+ROCKET	[None, Refresh, Print, Abandon, Debug, InstantMove]		Various rocket debug functions
+SAVE	[<filename>, delete (d | rm) <filename>, list (l)]		Saves the current game to specified path
+SAY		sends a message to all connected players
+SERVERRUN	[Command]		Sends a message to the server to perform server side commands
+SETBATTERIES	[Empty, Critical, Very Low, Low, Medium, High, Full]		Toggle orbital sim debugging
+SETTINGS | -SETTINGS	[list, print, <PropertyName> <Value>]		Change the settings.xml. e.g settings servermaxplayers 5
+SETTINGSPATH | -SETTINGSPATH	[<full-directory-path>]		Sets the default settings path to a new location. Launch command only. If none found default is used.
+SPACEMAP	[regenerate, fill, chart, testpaths]		Various space map debug functions
+SPACEMAPNODE	[<id>]		Various space map node debug functions
+STATUS		Displays a bunch of info to give insight into state of server.
+STEAM	[Refresh, Store, Achieve, Clear, ClearAll, IncreaseAchievementValue, SetAchievementValue, Invalid]		Steam command for testing Steamworks integration.
+STORM	[start, stop, debug]		Starts and stops weather events & Weather debug tools
+STRUCTURE	[completeall]		Various structure debug functions
+STRUCTURENETWORK	[chute, rocket]		Enables structure network debugging
+SYSTEMINFO	[]		Prints information about system and devices
+TELEPORT		Teleport to a specific location in the world. Usage: teleport <x> <y>
+TERRAIN	[debug, cursor]		Enables terrain debugging
+TERRAINEDITOR		Heightmap Import tools
+TEST		Testing all the colours of the rainbow
+TESTBYTEARRAY		Tests every item in world to check its network read/write functions are parallel. Only enabled in Editor. Supply a reference Id to check ONLY that item
+TESTOCTREE	[[number of iterations]]		Benchmarks a read density at a random location on the map for [argument0] iterations.
+THING	[No args returns total thing count, find, delete, spawn, info, countanimator, blueprint, thumbnail, spawnvel, checkslots]		
+no args
+	 Returns total thing countfind <id>
+	 Finds thing by reference iddelete <id>
+	 Deletes thing by reference idspawn <prefabName> [amount]
+	 Spawns thing by prefab nameinfo <id>
+	 Prints debug info for thing by reference idinfo-verbose <id>
+	 Prints verbose debug info for thing by reference idcountanimator
+	 Prints count of all animator thingsblueprint <meshPath> <angleThreshold> <mergeDistance> <scale>
+	 Generates edge blueprint from meshthumb <id> <zoom>
+	 Generates thumbnail for thing by reference idcheckslots
+	 Checks for invalid slots in all things
+TRADER	[regenerate, land, depart, contacts, buys, sells, evaluate, checksum]		Useful commands for debugging traders.
+UNSTUCK	[]		Attempts to unstick the player
+UPNP		returns universal plug and play (upnp) state
+VEGETATION	[set, debug]		Set the quantity per chunk of vegetation types
+VERSION		Returns the game version
+WINDOWHEIGHT	[<height>, reset (r)]		Sets the window height to a fixed number of lines or resets it to default behaviour.
+WORLD		Prints the current world setting to the console
+WORLDSETTING		WIP allows realtime authoring of some WorldSetting Info

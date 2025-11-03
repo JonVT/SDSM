@@ -1315,15 +1315,10 @@ func (s *Server) Start() {
 	s.Logger.Write(fmt.Sprintf("World: %s  -  WorldId: %s", s.World, s.WorldID))
 
 	args := []string{
-		"-file",
-		"start",
-		s.Name,
-		worldIdentifier,
-		s.Difficulty,
-		s.StartCondition,
-		s.StartLocation,
-		"-logFile", s.Paths.ServerOutputFile(s.ID),
-		"-settings",
+		"-FILE", "start", s.Name, worldIdentifier, s.Difficulty, s.StartCondition, s.StartLocation,
+		"-LOGFILE", s.Paths.ServerOutputFile(s.ID),
+		"-SETTINGSPATH", s.Paths.ServerSettingsDir(s.ID),
+		"-SETTINGS",
 		"ServerVisible", strconv.FormatBool(s.Visible),
 		"GamePort", strconv.Itoa(s.Port),
 		"ServerName", s.Name,
@@ -1332,7 +1327,7 @@ func (s *Server) Start() {
 		"ServerMaxPlayers", strconv.Itoa(s.MaxClients),
 		"AutoSave", strconv.FormatBool(s.AutoSave),
 		"SaveInterval", strconv.Itoa(s.SaveInterval),
-		"SavePath", s.Paths.ServerSavesDir(s.ID),
+		"SavePath", s.Paths.ServerDir(s.ID),
 		"AutoPauseServer", strconv.FormatBool(s.AutoPause),
 		"StartLocalHost", "true",
 		"LocalIpAddress", "0.0.0.0",

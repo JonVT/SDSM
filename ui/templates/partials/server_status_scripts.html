@@ -89,6 +89,18 @@
     const errorTimeEl = document.getElementById('server-error-time');
     let bannedSteamSet = new Set();
     const worldThumb = document.querySelector('.world-thumb');
+    // Server logs UI elements
+    const logTabs = document.getElementById('log-tabs');
+    const logTabsEmpty = document.getElementById('log-tabs-empty');
+    const logViewer = document.getElementById('log-viewer');
+    let logFiles = [];
+    let selectedLog = '';
+    let logTimer = null;
+    let logListTimer = null;
+    let logTailOffset = -1; // -1 means from end
+    let logPausedByScroll = false; // pause tailing when user scrolls off bottom
+    const LOG_TAIL_BACK = 8192; // fetch last 8KB on first load / rotation
+    const LOG_TAIL_MAX = 65536; // cap per-poll payload
 
     let serverIsRunning = rootEl.dataset.serverRunning === "true";
     let serverIsPaused = rootEl.dataset.serverPaused === "true";
@@ -484,6 +496,7 @@
         setConnectionBanner(true, 'Connection lost. Attempting to reconnect...');
         stopStatusUpdates();
         stopProgressPolling();
+        stopLogTail();
         setUpdateButtonDisabled(true);
         updateControlButtons();
         if (!reconnectTimer) {
@@ -505,6 +518,7 @@
         if (progressActive) {
             startProgressPolling();
         }
+        startLogTail();
     }
 
     function attemptReconnect() {
@@ -1562,6 +1576,7 @@
             if (document.hidden) {
                 stopStatusUpdates();
                 stopProgressPolling();
+                stopLogTail();
             } else {
                 fetchStatus();
                 fetchProgress();
@@ -1569,6 +1584,7 @@
                 if (progressActive) {
                     startProgressPolling();
                 }
+                startLogTail();
             }
         });
 
@@ -1576,6 +1592,11 @@
         fetchProgress();
         fetchStatus();
         startStatusUpdates();
+        // Initialize logs UI
+        initLogsUI();
+        fetchLogList();
+        startLogTail();
+        startLogListRefresh();
 
         function coreParamsChanged(){
             const currWorld = (document.getElementById('world') && document.getElementById('world').value) || '';
@@ -2104,4 +2125,148 @@
             delegateAction(historyBody);
         })();
     });
+
+    // -------- Server Logs (tabs + tail) --------
+    function renderLogTabs(files) {
+        if (!logTabs) return;
+        logTabs.textContent = '';
+        const hasFiles = Array.isArray(files) && files.length > 0;
+        if (logTabsEmpty) logTabsEmpty.style.display = hasFiles ? 'none' : '';
+        if (!hasFiles) return;
+        files.forEach((name, idx) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'log-tab';
+            btn.setAttribute('role', 'tab');
+            btn.setAttribute('aria-selected', selectedLog === name ? 'true' : 'false');
+            const label = document.createElement('span');
+            label.className = 'filename';
+            label.textContent = name;
+            btn.appendChild(label);
+            btn.addEventListener('click', function(){
+                if (selectedLog === name) return;
+                selectedLog = name;
+                // update selected states
+                const tabs = logTabs.querySelectorAll('.log-tab');
+                tabs.forEach(t => t.setAttribute('aria-selected', t === btn ? 'true' : 'false'));
+                // reset tail to end and clear viewer, then tail
+                logTailOffset = -1;
+                logPausedByScroll = false; // resume tailing on new selection
+                if (logViewer) logViewer.textContent = '';
+                fetchLogTail();
+            });
+            logTabs.appendChild(btn);
+            if (!selectedLog && idx === 0) {
+                selectedLog = name;
+                btn.setAttribute('aria-selected', 'true');
+            }
+        });
+    }
+
+    function fetchLogList() {
+        const serverId = Number(rootEl.dataset.serverId || '0');
+        if (!serverId || !logTabs) return;
+        fetch(`/api/servers/${serverId}/logs`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data || !Array.isArray(data.files)) return;
+                const prevSelected = selectedLog;
+                logFiles = data.files;
+                renderLogTabs(logFiles);
+                // If previously selected file no longer exists, reset selection and viewer
+                if (prevSelected && !logFiles.includes(prevSelected)) {
+                    selectedLog = logFiles[0] || '';
+                    logTailOffset = -1;
+                    if (logViewer) logViewer.textContent = '';
+                }
+                // Kick off tailing if we have a selection and no timer
+                if (selectedLog && !logTimer) {
+                    fetchLogTail();
+                    startLogTail();
+                }
+            })
+            .catch(() => {});
+    }
+
+    function fetchLogTail() {
+        const serverId = Number(rootEl.dataset.serverId || '0');
+        if (!serverId || !selectedLog || !logViewer || connectionLost) return;
+        const params = new URLSearchParams();
+        params.set('name', selectedLog);
+        params.set('offset', String(logTailOffset));
+        params.set('back', String(LOG_TAIL_BACK));
+        params.set('max', String(LOG_TAIL_MAX));
+        fetch(`/api/servers/${serverId}/log/tail?` + params.toString(), { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                if (data.reset) {
+                    // file rotated/truncated; viewer should show last chunk only
+                    logViewer.textContent = '';
+                }
+                const chunk = typeof data.data === 'string' ? data.data : '';
+                if (chunk) {
+                    // Determine if we should stick to bottom (only when not paused and currently at bottom)
+                    const shouldStick = !logPausedByScroll && isViewerAtBottom();
+                    logViewer.textContent += chunk;
+                    if (shouldStick) {
+                        scrollViewerToBottom();
+                    }
+                }
+                if (typeof data.offset === 'number') {
+                    logTailOffset = data.offset;
+                }
+            })
+            .catch(() => {});
+    }
+
+    function stopLogTail() {
+        if (logTimer) {
+            clearInterval(logTimer);
+            logTimer = null;
+        }
+    }
+
+    function startLogTail() {
+        if (logTimer || connectionLost) return;
+        if (logPausedByScroll) return;
+        if (!selectedLog) return;
+        logTimer = setInterval(fetchLogTail, 2000);
+    }
+
+    function initLogsUI() {
+        // If no logs UI present, skip
+        if (!logTabs || !logViewer) return;
+        // Pause/resume tailing based on user scroll position
+        logViewer.addEventListener('scroll', function(){
+            // If user scrolls off the bottom, pause tailing. Resume when back at bottom.
+            if (isViewerAtBottom()) {
+                if (logPausedByScroll) {
+                    logPausedByScroll = false;
+                    startLogTail();
+                }
+            } else {
+                if (!logPausedByScroll) {
+                    logPausedByScroll = true;
+                    stopLogTail();
+                }
+            }
+        });
+    }
+
+    function startLogListRefresh() {
+        if (logListTimer) return;
+        logListTimer = setInterval(fetchLogList, 30000);
+    }
+
+    function isViewerAtBottom(tolerance){
+        if (!logViewer) return false;
+        const tol = typeof tolerance === 'number' ? tolerance : 4; // pixels
+        return (logViewer.scrollTop + logViewer.clientHeight) >= (logViewer.scrollHeight - tol);
+    }
+
+    function scrollViewerToBottom(){
+        if (!logViewer) return;
+        logViewer.scrollTop = logViewer.scrollHeight;
+    }
 </script>
