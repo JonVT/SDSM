@@ -640,10 +640,10 @@ func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// APIServerSaves lists server save files for a given type (e.g., auto, quick, manual).
+// APIServerSaves lists server save files for a given type (e.g., auto, manual).
 // Query params:
-//   type: one of "auto" (supported now; others TBD)
-// Returns JSON: { items: [ { name: string, filename: string, datetime: RFC3339, size: int64, path: string } ] }
+//   type: one of "auto" | "manual"
+// Returns JSON: { items: [ { type: string, name: string, filename: string, datetime: RFC3339, size: int64, path: string } ] }
 func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -687,26 +687,49 @@ func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
 	switch t {
 	case "auto", "autosave", "autosaves":
 		sub = "autosave"
+	case "quick", "quicksave", "quicksaves":
+		sub = "quicksave"
+	case "manual", "manualsave", "manuals":
+		sub = "manualsave"
+	case "player", "players", "playersave", "playersaves":
+		sub = "player"
 	case "":
 		// default to auto for now
 		sub = "autosave"
 	default:
-		// Not implemented yet
 		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported type"})
 		return
 	}
 
-	// Directory layout for autosaves: only <savesDir>/<ServerName>/autosave
+	// Directory layout (strict):
+	//  - autosave:     <savesDir>/<ServerName>/autosave
+	//  - quicksave:    <savesDir>/<ServerName>/quicksave
+	//  - manual (named): includes files from both <savesDir>/<ServerName>/manualsave and <savesDir>/<ServerName>
+	//  - player:         includes files matching <steamid>-YYYYMMDD-HHMMSS.save from both manualsave and server root
 	var dir string
-	if sub == "autosave" {
+	var dirs []string
+	switch sub {
+	case "autosave":
 		dir = filepath.Join(savesDir, s.Name, "autosave")
-	} else {
-		dir = filepath.Join(savesDir, sub)
+	case "quicksave":
+		dir = filepath.Join(savesDir, s.Name, "quicksave")
+	case "manualsave":
+		// We'll aggregate from two specific directories
+		dirs = []string{
+			filepath.Join(savesDir, s.Name, "manualsave"),
+			filepath.Join(savesDir, s.Name),
+		}
+	case "player":
+		// Player saves: <savesDir>/<ServerName>/playersave
+		dir = filepath.Join(savesDir, s.Name, "playersave")
+	default:
+		dir = filepath.Join(savesDir, s.Name)
 	}
 
 	// (debug logging removed)
 
 	type item struct {
+		Type     string `json:"type"`
 		Name     string `json:"name"`
 		Filename string `json:"filename"`
 		Datetime string `json:"datetime"`
@@ -715,43 +738,178 @@ func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
 		ts       time.Time
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"items": []any{}})
-		return
+	items := make([]item, 0)
+	// Helper to read a directory and append manual/named items
+	addManualFromDir := func(baseDir string) {
+		entries, err := os.ReadDir(baseDir)
+		if err != nil { return }
+		for _, e := range entries {
+			if e.IsDir() { continue }
+			name := e.Name()
+			lower := strings.ToLower(name)
+			if !strings.HasSuffix(lower, ".save") { continue }
+			info, _ := e.Info()
+			size := int64(0)
+			var ts time.Time
+			if info != nil {
+				size = info.Size()
+				ts = info.ModTime()
+			}
+			baseDisplay := strings.TrimSuffix(name, ".save")
+			items = append(items, item{ Type: "manual", Name: baseDisplay, Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(baseDir, name), ts: ts })
+		}
 	}
-	items := make([]item, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() { continue }
-		name := e.Name()
-		lower := strings.ToLower(name)
-		if !strings.HasSuffix(lower, ".save") { continue }
-		// Expect ddmmyy_hhmmss_auto.save
-		base := strings.TrimSuffix(lower, ".save")
-		parts := strings.Split(base, "_")
-		if len(parts) < 3 { continue }
-		datePart := parts[0]
-		timePart := parts[1]
-		if !strings.Contains(parts[2], "auto") { continue }
-		if len(datePart) != 6 || len(timePart) != 6 { continue }
-		dd := datePart[0:2]
-		mm := datePart[2:4]
-		yy := datePart[4:6]
-		hh := timePart[0:2]
-		min := timePart[2:4]
-		ss := timePart[4:6]
-		day := atoiSafe(dd)
-		month := atoiSafe(mm)
-		year := 2000 + atoiSafe(yy)
-		hour := atoiSafe(hh)
-		minute := atoiSafe(min)
-		second := atoiSafe(ss)
-		if month < 1 || month > 12 || day < 1 || day > 31 { continue }
-		ts := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.Local)
-		info, _ := e.Info()
-		size := int64(0)
-		if info != nil { size = info.Size() }
-		items = append(items, item{ Name: "Auto", Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(dir, name), ts: ts })
+
+	// Grouped structure for player saves
+	type playerGroup struct {
+		SteamID string `json:"steam_id"`
+		Name    string `json:"name"`
+		Items   []item `json:"items"`
+	}
+
+	if sub == "manualsave" {
+		for _, d := range dirs { addManualFromDir(d) }
+	} else if sub == "player" {
+		// Build grouped result from playersave dir
+		groupsByID := make(map[string]*playerGroup)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"groups": []any{}})
+			return
+		}
+		for _, e := range entries {
+			if e.IsDir() { continue }
+			name := e.Name()
+			lower := strings.ToLower(name)
+			if !strings.HasSuffix(lower, ".save") { continue }
+			base := strings.TrimSuffix(lower, ".save")
+			// Expect ddmmyy_hhmmss_<steamid>
+			parts := strings.Split(base, "_")
+			if len(parts) < 3 { continue }
+			datePart := parts[0]
+			timePart := parts[1]
+			steam := parts[2]
+			if len(datePart) != 6 || len(timePart) != 6 { continue }
+			if len(steam) != 17 { continue }
+			// digits only check
+			digits := true
+			for i := 0; i < len(steam); i++ { if steam[i] < '0' || steam[i] > '9' { digits = false; break } }
+			if !digits { continue }
+			dd := atoiSafe(datePart[0:2])
+			mm := atoiSafe(datePart[2:4])
+			yy := atoiSafe(datePart[4:6])
+			hh := atoiSafe(timePart[0:2])
+			min := atoiSafe(timePart[2:4])
+			ss := atoiSafe(timePart[4:6])
+			year := 2000 + yy
+			if mm < 1 || mm > 12 || dd < 1 || dd > 31 { continue }
+			ts := time.Date(year, time.Month(mm), dd, hh, min, ss, 0, time.Local)
+			info, _ := e.Info()
+			size := int64(0)
+			if info != nil { size = info.Size() }
+			// Ensure group exists
+			g, ok := groupsByID[steam]
+			if !ok {
+				g = &playerGroup{SteamID: steam, Name: s.ResolveNameForSteamID(steam), Items: []item{}}
+				groupsByID[steam] = g
+			}
+			g.Items = append(g.Items, item{ Type: "player", Name: "", Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(dir, name), ts: ts })
+		}
+		// Sort items within groups and groups by name asc (fallback steam id)
+		groups := make([]playerGroup, 0, len(groupsByID))
+		for _, g := range groupsByID {
+			sort.Slice(g.Items, func(i, j int) bool { return g.Items[i].ts.After(g.Items[j].ts) })
+			groups = append(groups, *g)
+		}
+		sort.Slice(groups, func(i, j int) bool {
+			ai := strings.ToLower(strings.TrimSpace(groups[i].Name))
+			aj := strings.ToLower(strings.TrimSpace(groups[j].Name))
+			if ai == aj {
+				return groups[i].SteamID < groups[j].SteamID
+			}
+			if ai == "" { return false }
+			if aj == "" { return true }
+			return ai < aj
+		})
+		// Emit grouped JSON
+		out := make([]gin.H, 0, len(groups))
+		for _, g := range groups {
+			// Emit items without internal ts
+			gi := make([]gin.H, 0, len(g.Items))
+			for _, it := range g.Items {
+				gi = append(gi, gin.H{"type": it.Type, "filename": it.Filename, "datetime": it.Datetime, "size": it.Size, "path": it.Path})
+			}
+			out = append(out, gin.H{"steam_id": g.SteamID, "name": g.Name, "items": gi})
+		}
+		_ = utils.Paths{}
+		c.JSON(http.StatusOK, gin.H{"groups": out})
+		return
+	} else {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"items": []any{}})
+			return
+		}
+		items = make([]item, 0, len(entries))
+		for _, e := range entries {
+			if e.IsDir() { continue }
+			name := e.Name()
+			lower := strings.ToLower(name)
+			if !strings.HasSuffix(lower, ".save") { continue }
+			info, _ := e.Info()
+			size := int64(0)
+			if info != nil { size = info.Size() }
+			switch sub {
+		case "autosave":
+			// Expect ddmmyy_hhmmss_auto.save
+			base := strings.TrimSuffix(lower, ".save")
+			parts := strings.Split(base, "_")
+			if len(parts) < 3 { continue }
+			datePart := parts[0]
+			timePart := parts[1]
+			if !strings.Contains(parts[2], "auto") { continue }
+			if len(datePart) != 6 || len(timePart) != 6 { continue }
+			dd := datePart[0:2]
+			mm := datePart[2:4]
+			yy := datePart[4:6]
+			hh := timePart[0:2]
+			min := timePart[2:4]
+			ss := timePart[4:6]
+			day := atoiSafe(dd)
+			month := atoiSafe(mm)
+			year := 2000 + atoiSafe(yy)
+			hour := atoiSafe(hh)
+			minute := atoiSafe(min)
+			second := atoiSafe(ss)
+			if month < 1 || month > 12 || day < 1 || day > 31 { continue }
+			ts := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.Local)
+			items = append(items, item{ Type: "auto", Name: "Auto", Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(dir, name), ts: ts })
+		case "quicksave":
+			// Expect ddmmyy_hhmmss_quick.save
+			base := strings.TrimSuffix(lower, ".save")
+			parts := strings.Split(base, "_")
+			if len(parts) < 3 { continue }
+			datePart := parts[0]
+			timePart := parts[1]
+			if !strings.Contains(parts[2], "quick") { continue }
+			if len(datePart) != 6 || len(timePart) != 6 { continue }
+			dd := datePart[0:2]
+			mm := datePart[2:4]
+			yy := datePart[4:6]
+			hh := timePart[0:2]
+			min := timePart[2:4]
+			ss := timePart[4:6]
+			day := atoiSafe(dd)
+			month := atoiSafe(mm)
+			year := 2000 + atoiSafe(yy)
+			hour := atoiSafe(hh)
+			minute := atoiSafe(min)
+			second := atoiSafe(ss)
+			if month < 1 || month > 12 || day < 1 || day > 31 { continue }
+			ts := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.Local)
+			items = append(items, item{ Type: "quick", Name: "Quick", Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(dir, name), ts: ts })
+		}
+	}
 	}
 
 	sort.Slice(items, func(i, j int) bool { return items[i].ts.After(items[j].ts) })
@@ -759,6 +917,7 @@ func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
 	out := make([]gin.H, 0, len(items))
 	for _, it := range items {
 		out = append(out, gin.H{
+			"type":     it.Type,
 			"name":     it.Name,
 			"filename": it.Filename,
 			"datetime": it.Datetime,
@@ -766,15 +925,14 @@ func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
 			"path":     it.Path,
 		})
 	}
-	// touch utils import to avoid unused when builds move
 	_ = utils.Paths{}
 	c.JSON(http.StatusOK, gin.H{"items": out})
 }
 
 // APIServerSaveDelete deletes a save file under the server's saves directory.
 // Query params:
-//   type: one of "auto" (currently supported)
-//   name: filename (e.g., ddmmyy_hhmmss_auto.save)
+//   type: one of "auto" | "manual"
+//   name: filename (e.g., ddmmyy_hhmmss_auto.save or <filename>.save)
 func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -819,6 +977,12 @@ func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
 	switch t {
 	case "auto", "autosave", "autosaves":
 		sub = "autosave"
+	case "quick", "quicksave", "quicksaves":
+		sub = "quicksave"
+	case "manual", "manualsave", "manuals":
+		sub = "manualsave"
+	case "player", "players", "playersave", "playersaves":
+		sub = "player"
 	case "":
 		sub = "autosave"
 	default:
@@ -837,33 +1001,50 @@ func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
 		return
 	}
 
-	// Compute target directory for delete
-	// Only delete from the specific autosave directory
-	var dir string
-	if sub == "autosave" {
-		dir = filepath.Join(savesDir, s.Name, "autosave")
-	} else {
-		dir = filepath.Join(savesDir, sub)
+	// Compute target directory for delete (strict per-type directory)
+	// For manual/named, allow delete from either <server>/manualsave or <server>/ root
+	tryDirs := []string{}
+	switch sub {
+	case "autosave":
+		tryDirs = []string{filepath.Join(savesDir, s.Name, "autosave")}
+	case "quicksave":
+		tryDirs = []string{filepath.Join(savesDir, s.Name, "quicksave")}
+	case "manualsave":
+		tryDirs = []string{filepath.Join(savesDir, s.Name, "manualsave"), filepath.Join(savesDir, s.Name)}
+	case "player":
+		tryDirs = []string{filepath.Join(savesDir, s.Name, "playersave")}
+	default:
+		tryDirs = []string{filepath.Join(savesDir, s.Name)}
 	}
-	target := filepath.Join(dir, base)
-	cleanDir := filepath.Clean(dir)
-	cleanTarget := filepath.Clean(target)
-	if rel, err := filepath.Rel(cleanDir, cleanTarget); err != nil || strings.HasPrefix(rel, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
-		return
-	}
-	if err := os.Remove(cleanTarget); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			c.Header("X-Toast-Type", "warning")
-			c.Header("X-Toast-Title", "Not Found")
-			c.Header("X-Toast-Message", "Save file was already removed.")
-			c.JSON(http.StatusOK, gin.H{"status": "not_found"})
+
+	deleted := false
+	for _, d := range tryDirs {
+		target := filepath.Join(d, base)
+		cleanDir := filepath.Clean(d)
+		cleanTarget := filepath.Clean(target)
+		if rel, err := filepath.Rel(cleanDir, cleanTarget); err != nil || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if err := os.Remove(cleanTarget); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Try next directory
+				continue
+			}
+			c.Header("X-Toast-Type", "error")
+			c.Header("X-Toast-Title", "Delete Failed")
+			c.Header("X-Toast-Message", err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
 			return
 		}
-		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Delete Failed")
-		c.Header("X-Toast-Message", err.Error())
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
+		deleted = true
+		break
+	}
+
+	if !deleted {
+		c.Header("X-Toast-Type", "warning")
+		c.Header("X-Toast-Title", "Not Found")
+		c.Header("X-Toast-Message", "Save file was already removed.")
+		c.JSON(http.StatusOK, gin.H{"status": "not_found"})
 		return
 	}
 
@@ -914,6 +1095,52 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 		"totalPlayers":  totalPlayers,
 		"systemHealth":  "100%",
 	})
+}
+
+// APIServerPlayerSaveExclude adds a Steam ID to the server's player-save exclusion list.
+// JSON body: { "steam_id": "7656119..." }
+func (h *ManagerHandlers) APIServerPlayerSaveExclude(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC
+	role := c.GetString("role")
+	if role != "admin" {
+		// Allow operators with access as well
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var req struct{ SteamID string `json:"steam_id"` }
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.SteamID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "steam_id required"})
+		return
+	}
+
+	added := s.AddPlayerSaveExclude(req.SteamID)
+	if added {
+		h.manager.Save()
+	}
+
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Player Excluded")
+	c.Header("X-Toast-Message", "This player will be excluded from future player saves.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "added": added})
 }
 
 func (h *ManagerHandlers) APIServers(c *gin.Context) {

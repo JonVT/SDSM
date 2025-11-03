@@ -976,6 +976,25 @@ input[type="email"]:focus {
     border-color: rgba(37, 99, 235, 0.24);
 }
 
+/* Player tab variant: use a distinct green accent when active */
+.tab.tab-player.active {
+    background: rgba(220, 38, 38, 0.16); /* red tint */
+    border-color: rgba(220, 38, 38, 0.28);
+    color: var(--danger-700);
+}
+
+/* All tab variant: green accent when active */
+.tab.tab-all.active {
+    background: rgba(22, 163, 74, 0.16); /* green tint */
+    border-color: rgba(22, 163, 74, 0.28);
+    color: var(--success-700);
+}
+
+/* Indent player save rows under the player header */
+#saves-list table tbody tr.player-child td:first-child {
+    padding-left: var(--space-6);
+}
+
 .tab-panel,
 .tab-content {
     display: none;

@@ -402,6 +402,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
 		api.POST("/servers/:server_id/command", managerHandlers.APIServerCommand)
+		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
 		// Admin-only delete via API
 		api.POST("/servers/:server_id/delete", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {

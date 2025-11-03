@@ -166,6 +166,15 @@
         return `${ddd} ${dd}-${mmm}-${yy} ${hh}:${mm}:${ss}`;
     }
 
+    function getSteamIdFromItem(it) {
+        try {
+            const fname = (it && it.filename ? String(it.filename) : '').trim();
+            if (!fname) return '';
+            const idx = fname.indexOf('-');
+            return idx > 0 ? fname.slice(0, idx) : '';
+        } catch(_) { return ''; }
+    }
+
     function renderSaves(items) {
         if (!savesList) return;
         savesList.textContent = '';
@@ -174,6 +183,26 @@
             showElement(savesEmpty, true);
             return;
         }
+        // Sort by datetime descending by default. For Player saves, sort by SteamID asc, then datetime desc
+        try {
+            const allPlayer = items.length > 0 && items.every(it => (it && String(it.type)) === 'player');
+            if (allPlayer) {
+                items.sort((a, b) => {
+                    const sa = getSteamIdFromItem(a);
+                    const sb = getSteamIdFromItem(b);
+                    if (sa && sb && sa !== sb) return sa.localeCompare(sb);
+                    const ta = a && a.datetime ? new Date(a.datetime).getTime() : 0;
+                    const tb = b && b.datetime ? new Date(b.datetime).getTime() : 0;
+                    return tb - ta; // newest first within same SteamID
+                });
+            } else {
+                items.sort((a, b) => {
+                    const ta = a && a.datetime ? new Date(a.datetime).getTime() : 0;
+                    const tb = b && b.datetime ? new Date(b.datetime).getTime() : 0;
+                    return tb - ta;
+                });
+            }
+        } catch (_) {}
         // Build a simple table (without headers as requested)
         const table = document.createElement('table');
         table.className = 'table';
@@ -189,10 +218,35 @@
             nameWrap.style.alignItems = 'center';
             nameWrap.style.gap = '6px';
             const icon = document.createElement('span');
-            icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Autosave"><circle cx="12" cy="13" r="8"></circle><line x1="12" y1="5" x2="12" y2="2"></line><line x1="9" y1="2" x2="15" y2="2"></line><line x1="12" y1="13" x2="16" y2="13"></line></svg>';
+            const type = (it && it.type) ? String(it.type) : '';
+            if (type === 'manual') {
+                // Disc/floppy icon for manual saves
+                icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Manual save"><path d="M4 4h13l3 3v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path><path d="M16 4v6H8V4"></path><rect x="8" y="14" width="8" height="6" rx="1"/></svg>';
+            } else if (type === 'quick') {
+                // Lightning bolt icon for quicksaves
+                icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Quicksave"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+            } else if (type === 'player') {
+                // User icon for player saves
+                icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Player save"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>';
+            } else {
+                // Stopwatch icon for autosaves (default)
+                icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Autosave"><circle cx="12" cy="13" r="8"></circle><line x1="12" y1="5" x2="12" y2="2"></line><line x1="9" y1="2" x2="15" y2="2"></line><line x1="12" y1="13" x2="16" y2="13"></line></svg>';
+            }
             const label = document.createElement('span');
             const rawName = (it && it.name) ? String(it.name) : '';
-            const displayName = rawName && rawName.toLowerCase() !== 'auto' ? rawName : 'Autosave';
+            let displayName = rawName;
+            if (!displayName) {
+                if (type === 'manual') {
+                    displayName = (it && it.filename) ? String(it.filename).replace(/\.save$/i, '') : '';
+                } else if (type === 'player') {
+                    const sid = getSteamIdFromItem(it);
+                    displayName = sid || 'Player';
+                } else {
+                    displayName = 'Autosave';
+                }
+            } else if (type !== 'manual' && rawName.toLowerCase() === 'auto') {
+                displayName = 'Autosave';
+            }
             label.textContent = displayName;
             nameWrap.appendChild(icon);
             nameWrap.appendChild(label);
@@ -214,11 +268,18 @@
             const btnLoad = document.createElement('button');
             btnLoad.type = 'button';
             btnLoad.className = 'btn btn-primary btn-icon btn-sm btn-load-save';
-            btnLoad.title = 'Load this save';
+            // More descriptive tooltip with context
+            try {
+                const fileLabel = (it && it.filename ? String(it.filename) : '').trim();
+                const tip = displayName
+                    ? `Load "${displayName}"${fileLabel ? ` (file: ${fileLabel})` : ''} — replaces current world state`
+                    : (fileLabel ? `Load "${fileLabel}" — replaces current world state` : 'Load this save — replaces current world state');
+                btnLoad.title = tip;
+            } catch(_) { btnLoad.title = 'Load this save — replaces current world state'; }
             btnLoad.setAttribute('aria-label', 'Load save');
             btnLoad.dataset.filename = it && it.filename ? it.filename : '';
             btnLoad.dataset.path = it && it.path ? it.path : '';
-            btnLoad.dataset.type = 'auto';
+            btnLoad.dataset.type = type || 'auto';
             btnLoad.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
             // Delete button
             const btnDel = document.createElement('button');
@@ -227,7 +288,7 @@
             btnDel.title = 'Delete this save';
             btnDel.setAttribute('aria-label', 'Delete save');
             btnDel.dataset.filename = it && it.filename ? it.filename : '';
-            btnDel.dataset.type = 'auto';
+            btnDel.dataset.type = type || 'auto';
             btnDel.style.marginLeft = '6px';
             btnDel.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
             actions.appendChild(btnLoad);
@@ -260,6 +321,204 @@
             });
     }
 
+    function fetchManualSaves() {
+        const serverId = rootEl.dataset.serverId;
+        if (!serverId) return;
+        fetch(`/api/servers/${serverId}/saves?type=manual`, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load saves')))
+            .then(data => {
+                renderSaves((data && data.items) || []);
+            })
+            .catch(() => {
+                renderSaves([]);
+            });
+    }
+
+    function fetchAllSaves() {
+        const serverId = rootEl.dataset.serverId;
+        if (!serverId) return;
+        const reqs = [
+            fetch(`/api/servers/${serverId}/saves?type=auto`, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } }).then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
+            fetch(`/api/servers/${serverId}/saves?type=quick`, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } }).then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
+            fetch(`/api/servers/${serverId}/saves?type=manual`, { credentials: 'same-origin', cache: 'no-store', headers: { 'Accept': 'application/json' } }).then(r => r.ok ? r.json() : { items: [] }).catch(() => ({ items: [] })),
+        ];
+        Promise.all(reqs).then(([autoRes, quickRes, manRes]) => {
+            const a = Array.isArray(autoRes.items) ? autoRes.items : [];
+            const q = Array.isArray(quickRes.items) ? quickRes.items : [];
+            const m = Array.isArray(manRes.items) ? manRes.items : [];
+            const merged = a.concat(q).concat(m);
+            // Sort by datetime desc if available
+            merged.sort((x, y) => {
+                const dx = x && x.datetime ? new Date(x.datetime).getTime() : 0;
+                const dy = y && y.datetime ? new Date(y.datetime).getTime() : 0;
+                return dy - dx;
+            });
+            renderSaves(merged);
+        }).catch(() => renderSaves([]));
+    }
+
+    function renderPlayerSaves(groups) {
+        if (!savesList) return;
+        savesList.textContent = '';
+        const arr = Array.isArray(groups) ? groups.slice() : [];
+        if (arr.length === 0) {
+            showElement(savesList, false);
+            showElement(savesEmpty, true);
+            return;
+        }
+        // Sort groups by name asc (fallback steam id)
+        arr.sort((a, b) => {
+            const an = (a && a.name ? String(a.name) : '').toLowerCase().trim();
+            const bn = (b && b.name ? String(b.name) : '').toLowerCase().trim();
+            if (an === bn) {
+                const as = (a && a.steam_id ? String(a.steam_id) : '');
+                const bs = (b && b.steam_id ? String(b.steam_id) : '');
+                return as.localeCompare(bs);
+            }
+            if (!an) return 1;
+            if (!bn) return -1;
+            return an.localeCompare(bn);
+        });
+        const table = document.createElement('table');
+        table.className = 'table';
+        const tbody = document.createElement('tbody');
+        arr.forEach(g => {
+            const steam = g && g.steam_id ? String(g.steam_id) : '';
+            const pname = g && g.name ? String(g.name) : '';
+            // Group header row (click to expand/collapse)
+            const hr = document.createElement('tr');
+            hr.className = 'player-header';
+            hr.dataset.group = steam;
+            hr.setAttribute('aria-expanded', 'false');
+            const hname = document.createElement('td');
+            hname.colSpan = 2;
+            const wrap = document.createElement('div');
+            wrap.style.display = 'flex';
+            wrap.style.alignItems = 'center';
+            wrap.style.justifyContent = 'space-between';
+            wrap.style.gap = '12px';
+            const left = document.createElement('div');
+            left.style.display = 'inline-flex';
+            left.style.alignItems = 'center';
+            left.style.gap = '10px';
+            const caret = document.createElement('span');
+            caret.className = 'player-caret';
+            caret.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+            const label = document.createElement('span');
+            label.textContent = pname ? `${pname} (${steam})` : steam;
+            left.appendChild(caret);
+            left.appendChild(label);
+            const right = document.createElement('div');
+            right.style.marginLeft = '16px';
+            const btnExclude = document.createElement('button');
+            btnExclude.type = 'button';
+            btnExclude.className = 'btn btn-danger btn-icon btn-exclude-player';
+            btnExclude.title = 'Delete (excludes this player from future player saves)';
+            btnExclude.setAttribute('aria-label', 'Delete player (exclude from player saves)');
+            btnExclude.dataset.steamId = steam;
+            btnExclude.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
+            right.appendChild(btnExclude);
+            wrap.appendChild(left);
+            wrap.appendChild(right);
+            hname.appendChild(wrap);
+            hr.appendChild(hname);
+            tbody.appendChild(hr);
+            // Child rows: saves for this player, sorted by datetime desc (initially hidden)
+            const items = Array.isArray(g.items) ? g.items.slice() : [];
+            items.sort((a, b) => {
+                const ta = a && a.datetime ? new Date(a.datetime).getTime() : 0;
+                const tb = b && b.datetime ? new Date(b.datetime).getTime() : 0;
+                return tb - ta;
+            });
+            items.forEach(it => {
+                const tr = document.createElement('tr');
+                tr.className = 'player-child hidden';
+                tr.dataset.group = steam;
+                const name = document.createElement('td');
+                name.style.paddingRight = '24px';
+                const iconOnly = document.createElement('span');
+                iconOnly.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Player save"><path d="M20 21v-2a4 4 0 0 0-3-3.87"/><path d="M4 21v-2a4 4 0 0 1 3-3.87"/><circle cx="12" cy="7" r="4"/></svg>';
+                name.appendChild(iconOnly);
+                const dt = document.createElement('td');
+                dt.style.display = 'flex';
+                dt.style.alignItems = 'center';
+                dt.style.justifyContent = 'space-between';
+                dt.style.gap = '10px';
+                const d = it && it.datetime ? new Date(it.datetime) : null;
+                const timeSpan = document.createElement('span');
+                timeSpan.textContent = d && !Number.isNaN(d.getTime()) ? formatAutosaveDate(d) : '—';
+                const actions = document.createElement('span');
+                actions.style.whiteSpace = 'nowrap';
+                actions.style.marginLeft = '12px';
+                const btnLoad = document.createElement('button');
+                btnLoad.type = 'button';
+                btnLoad.className = 'btn btn-primary btn-icon btn-sm btn-load-save';
+                // Tooltip: include timestamp and filename when available
+                try {
+                    const fileLabel = (it && it.filename ? String(it.filename) : '').trim();
+                    const dateStr = (d && !Number.isNaN(d.getTime())) ? formatAutosaveDate(d) : '';
+                    const when = dateStr ? `from ${dateStr}` : '';
+                    const detail = fileLabel ? `${when ? when + ' ' : ''}(file: ${fileLabel})` : when;
+                    btnLoad.title = `Load player save ${detail} — replaces current world state`;
+                } catch(_) { btnLoad.title = 'Load this save — replaces current world state'; }
+                btnLoad.setAttribute('aria-label', 'Load save');
+                btnLoad.dataset.filename = it && it.filename ? it.filename : '';
+                btnLoad.dataset.path = it && it.path ? it.path : '';
+                btnLoad.dataset.type = 'player';
+                btnLoad.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+                actions.appendChild(btnLoad);
+                dt.appendChild(timeSpan);
+                dt.appendChild(actions);
+                tr.appendChild(name);
+                tr.appendChild(dt);
+                tbody.appendChild(tr);
+            });
+        });
+        table.appendChild(tbody);
+        savesList.appendChild(table);
+        showElement(savesEmpty, false);
+        showElement(savesList, true, 'block');
+    }
+
+    function fetchPlayerSaves() {
+        const serverId = rootEl.dataset.serverId;
+        if (!serverId) return;
+        fetch(`/api/servers/${serverId}/saves?type=player`, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load saves')))
+            .then(data => {
+                const groups = (data && Array.isArray(data.groups)) ? data.groups : [];
+                renderPlayerSaves(groups);
+            })
+            .catch(() => {
+                renderPlayerSaves([]);
+            });
+    }
+
+    function fetchQuickSaves() {
+        const serverId = rootEl.dataset.serverId;
+        if (!serverId) return;
+        fetch(`/api/servers/${serverId}/saves?type=quick`, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load saves')))
+            .then(data => {
+                renderSaves((data && data.items) || []);
+            })
+            .catch(() => {
+                renderSaves([]);
+            });
+    }
+
     // Bind saves tab interactions (first pass: Auto only)
     if (savesTabs) {
         savesTabs.addEventListener('click', (e) => {
@@ -269,8 +528,16 @@
             savesTabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             const filter = btn.getAttribute('data-save-filter');
-            if (filter === 'auto' || filter === 'all') {
+            if (filter === 'auto') {
                 fetchAutoSaves();
+            } else if (filter === 'quick') {
+                fetchQuickSaves();
+            } else if (filter === 'manual') {
+                fetchManualSaves();
+            } else if (filter === 'player') {
+                fetchPlayerSaves();
+            } else if (filter === 'all') {
+                fetchAllSaves();
             } else {
                 // Not implemented yet; show empty state
                 renderSaves([]);
@@ -280,8 +547,16 @@
         try {
             const activeTab = savesTabs.querySelector('.tab.active');
             const activeFilter = activeTab ? activeTab.getAttribute('data-save-filter') : '';
-            if (activeFilter === 'auto' || activeFilter === 'all') {
+            if (activeFilter === 'auto') {
                 fetchAutoSaves();
+            } else if (activeFilter === 'quick') {
+                fetchQuickSaves();
+            } else if (activeFilter === 'manual') {
+                fetchManualSaves();
+            } else if (activeFilter === 'player') {
+                fetchPlayerSaves();
+            } else if (activeFilter === 'all') {
+                fetchAllSaves();
             }
         } catch(_) {}
     }
@@ -289,10 +564,52 @@
     // Delegated handlers for Load/Delete in saves list
     if (savesList) {
         savesList.addEventListener('click', function(e){
+            const excludeBtn = e.target.closest && e.target.closest('.btn-exclude-player');
             const loadBtn = e.target.closest && e.target.closest('.btn-load-save');
             const delBtn = e.target.closest && e.target.closest('.btn-delete-save');
+            const headerRow = e.target.closest && e.target.closest('tr.player-header');
             const serverId = Number(rootEl.dataset.serverId || '0');
             if (!serverId) return;
+            if (headerRow && !excludeBtn) {
+                e.preventDefault();
+                const group = headerRow.dataset.group || '';
+                if (!group) return;
+                const expanded = headerRow.getAttribute('aria-expanded') === 'true';
+                headerRow.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                const childs = savesList.querySelectorAll(`tr.player-child[data-group="${group}"]`);
+                childs.forEach(row => {
+                    if (expanded) {
+                        row.classList.add('hidden');
+                    } else {
+                        row.classList.remove('hidden');
+                    }
+                });
+                return;
+            }
+            if (excludeBtn) {
+                e.preventDefault();
+                const steamId = (excludeBtn.dataset.steamId || '').trim();
+                if (!steamId) return;
+                e.stopPropagation();
+                excludeBtn.disabled = true;
+                fetch(`/api/servers/${serverId}/player-saves/exclude`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ steam_id: steamId })
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const typeH = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                        }
+                    } catch(_) {}
+                    fetchPlayerSaves();
+                }).catch(() => {}).finally(() => { excludeBtn.disabled = false; });
+                return;
+            }
             if (loadBtn) {
                 e.preventDefault();
                 const path = (loadBtn.dataset.path || '').trim();
@@ -345,8 +662,16 @@
                             if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
                         }
                     } catch(_) {}
-                    // Refresh autosaves list after deletion
-                    fetchAutoSaves();
+                    // Refresh the currently active tab after deletion
+                    try {
+                        const activeTab = savesTabs.querySelector('.tab.active');
+                        const filter = activeTab ? activeTab.getAttribute('data-save-filter') : '';
+                        if (filter === 'auto') fetchAutoSaves();
+                        else if (filter === 'quick') fetchQuickSaves();
+                        else if (filter === 'manual') fetchManualSaves();
+                        else if (filter === 'player') fetchPlayerSaves();
+                        else fetchAllSaves();
+                    } catch(_) { fetchAllSaves(); }
                 }).catch(() => {
                     // no-op
                 }).finally(() => { delBtn.disabled = false; });

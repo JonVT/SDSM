@@ -145,6 +145,8 @@ type Server struct {
 	DisconnectTimeout     int           `json:"disconnect_timeout"`
 	// PlayerSaves persists the preference to auto-save when players connect
 	PlayerSaves         bool          `json:"player_saves"`
+	// PlayerSaveExcludes lists Steam IDs for which player-save automation should be skipped
+	PlayerSaveExcludes []string      `json:"player_save_excludes"`
 	Mods                []string      `json:"mods"`
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
 	SCONPort            int           `json:"scon_port"` // Port for SCON plugin HTTP API
@@ -169,6 +171,25 @@ type Server struct {
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
 	playersLogDirty     bool
+}
+
+// HasPlayerSaveExclude returns true if the Steam ID is present in the exclusion list.
+func (s *Server) HasPlayerSaveExclude(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" || s == nil { return false }
+	for _, v := range s.PlayerSaveExcludes {
+		if strings.EqualFold(v, id) { return true }
+	}
+	return false
+}
+
+// AddPlayerSaveExclude appends a Steam ID to the exclusion list if missing.
+func (s *Server) AddPlayerSaveExclude(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" || s == nil { return false }
+	if s.HasPlayerSaveExclude(id) { return false }
+	s.PlayerSaveExcludes = append(s.PlayerSaveExcludes, id)
+	return true
 }
 
 func (s *Server) EnsureLogger(paths *utils.Paths) {
