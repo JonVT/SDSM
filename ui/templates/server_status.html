@@ -161,7 +161,6 @@
             <div class="card card-saves">
                 <div class="card-header">
                     <h2 class="card-title">Saves</h2>
-                    <span class="pill">Coming Soon</span>
                 </div>
                 <!-- Saves filter tabs -->
                 <div class="tabs" id="saves-tabs" role="tablist" aria-label="Save types">
@@ -172,7 +171,8 @@
                     <button class="tab" role="tab" aria-selected="false" data-save-filter="named">Named</button>
                     <button class="tab" role="tab" aria-selected="false" data-save-filter="player">Player</button>
                 </div>
-                <div class="empty-state">Save management will appear here.</div>
+                <div id="saves-empty" class="empty-state">Select a tab to view saves.</div>
+                <div id="saves-list" role="region" aria-label="Saves list" class="hidden"></div>
             </div>
 
             <!-- Bottom Right: Startup Parameters -->

@@ -191,6 +191,11 @@
         }
 
         function setDashboardConnectionBanner(active, text) {
+            // If rendered inside the main frame, delegate to top-level banner
+            if (window.top && window.top !== window && typeof window.top.setConnectionBanner === 'function') {
+                window.top.setConnectionBanner(!!active, text || '');
+                return;
+            }
             const banner = document.getElementById('connection-banner');
             const bannerText = document.getElementById('connection-banner-text');
             if (!banner) {

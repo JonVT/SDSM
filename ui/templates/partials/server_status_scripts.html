@@ -129,6 +129,11 @@
     let knownLiveSteam = new Set();
     let playerSavesToggle = null;
 
+    // Saves UI elements
+    const savesTabs = document.getElementById('saves-tabs');
+    const savesList = document.getElementById('saves-list');
+    const savesEmpty = document.getElementById('saves-empty');
+
     updateControlButtons({ running: serverIsRunning, paused: serverIsPaused, starting: serverIsStarting });
 
     function pad2(value) {
@@ -144,6 +149,209 @@
             return fallback;
         }
         return `${pad2(dt.getMonth() + 1)}/${pad2(dt.getDate())}/${dt.getFullYear()} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:${pad2(dt.getSeconds())}`;
+    }
+
+    // Autosave display format: DDD dd-MMM-yy hh:mm:ss (e.g., Mon 03-Nov-25 11:48:35)
+    function formatAutosaveDate(dt) {
+        if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return '—';
+        const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const ddd = days[dt.getDay()];
+        const dd = pad2(dt.getDate());
+        const mmm = months[dt.getMonth()];
+        const yy = String(dt.getFullYear()).slice(-2);
+        const hh = pad2(dt.getHours());
+        const mm = pad2(dt.getMinutes());
+        const ss = pad2(dt.getSeconds());
+        return `${ddd} ${dd}-${mmm}-${yy} ${hh}:${mm}:${ss}`;
+    }
+
+    function renderSaves(items) {
+        if (!savesList) return;
+        savesList.textContent = '';
+        if (!Array.isArray(items) || items.length === 0) {
+            showElement(savesList, false);
+            showElement(savesEmpty, true);
+            return;
+        }
+        // Build a simple table (without headers as requested)
+        const table = document.createElement('table');
+        table.className = 'table';
+        const tbody = document.createElement('tbody');
+        items.forEach(it => {
+            const tr = document.createElement('tr');
+            const name = document.createElement('td');
+            // Add extra space between the name and the datetime/action cells
+            name.style.paddingRight = '24px';
+            // Name cell with stopwatch icon for autosaves
+            const nameWrap = document.createElement('span');
+            nameWrap.style.display = 'inline-flex';
+            nameWrap.style.alignItems = 'center';
+            nameWrap.style.gap = '6px';
+            const icon = document.createElement('span');
+            icon.innerHTML = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Autosave"><circle cx="12" cy="13" r="8"></circle><line x1="12" y1="5" x2="12" y2="2"></line><line x1="9" y1="2" x2="15" y2="2"></line><line x1="12" y1="13" x2="16" y2="13"></line></svg>';
+            const label = document.createElement('span');
+            const rawName = (it && it.name) ? String(it.name) : '';
+            const displayName = rawName && rawName.toLowerCase() !== 'auto' ? rawName : 'Autosave';
+            label.textContent = displayName;
+            nameWrap.appendChild(icon);
+            nameWrap.appendChild(label);
+            name.appendChild(nameWrap);
+            const dt = document.createElement('td');
+            const d = it && it.datetime ? new Date(it.datetime) : null;
+            // Lay out time on the left and actions on the right with comfortable spacing
+            dt.style.display = 'flex';
+            dt.style.alignItems = 'center';
+            dt.style.justifyContent = 'space-between';
+            dt.style.flexWrap = 'nowrap';
+            dt.style.gap = '10px';
+            const timeSpan = document.createElement('span');
+            timeSpan.textContent = d && !Number.isNaN(d.getTime()) ? formatAutosaveDate(d) : '—';
+            const actions = document.createElement('span');
+            actions.style.whiteSpace = 'nowrap';
+            actions.style.marginLeft = '12px';
+            // Load button
+            const btnLoad = document.createElement('button');
+            btnLoad.type = 'button';
+            btnLoad.className = 'btn btn-primary btn-icon btn-sm btn-load-save';
+            btnLoad.title = 'Load this save';
+            btnLoad.setAttribute('aria-label', 'Load save');
+            btnLoad.dataset.filename = it && it.filename ? it.filename : '';
+            btnLoad.dataset.path = it && it.path ? it.path : '';
+            btnLoad.dataset.type = 'auto';
+            btnLoad.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+            // Delete button
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button';
+            btnDel.className = 'btn btn-danger btn-icon btn-sm btn-delete-save';
+            btnDel.title = 'Delete this save';
+            btnDel.setAttribute('aria-label', 'Delete save');
+            btnDel.dataset.filename = it && it.filename ? it.filename : '';
+            btnDel.dataset.type = 'auto';
+            btnDel.style.marginLeft = '6px';
+            btnDel.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
+            actions.appendChild(btnLoad);
+            actions.appendChild(btnDel);
+            dt.appendChild(timeSpan);
+            dt.appendChild(actions);
+            tr.appendChild(name); tr.appendChild(dt);
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        savesList.appendChild(table);
+        showElement(savesEmpty, false);
+        showElement(savesList, true, 'block');
+    }
+
+    function fetchAutoSaves() {
+        const serverId = rootEl.dataset.serverId;
+        if (!serverId) return;
+        fetch(`/api/servers/${serverId}/saves?type=auto`, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed to load saves')))
+            .then(data => {
+                renderSaves((data && data.items) || []);
+            })
+            .catch(() => {
+                renderSaves([]);
+            });
+    }
+
+    // Bind saves tab interactions (first pass: Auto only)
+    if (savesTabs) {
+        savesTabs.addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab');
+            if (!btn) return;
+            e.preventDefault();
+            savesTabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            const filter = btn.getAttribute('data-save-filter');
+            if (filter === 'auto' || filter === 'all') {
+                fetchAutoSaves();
+            } else {
+                // Not implemented yet; show empty state
+                renderSaves([]);
+            }
+        });
+        // If Auto tab is already active on load, fetch immediately
+        try {
+            const activeTab = savesTabs.querySelector('.tab.active');
+            const activeFilter = activeTab ? activeTab.getAttribute('data-save-filter') : '';
+            if (activeFilter === 'auto' || activeFilter === 'all') {
+                fetchAutoSaves();
+            }
+        } catch(_) {}
+    }
+
+    // Delegated handlers for Load/Delete in saves list
+    if (savesList) {
+        savesList.addEventListener('click', function(e){
+            const loadBtn = e.target.closest && e.target.closest('.btn-load-save');
+            const delBtn = e.target.closest && e.target.closest('.btn-delete-save');
+            const serverId = Number(rootEl.dataset.serverId || '0');
+            if (!serverId) return;
+            if (loadBtn) {
+                e.preventDefault();
+                const path = (loadBtn.dataset.path || '').trim();
+                const name = (loadBtn.dataset.filename || '').trim();
+                if (!path && !name) return;
+                const target = path || name;
+                const confirmed = window.confirm('Load this save? The current world state will be replaced.');
+                if (!confirmed) return;
+                loadBtn.disabled = true;
+                fetch(`/api/servers/${serverId}/command`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ type: 'console', payload: 'FILE load ' + target })
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                        }
+                    } catch(_) {}
+                }).catch(() => {
+                    // no-op
+                }).finally(() => { loadBtn.disabled = false; });
+                return;
+            }
+            if (delBtn) {
+                e.preventDefault();
+                const name = (delBtn.dataset.filename || '').trim();
+                const type = (delBtn.dataset.type || 'auto');
+                if (!name) return;
+                const confirmed = window.confirm('Delete this save file permanently?');
+                if (!confirmed) return;
+                delBtn.disabled = true;
+                const url = new URL(window.location.origin + `/api/servers/${serverId}/saves`);
+                url.searchParams.set('type', type);
+                url.searchParams.set('name', name);
+                fetch(url.toString(), {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const typeH = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                        }
+                    } catch(_) {}
+                    // Refresh autosaves list after deletion
+                    fetchAutoSaves();
+                }).catch(() => {
+                    // no-op
+                }).finally(() => { delBtn.disabled = false; });
+            }
+        });
     }
 
     function formatTimeDisplay(value, fallback) {
@@ -167,11 +375,20 @@
         if (!el) {
             return;
         }
+        // Also toggle a generic 'hidden' class if present to avoid CSS overriding inline display
+        try {
+            if (shouldShow) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        } catch(_) {}
         if (shouldShow) {
             if (displayValue) {
                 el.style.display = displayValue;
             } else {
-                el.style.removeProperty('display');
+                // Set to initial to override any stylesheet default without relying on removal
+                el.style.display = '';
             }
         } else {
             el.style.display = 'none';
@@ -458,6 +675,11 @@
     }
 
     function setConnectionBanner(active, message) {
+        // If this page is inside the main frame, use the top-level banner instead
+        if (window.top && window.top !== window && typeof window.top.setConnectionBanner === 'function') {
+            window.top.setConnectionBanner(!!active, message || '');
+            return;
+        }
         if (!connectionBanner) {
             return;
         }

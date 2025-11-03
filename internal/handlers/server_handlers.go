@@ -374,6 +374,25 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			}
 		}
 
+		// Extended settings
+		if v := strings.TrimSpace(c.PostForm("max_auto_saves")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+				s.MaxAutoSaves = n
+			}
+		}
+		if v := strings.TrimSpace(c.PostForm("max_quick_saves")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+				s.MaxQuickSaves = n
+			}
+		}
+		s.DeleteSkeletonOnDecay = c.PostForm("delete_skeleton_on_decay") == "on"
+		s.UseSteamP2P = c.PostForm("use_steam_p2p") == "on"
+		if v := strings.TrimSpace(c.PostForm("disconnect_timeout")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n >= 1000 && n <= 600000 {
+				s.DisconnectTimeout = n
+			}
+		}
+
 		s.Visible = c.PostForm("server_visible") == "on"
 		s.Beta = c.PostForm("beta") == "true"
 		s.AutoStart = c.PostForm("auto_start") == "on"
@@ -480,6 +499,27 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	autoSave := c.PostForm("auto_save") == "on"
 	autoPause := c.PostForm("auto_pause") == "on"
 	playerSaves := c.PostForm("player_saves") == "on"
+	// Extended settings for saves/network
+	maxAutoSaves := 5
+	if v := strings.TrimSpace(c.PostForm("max_auto_saves")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+			maxAutoSaves = n
+		}
+	}
+	maxQuickSaves := 5
+	if v := strings.TrimSpace(c.PostForm("max_quick_saves")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
+			maxQuickSaves = n
+		}
+	}
+	deleteSkeletonOnDecay := c.PostForm("delete_skeleton_on_decay") == "on"
+	useSteamP2P := c.PostForm("use_steam_p2p") == "on"
+	disconnectTimeout := 10000
+	if v := strings.TrimSpace(c.PostForm("disconnect_timeout")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1000 && n <= 600000 {
+			disconnectTimeout = n
+		}
+	}
 	serverVisible := c.PostForm("server_visible") == "on"
 
 	formState := gin.H{
@@ -500,9 +540,14 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		"auto_save":             autoSave,
 		"auto_pause":            autoPause,
 		"server_visible":        serverVisible,
+		"player_saves":          playerSaves,
+		"max_auto_saves":        maxAutoSaves,
+		"max_quick_saves":       maxQuickSaves,
+		"delete_skeleton_on_decay": deleteSkeletonOnDecay,
+		"use_steam_p2p":         useSteamP2P,
+		"disconnect_timeout":    disconnectTimeout,
 	}
-	// Reflect Player Saves in the form state for error redisplay
-	formState["player_saves"] = playerSaves
+	// Reflect Player Saves already included; keep extended settings for redisplay
 	// Player Saves preference for UI (client-side feature)
 	// We'll read the posted value below and also stash it here for error redisplay
 	// so the checkbox state persists when validation fails.
@@ -641,6 +686,11 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		AutoSave:            autoSave,
 		AutoPause:           autoPause,
 		PlayerSaves:         playerSaves,
+		MaxAutoSaves:        maxAutoSaves,
+		MaxQuickSaves:       maxQuickSaves,
+		DeleteSkeletonOnDecay: deleteSkeletonOnDecay,
+		UseSteamP2P:         useSteamP2P,
+		DisconnectTimeout:   disconnectTimeout,
 		RestartDelaySeconds: restartDelay,
 	}
 

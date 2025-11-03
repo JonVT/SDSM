@@ -219,6 +219,38 @@
                                 </label>
                                 <p class="help-text">Pause server simulation when no players are connected</p>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
+                                <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" title="Maximum number of autosaves to retain on disk (default 5)"
+                                       value="{{ or (index $form "max_auto_saves") 5 }}" min="1" max="1000" placeholder="5">
+                                <p class="help-text">Maximum number of autosaves to retain (default 5)</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
+                                <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" title="Maximum number of quicksaves to retain on disk (default 5)"
+                                       value="{{ or (index $form "max_quick_saves") 5 }}" min="1" max="1000" placeholder="5">
+                                <p class="help-text">Maximum number of quicksaves to retain (default 5)</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="checkbox-label" for="delete_skeleton_on_decay" title="When enabled, skeleton corpses are deleted when they decay (default off)">
+                                    <input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{ if index $form "delete_skeleton_on_decay" }}checked{{ end }} title="Delete skeleton corpses when they decay">
+                                    <span>Delete Skeleton On Decay</span>
+                                </label>
+                                <p class="help-text">When enabled, delete skeletons on decay (default off)</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="checkbox-label" for="use_steam_p2p" title="Use Steam peer-to-peer networking instead of direct sockets (default off)">
+                                    <input type="checkbox" id="use_steam_p2p" name="use_steam_p2p" {{ if index $form "use_steam_p2p" }}checked{{ end }} title="Use Steam peer-to-peer networking">
+                                    <span>Use Steam P2P</span>
+                                </label>
+                                <p class="help-text">Use Steam P2P networking (default off)</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="disconnect_timeout" title="Milliseconds before clients are disconnected due to inactivity (default 10000)">Disconnect Timeout (ms)</label>
+                                <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
+                                       value="{{ or (index $form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
+                                <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
+                            </div>
                             
                             <div class="form-group">
                                 <label class="checkbox-label">

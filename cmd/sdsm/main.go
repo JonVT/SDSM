@@ -394,6 +394,8 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers", managerHandlers.APIServers)
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
 		api.GET("/servers/:server_id/status", managerHandlers.APIServerStatus)
+		api.GET("/servers/:server_id/saves", managerHandlers.APIServerSaves)
+		api.DELETE("/servers/:server_id/saves", managerHandlers.APIServerSaveDelete)
 		api.GET("/servers/:server_id/logs", managerHandlers.APIServerLogsList)
 		api.GET("/servers/:server_id/log", managerHandlers.APIServerLog)
 		api.GET("/servers/:server_id/log/tail", managerHandlers.APIServerLogTail)

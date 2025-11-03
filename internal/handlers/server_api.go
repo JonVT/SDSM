@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sdsm/internal/models"
+	"sdsm/internal/utils"
 	"strconv"
 	"strings"
 	"time"
@@ -637,6 +638,250 @@ func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
 	c.Header("X-Toast-Title", "Command Sent")
 	c.Header("X-Toast-Message", "Your command was sent to the server.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerSaves lists server save files for a given type (e.g., auto, quick, manual).
+// Query params:
+//   type: one of "auto" (supported now; others TBD)
+// Returns JSON: { items: [ { name: string, filename: string, datetime: RFC3339, size: int64, path: string } ] }
+func (h *ManagerHandlers) APIServerSaves(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC: operators must be assigned to the server
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Determine base saves path
+	var savesDir string
+	if s.Paths != nil {
+		savesDir = s.Paths.ServerSavesDir(s.ID)
+	} else if h.manager.Paths != nil {
+		savesDir = h.manager.Paths.ServerSavesDir(s.ID)
+	}
+	if strings.TrimSpace(savesDir) == "" {
+		c.JSON(http.StatusOK, gin.H{"items": []any{}})
+		return
+	}
+
+	t := strings.ToLower(strings.TrimSpace(c.Query("type")))
+	sub := ""
+	switch t {
+	case "auto", "autosave", "autosaves":
+		sub = "autosave"
+	case "":
+		// default to auto for now
+		sub = "autosave"
+	default:
+		// Not implemented yet
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported type"})
+		return
+	}
+
+	// Directory layout for autosaves: only <savesDir>/<ServerName>/autosave
+	var dir string
+	if sub == "autosave" {
+		dir = filepath.Join(savesDir, s.Name, "autosave")
+	} else {
+		dir = filepath.Join(savesDir, sub)
+	}
+
+	// (debug logging removed)
+
+	type item struct {
+		Name     string `json:"name"`
+		Filename string `json:"filename"`
+		Datetime string `json:"datetime"`
+		Size     int64  `json:"size"`
+		Path     string `json:"path"`
+		ts       time.Time
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"items": []any{}})
+		return
+	}
+	items := make([]item, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() { continue }
+		name := e.Name()
+		lower := strings.ToLower(name)
+		if !strings.HasSuffix(lower, ".save") { continue }
+		// Expect ddmmyy_hhmmss_auto.save
+		base := strings.TrimSuffix(lower, ".save")
+		parts := strings.Split(base, "_")
+		if len(parts) < 3 { continue }
+		datePart := parts[0]
+		timePart := parts[1]
+		if !strings.Contains(parts[2], "auto") { continue }
+		if len(datePart) != 6 || len(timePart) != 6 { continue }
+		dd := datePart[0:2]
+		mm := datePart[2:4]
+		yy := datePart[4:6]
+		hh := timePart[0:2]
+		min := timePart[2:4]
+		ss := timePart[4:6]
+		day := atoiSafe(dd)
+		month := atoiSafe(mm)
+		year := 2000 + atoiSafe(yy)
+		hour := atoiSafe(hh)
+		minute := atoiSafe(min)
+		second := atoiSafe(ss)
+		if month < 1 || month > 12 || day < 1 || day > 31 { continue }
+		ts := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.Local)
+		info, _ := e.Info()
+		size := int64(0)
+		if info != nil { size = info.Size() }
+		items = append(items, item{ Name: "Auto", Filename: name, Datetime: ts.UTC().Format(time.RFC3339), Size: size, Path: filepath.Join(dir, name), ts: ts })
+	}
+
+	sort.Slice(items, func(i, j int) bool { return items[i].ts.After(items[j].ts) })
+
+	out := make([]gin.H, 0, len(items))
+	for _, it := range items {
+		out = append(out, gin.H{
+			"name":     it.Name,
+			"filename": it.Filename,
+			"datetime": it.Datetime,
+			"size":     it.Size,
+			"path":     it.Path,
+		})
+	}
+	// touch utils import to avoid unused when builds move
+	_ = utils.Paths{}
+	c.JSON(http.StatusOK, gin.H{"items": out})
+}
+
+// APIServerSaveDelete deletes a save file under the server's saves directory.
+// Query params:
+//   type: one of "auto" (currently supported)
+//   name: filename (e.g., ddmmyy_hhmmss_auto.save)
+func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC: operators must be assigned to the server
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Determine saves base
+	var savesDir string
+	if s.Paths != nil {
+		savesDir = s.Paths.ServerSavesDir(s.ID)
+	} else if h.manager.Paths != nil {
+		savesDir = h.manager.Paths.ServerSavesDir(s.ID)
+	}
+	if strings.TrimSpace(savesDir) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "saves directory unavailable"})
+		return
+	}
+
+	// Parse type and filename
+	t := strings.ToLower(strings.TrimSpace(c.Query("type")))
+	sub := ""
+	switch t {
+	case "auto", "autosave", "autosaves":
+		sub = "autosave"
+	case "":
+		sub = "autosave"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported type"})
+		return
+	}
+
+	name := strings.TrimSpace(c.Query("name"))
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
+	}
+	base := filepath.Base(name)
+	if !strings.HasSuffix(strings.ToLower(base), ".save") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+
+	// Compute target directory for delete
+	// Only delete from the specific autosave directory
+	var dir string
+	if sub == "autosave" {
+		dir = filepath.Join(savesDir, s.Name, "autosave")
+	} else {
+		dir = filepath.Join(savesDir, sub)
+	}
+	target := filepath.Join(dir, base)
+	cleanDir := filepath.Clean(dir)
+	cleanTarget := filepath.Clean(target)
+	if rel, err := filepath.Rel(cleanDir, cleanTarget); err != nil || strings.HasPrefix(rel, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+		return
+	}
+	if err := os.Remove(cleanTarget); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.Header("X-Toast-Type", "warning")
+			c.Header("X-Toast-Title", "Not Found")
+			c.Header("X-Toast-Message", "Save file was already removed.")
+			c.JSON(http.StatusOK, gin.H{"status": "not_found"})
+			return
+		}
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Delete Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed"})
+		return
+	}
+
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Deleted")
+	c.Header("X-Toast-Message", "Save file deleted.")
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		}
+	}
+	return n
 }
 
 func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {

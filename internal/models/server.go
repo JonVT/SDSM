@@ -99,8 +99,14 @@ type ServerConfig struct {
 	AutoUpdate          bool
 	AutoSave            bool
 	AutoPause           bool
+	// Additional server settings
+	MaxAutoSaves          int
+	MaxQuickSaves         int
+	DeleteSkeletonOnDecay bool
+	UseSteamP2P           bool
+	DisconnectTimeout     int
 	// PlayerSaves enables automatic save creation when players connect.
-	PlayerSaves         bool
+	PlayerSaves           bool
 	Mods                []string
 	RestartDelaySeconds int
 }
@@ -131,6 +137,12 @@ type Server struct {
 	AutoUpdate          bool          `json:"auto_update"`
 	AutoSave            bool          `json:"auto_save"`
 	AutoPause           bool          `json:"auto_pause"`
+	// Additional server settings persisted in sdsm.config
+	MaxAutoSaves          int           `json:"max_auto_saves"`
+	MaxQuickSaves         int           `json:"max_quick_saves"`
+	DeleteSkeletonOnDecay bool          `json:"delete_skeleton_on_decay"`
+	UseSteamP2P           bool          `json:"use_steam_p2p"`
+	DisconnectTimeout     int           `json:"disconnect_timeout"`
 	// PlayerSaves persists the preference to auto-save when players connect
 	PlayerSaves         bool          `json:"player_saves"`
 	Mods                []string      `json:"mods"`
@@ -786,6 +798,24 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 	if !cfgProvided {
 		s.AutoPause = true
 	}
+	// Persist extended settings with defaults when not provided
+	if cfg.MaxAutoSaves > 0 {
+		s.MaxAutoSaves = cfg.MaxAutoSaves
+	} else {
+		s.MaxAutoSaves = 5
+	}
+	if cfg.MaxQuickSaves > 0 {
+		s.MaxQuickSaves = cfg.MaxQuickSaves
+	} else {
+		s.MaxQuickSaves = 5
+	}
+	s.DeleteSkeletonOnDecay = cfg.DeleteSkeletonOnDecay
+	s.UseSteamP2P = cfg.UseSteamP2P
+	if cfg.DisconnectTimeout > 0 {
+		s.DisconnectTimeout = cfg.DisconnectTimeout
+	} else {
+		s.DisconnectTimeout = 10000
+	}
 	// Persist PlayerSaves preference (defaults to false when not provided)
 	s.PlayerSaves = cfg.PlayerSaves
 
@@ -830,6 +860,16 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		if s.SCONPort == 0 && s.Port > 0 {
 			s.SCONPort = s.Port + 1
 		}
+		// Backfill defaults for newly introduced fields if absent
+		if s.MaxAutoSaves <= 0 {
+			s.MaxAutoSaves = 5
+		}
+		if s.MaxQuickSaves <= 0 {
+			s.MaxQuickSaves = 5
+		}
+		if s.DisconnectTimeout <= 0 {
+			s.DisconnectTimeout = 10000
+		}
 	} else {
 		s.Name = fmt.Sprintf("Stationeers Server %d", serverID)
 		s.World = "Mars2"
@@ -848,6 +888,11 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.AutoUpdate = false
 		s.AutoSave = true
 		s.AutoPause = true
+		s.MaxAutoSaves = 5
+		s.MaxQuickSaves = 5
+		s.DeleteSkeletonOnDecay = false
+		s.UseSteamP2P = false
+		s.DisconnectTimeout = 10000
 		s.PlayerSaves = false
 		s.SCONPort = s.Port + 1
 	}
@@ -1338,6 +1383,12 @@ func (s *Server) Start() {
 		"AutoPauseServer", strconv.FormatBool(s.AutoPause),
 		"StartLocalHost", "true",
 		"LocalIpAddress", "0.0.0.0",
+		// Extended settings
+		"MaxAutoSaves", strconv.Itoa(max(1, s.MaxAutoSaves)),
+		"MaxQuickSaves", strconv.Itoa(max(1, s.MaxQuickSaves)),
+		"DeleteSkeletonOnDecay", strconv.FormatBool(s.DeleteSkeletonOnDecay),
+		"UseSteamP2P", strconv.FormatBool(s.UseSteamP2P),
+		"DisconnectTimeout", strconv.Itoa(func(v int) int { if v <= 0 { return 10000 } ; return v }(s.DisconnectTimeout)),
 	}
 	s.Logger.Write(fmt.Sprintf("Starting server %d with command line: %v %v", s.ID, executablePath, args))
 
