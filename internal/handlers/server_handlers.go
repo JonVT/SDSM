@@ -79,6 +79,20 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	isAsync := acceptsJSON || isXHR || isHX
 
 	switch {
+	case c.PostForm("set_player_saves") != "":
+		// Persist Player Saves preference and return JSON/toast
+		val := strings.TrimSpace(c.PostForm("set_player_saves"))
+		enabled := strings.EqualFold(val, "true") || val == "1" || strings.EqualFold(val, "on")
+		s.PlayerSaves = enabled
+		h.manager.Save()
+		if isAsync {
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Preference Saved")
+			c.Header("X-Toast-Message", fmt.Sprintf("Player Saves %s", map[bool]string{true:"enabled", false:"disabled"}[enabled]))
+			c.JSON(http.StatusOK, gin.H{"status":"ok", "player_saves": enabled})
+			return
+		}
+		// Non-async fallthrough will redirect at the end
 	case c.PostForm("unban") != "":
 		steamID := strings.TrimSpace(c.PostForm("unban"))
 		if steamID != "" {
@@ -465,6 +479,7 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	autoUpdate := c.PostForm("auto_update") == "on"
 	autoSave := c.PostForm("auto_save") == "on"
 	autoPause := c.PostForm("auto_pause") == "on"
+	playerSaves := c.PostForm("player_saves") == "on"
 	serverVisible := c.PostForm("server_visible") == "on"
 
 	formState := gin.H{
@@ -486,6 +501,11 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		"auto_pause":            autoPause,
 		"server_visible":        serverVisible,
 	}
+	// Reflect Player Saves in the form state for error redisplay
+	formState["player_saves"] = playerSaves
+	// Player Saves preference for UI (client-side feature)
+	// We'll read the posted value below and also stash it here for error redisplay
+	// so the checkbox state persists when validation fails.
 
 	if name == "" {
 		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
@@ -620,6 +640,7 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		AutoUpdate:          autoUpdate,
 		AutoSave:            autoSave,
 		AutoPause:           autoPause,
+		PlayerSaves:         playerSaves,
 		RestartDelaySeconds: restartDelay,
 	}
 
@@ -650,5 +671,11 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		h.manager.Log.Write(fmt.Sprintf("Initial deploy for server %s (ID: %d) failed: %v", newServer.Name, newServer.ID, err))
 	}
 
+	// If Player Saves preference was selected on create, pass it via a query param so the
+	// server page can persist it to localStorage for this server id.
+	if playerSaves {
+		c.Redirect(http.StatusFound, fmt.Sprintf("/server/%d?player_saves=1", newServer.ID))
+		return
+	}
 	c.Redirect(http.StatusFound, fmt.Sprintf("/server/%d", newServer.ID))
 }

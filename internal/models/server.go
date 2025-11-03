@@ -99,6 +99,8 @@ type ServerConfig struct {
 	AutoUpdate          bool
 	AutoSave            bool
 	AutoPause           bool
+	// PlayerSaves enables automatic save creation when players connect.
+	PlayerSaves         bool
 	Mods                []string
 	RestartDelaySeconds int
 }
@@ -129,6 +131,8 @@ type Server struct {
 	AutoUpdate          bool          `json:"auto_update"`
 	AutoSave            bool          `json:"auto_save"`
 	AutoPause           bool          `json:"auto_pause"`
+	// PlayerSaves persists the preference to auto-save when players connect
+	PlayerSaves         bool          `json:"player_saves"`
 	Mods                []string      `json:"mods"`
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
 	SCONPort            int           `json:"scon_port"` // Port for SCON plugin HTTP API
@@ -782,6 +786,8 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 	if !cfgProvided {
 		s.AutoPause = true
 	}
+	// Persist PlayerSaves preference (defaults to false when not provided)
+	s.PlayerSaves = cfg.PlayerSaves
 
 	if cfg.RestartDelaySeconds >= 0 {
 		s.RestartDelaySeconds = cfg.RestartDelaySeconds
@@ -842,6 +848,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.AutoUpdate = false
 		s.AutoSave = true
 		s.AutoPause = true
+		s.PlayerSaves = false
 		s.SCONPort = s.Port + 1
 	}
 

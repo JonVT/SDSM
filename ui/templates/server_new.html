@@ -205,6 +205,14 @@
                             </div>
 
                             <div class="form-group">
+                                <label class="checkbox-label" for="player_saves" title="Save the game automatically when a player connects (issues 'FILE saveas' with a timestamped filename).">
+                                    <input type="checkbox" id="player_saves" name="player_saves" {{ if index $form "player_saves" }}checked{{ end }}>
+                                    <span>Player Saves</span>
+                                </label>
+                                <p class="help-text">When enabled, a save will be created automatically on player connect.</p>
+                            </div>
+
+                            <div class="form-group">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index $form "auto_pause" }}checked{{ end }}>
                                     <span>Auto Pause</span>

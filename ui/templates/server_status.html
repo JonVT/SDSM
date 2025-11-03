@@ -13,7 +13,7 @@
     {{ template "server_status_styles.html" . }}
     
     </head>
-    <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}">
+    <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}" data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}">
         <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
             <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
             <button type="button" id="connection-banner-action" title="Reload the page">Reload</button>

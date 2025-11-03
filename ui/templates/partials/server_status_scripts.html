@@ -795,10 +795,40 @@
         if (playerSavesToggle) {
             try {
                 const saved = localStorage.getItem(playerSavesKey);
-                playerSavesToggle.checked = saved === '1';
+                if (saved === null || saved === undefined) {
+                    // Default to persisted config value from dataset when no client preference exists
+                    const defaultPS = String(rootEl.dataset.playerSaves || '').toLowerCase() === 'true';
+                    playerSavesToggle.checked = defaultPS;
+                    try { localStorage.setItem(playerSavesKey, defaultPS ? '1' : '0'); } catch(_) {}
+                } else {
+                    playerSavesToggle.checked = saved === '1';
+                }
             } catch(_) {}
             playerSavesToggle.addEventListener('change', function(){
-                try { localStorage.setItem(playerSavesKey, this.checked ? '1' : '0'); } catch(_) {}
+                const checked = !!this.checked;
+                try { localStorage.setItem(playerSavesKey, checked ? '1' : '0'); } catch(_) {}
+                // Persist to server config asynchronously
+                const sid = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
+                if (!sid) return;
+                fetch(window.location.pathname, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: 'set_player_saves=' + (checked ? '1' : '0'),
+                    credentials: 'same-origin'
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || 'success', title: title || '', message });
+                        }
+                    } catch(_) {}
+                }).catch(() => {});
             });
         }
         const versionKey = currentVersionKey();
@@ -1049,6 +1079,28 @@
         // Language is no longer a startup parameter; dropdown remains for backward compatibility only if present
         populateLanguageOptions();
         updateWorldThumb();
+        // Apply Player Saves preference from URL on first load after creation
+        (function(){
+            try {
+                const params = new URLSearchParams(window.location.search || '');
+                const ps = params.get('player_saves') || params.get('ps');
+                const sid = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
+                if (sid && ps !== null) {
+                    const key = `sdsm:server:${sid}:player-saves`;
+                    const val = (ps === '1' || ps === 'true') ? '1' : '0';
+                    try { localStorage.setItem(key, val); } catch(_) {}
+                    if (playerSavesToggle) {
+                        playerSavesToggle.checked = (val === '1');
+                    }
+                    // Clean the URL so the param doesn't persist on reloads
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('player_saves');
+                    url.searchParams.delete('ps');
+                    window.history.replaceState({}, document.title, url.toString());
+                }
+            } catch(_) { /* no-op */ }
+        })();
+
 
         const tabButtons = document.querySelectorAll('.tab-set .tab-btn');
         const tabContents = document.querySelectorAll('.tab-panel');

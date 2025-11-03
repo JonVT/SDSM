@@ -17,7 +17,7 @@
             <button type="button" class="tab-btn" data-target="players-banned" title="View and manage banned players">Banned</button>
         </div>
         <label class="checkbox-inline" for="player-saves-toggle" title="save the game when a player connects to the server.">
-            <input type="checkbox" id="player-saves-toggle" />
+            <input type="checkbox" id="player-saves-toggle" {{ if .server.PlayerSaves }}checked{{ end }} />
             <span>Player Saves</span>
         </label>
     </div>
