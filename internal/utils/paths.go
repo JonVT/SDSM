@@ -154,6 +154,11 @@ func (p *Paths) ServerOutputFile(id int) string {
 	return filepath.Join(p.ServerLogsDir(id), fmt.Sprintf("%s_output.log", p.ServerName(id)))
 }
 
+// ServerSettingsFile returns the settings file path for a server.
+func (p *Paths) ServerSettingsFile(id int) string {
+	return filepath.Join(p.ServerSettingsDir(id), "settings.xml")
+}
+
 // CheckServer verifies that a server's directory structure exists.
 func (p *Paths) CheckServer(id int) bool {
 	dirs := []string{

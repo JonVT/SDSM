@@ -1316,8 +1316,8 @@ func (s *Server) Start() {
 
 	args := []string{
 		"-FILE", "start", s.Name, worldIdentifier, s.Difficulty, s.StartCondition, s.StartLocation,
-		"-LOGFILE", s.Paths.ServerOutputFile(s.ID),
-		"-SETTINGSPATH", s.Paths.ServerSettingsDir(s.ID),
+		"-logFile", s.Paths.ServerOutputFile(s.ID),
+		"-SETTINGSPATH", s.Paths.ServerSettingsFile(s.ID),
 		"-SETTINGS",
 		"ServerVisible", strconv.FormatBool(s.Visible),
 		"GamePort", strconv.Itoa(s.Port),

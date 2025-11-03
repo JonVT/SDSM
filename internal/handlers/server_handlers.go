@@ -624,9 +624,17 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	}
 
 	// Set default language based on selected channel
+	// Prefer English when available; otherwise fall back to the first available language
 	langs := h.manager.GetLanguagesForVersion(beta)
 	if len(langs) > 0 {
+		// Default to first, but upgrade to English if present
 		cfg.Language = langs[0]
+		for _, l := range langs {
+			if strings.EqualFold(l, "english") {
+				cfg.Language = l
+				break
+			}
+		}
 	}
 
 	newServer, err := h.manager.AddServer(cfg)

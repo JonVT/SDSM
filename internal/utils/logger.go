@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -12,21 +13,60 @@ type Logger struct {
 	readFile  *os.File
 }
 
+// defaultLogPath returns the path to the default SDSM log file using the
+// same naming as Paths.LogFile(), rooted next to the running executable.
+func defaultLogPath() string {
+	exe, err := os.Executable()
+	if err == nil {
+		if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil && resolved != "" {
+			exe = resolved
+		}
+		execDir := filepath.Dir(exe)
+		// Use the same convention as utils.Paths.LogFile()
+		return NewPaths(execDir).LogFile()
+	}
+	// Fallback to a safe temp location
+	return NewPaths(filepath.Join(os.TempDir(), "sdsm")).LogFile()
+}
+
+// writeToDefaultLog attempts to write a single timestamped line to the default
+// SDSM log. If it fails, it falls back to stderr.
+func writeToDefaultLog(message string) {
+	path := defaultLogPath()
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		// Last resort: stderr
+		fmt.Fprintf(os.Stderr, "%s: %s\n", time.Now().Format("2006-01-02 15:04:05"), message)
+		return
+	}
+	defer f.Close()
+	ts := time.Now().Format("2006-01-02 15:04:05")
+	_, _ = f.WriteString(fmt.Sprintf("%s: %s\n", ts, message))
+}
+
 // NewLogger opens the given log file for appending and a parallel read handle.
 // If the file cannot be opened, logs will be written to stdout.
 func NewLogger(logFile string) *Logger {
 	logger := &Logger{}
-	if logFile != "" {
-		var err error
-		logger.writeFile, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			fmt.Printf("Error opening log file: %v\n", err)
-			return logger
-		}
-		logger.readFile, err = os.Open(logFile)
-		if err != nil {
-			fmt.Printf("Error opening log file for reading: %v\n", err)
-		}
+	// Ensure we always have a target path; prefer provided path, else default.
+	if logFile == "" {
+		logFile = defaultLogPath()
+	}
+
+	// Try to ensure directory exists first
+	_ = os.MkdirAll(filepath.Dir(logFile), 0o755)
+
+	var err error
+	logger.writeFile, err = os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		writeToDefaultLog(fmt.Sprintf("Error opening log file (%s): %v", logFile, err))
+		// Return a logger that will fall back to stdout on Write()
+		return logger
+	}
+	logger.readFile, err = os.Open(logFile)
+	if err != nil {
+		writeToDefaultLog(fmt.Sprintf("Error opening log file for reading (%s): %v", logFile, err))
 	}
 	return logger
 }
