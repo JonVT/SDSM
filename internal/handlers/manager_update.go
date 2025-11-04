@@ -119,11 +119,11 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			case "shutdown":
 				c.Header("X-Toast-Type", "warning")
 				c.Header("X-Toast-Title", "Shutdown Initiated")
-				c.Header("X-Toast-Message", "SDSM is shutting down…")
+				c.Header("X-Toast-Message", "SDSM is shutting down...")
 			case "restart":
 				c.Header("X-Toast-Type", "info")
 				c.Header("X-Toast-Title", "Restarting")
-				c.Header("X-Toast-Message", "SDSM is restarting…")
+				c.Header("X-Toast-Message", "SDSM is restarting...")
 			default:
 				c.Header("X-Toast-Type", "success")
 				c.Header("X-Toast-Title", "Action Queued")

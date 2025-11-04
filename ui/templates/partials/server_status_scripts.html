@@ -7,8 +7,8 @@
         popup.classList.add('active');
         body.textContent = 'Loading log...';
         
-        // Fetch server log via server route
-        fetch(`/server/${serverId}/log`, { credentials: 'same-origin' })
+        // Fetch server log via API
+        fetch(`/api/servers/${serverId}/log`, { credentials: 'same-origin' })
             .then(r => r.text())
             .then(log => {
                 body.textContent = log || 'No log data available';
@@ -57,6 +57,7 @@
     const statusIndicator = document.getElementById('status-dot-indicator');
     const statusText = document.getElementById('status-dot-text');
     const statusContainer = document.getElementById('status-pill-container');
+    const stormStatusPill = document.getElementById('storm-status-pill');
     const startedValueEl = document.getElementById('server-started-value');
     const savedValueEl = document.getElementById('server-saved-value');
     const lastLogLineEl = document.getElementById('last-log-line');
@@ -71,7 +72,9 @@
     const stopButton = document.getElementById('btn-stop');
     const restartButton = document.getElementById('btn-restart');
     const pauseButton = document.getElementById('btn-pause');
-    const saveButton = document.getElementById('btn-save');
+    const saveMainButton = document.getElementById('btn-save-main');
+    const saveMenuButton = document.getElementById('btn-save-menu');
+    const saveSplitRoot = document.getElementById('save-split');
     const stormButton = document.getElementById('btn-storm');
     const cleanupDeadButton = document.getElementById('btn-cleanup-dead');
     const cleanupDiscButton = document.getElementById('btn-cleanup-disconnected');
@@ -81,6 +84,8 @@
     const connectionBannerText = document.getElementById('connection-banner-text');
     const chatMessagesContainer = document.getElementById('chat-messages');
     const chatEmptyState = document.getElementById('chat-empty');
+    const chatSendButton = document.getElementById('chat-send-button');
+    const chatInput = document.getElementById('chat-input');
     const playersBannedTable = document.getElementById('players-banned-table');
     const playersBannedBody = document.getElementById('players-banned-body');
     const playersBannedEmpty = document.getElementById('players-banned-empty');
@@ -119,6 +124,15 @@
     let stopProgressPolling = function() {};
     let startProgressPolling = function() {};
     let refreshUpdateButtonState = function() {};
+    // Stop-button countdown state
+    let stoppingCountdownActive = false;
+    let stopCountdownTimer = null;
+    let stopCountdownEnd = 0;
+    let stopOriginalHTML = null;
+    // Restart spinner state
+    let restartingActive = false;
+    let restartSawStarting = false;
+    let restartOriginalHTML = null;
     let updateServerStatusUI = function() {};
     let fetchProgress = function() {};
     let fetchStatus = function() {};
@@ -138,6 +152,65 @@
 
     function pad2(value) {
         return String(value).padStart(2, '0');
+    }
+
+    function formatCountdown(seconds) {
+        const s = Math.max(0, Math.floor(seconds));
+        const m = Math.floor(s / 60);
+        const rem = s % 60;
+        return `${m}:${pad2(rem)}`;
+    }
+
+    function setStopButtonLabel(label) {
+        if (!stopButton) return;
+        // Preserve existing icon if present
+        const icon = stopButton.querySelector('svg');
+        const iconHTML = icon ? icon.outerHTML : '';
+        stopButton.innerHTML = iconHTML + ' ' + label;
+    }
+
+    function startStopCountdown() {
+        if (!stopButton) return;
+        if (!stopOriginalHTML) {
+            stopOriginalHTML = stopButton.innerHTML;
+        }
+        const delaySec = Number(rootEl.dataset.shutdownDelay || '0') || 0;
+        stoppingCountdownActive = true;
+        setButtonDisabled(stopButton, true);
+        if (delaySec <= 0) {
+            setStopButtonLabel('Stopping');
+            return;
+        }
+        stopCountdownEnd = Date.now() + delaySec * 1000;
+        // Initial paint
+        const initialRemaining = Math.ceil((stopCountdownEnd - Date.now()) / 1000);
+        setStopButtonLabel(`Stopping (${formatCountdown(initialRemaining)})`);
+        if (stopCountdownTimer) {
+            clearInterval(stopCountdownTimer);
+            stopCountdownTimer = null;
+        }
+        stopCountdownTimer = setInterval(() => {
+            const remaining = Math.ceil((stopCountdownEnd - Date.now()) / 1000);
+            if (remaining > 0) {
+                setStopButtonLabel(`Stopping (${formatCountdown(remaining)})`);
+            } else {
+                // Countdown reached zero; keep "Stopping" and wait for status poll to flip to stopped
+                setStopButtonLabel('Stopping');
+                clearInterval(stopCountdownTimer);
+                stopCountdownTimer = null;
+            }
+        }, 250);
+    }
+
+    function clearStopCountdown() {
+        if (stopCountdownTimer) {
+            clearInterval(stopCountdownTimer);
+            stopCountdownTimer = null;
+        }
+        if (stopOriginalHTML && stopButton) {
+            stopButton.innerHTML = stopOriginalHTML;
+        }
+        stoppingCountdownActive = false;
     }
 
     function formatDateTimeDisplay(value, fallback) {
@@ -615,15 +688,15 @@
                 const path = (loadBtn.dataset.path || '').trim();
                 const name = (loadBtn.dataset.filename || '').trim();
                 if (!path && !name) return;
-                const target = path || name;
+                const type = (loadBtn.dataset.type || 'auto');
                 const confirmed = window.confirm('Load this save? The current world state will be replaced.');
                 if (!confirmed) return;
                 loadBtn.disabled = true;
-                fetch(`/api/servers/${serverId}/command`, {
+                fetch(`/api/servers/${serverId}/load`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'console', payload: 'FILE load ' + target })
+                    body: JSON.stringify({ type, name })
                 }).then((res) => {
                     try {
                         if (typeof window.showToast === 'function') {
@@ -747,6 +820,137 @@
         } else if (sp) {
             sp.remove();
         }
+    }
+
+    // ---- Stop-button countdown helpers ----
+    function formatCountdown(totalSeconds) {
+        const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${m}:${pad2(r)}`;
+    }
+
+    function setStopButtonLabel(label) {
+        if (!stopButton) return;
+        // Capture icon markup on first use
+        if (stopOriginalHTML == null) {
+            stopOriginalHTML = stopButton.innerHTML;
+        }
+        let iconHTML = '';
+        try {
+            const svg = stopButton.querySelector('svg');
+            if (svg) iconHTML = svg.outerHTML;
+        } catch(_) {}
+        if (!iconHTML && stopOriginalHTML) {
+            // Fallback to original until next capture
+            const tmp = document.createElement('div');
+            tmp.innerHTML = stopOriginalHTML;
+            const s = tmp.querySelector('svg');
+            if (s) iconHTML = s.outerHTML;
+        }
+        stopButton.innerHTML = (iconHTML ? iconHTML : '') + label;
+        // If countdown active, ensure spinner remains visible
+        if (stoppingCountdownActive) {
+            toggleButtonSpinner(stopButton, true);
+        }
+    }
+
+    function startStopCountdown() {
+        if (!stopButton) return;
+        if (stoppingCountdownActive) return;
+        const delay = Math.max(0, parseInt(rootEl.dataset.shutdownDelay || '0', 10));
+        stoppingCountdownActive = true;
+        setButtonDisabled(stopButton, true);
+        if (delay <= 0) {
+            setStopButtonLabel('Stopping');
+            toggleButtonSpinner(stopButton, true);
+            return; // wait for server to report stopped
+        }
+        const now = Date.now();
+        stopCountdownEnd = now + delay * 1000;
+        toggleButtonSpinner(stopButton, true);
+        // Immediate paint
+        const firstLeft = Math.max(0, Math.ceil((stopCountdownEnd - Date.now()) / 1000));
+        setStopButtonLabel(`Stopping (${formatCountdown(firstLeft)})`);
+        // Tick every 500ms until zero; then keep "Stopping" until server stops
+        stopCountdownTimer = window.setInterval(() => {
+            const left = Math.ceil((stopCountdownEnd - Date.now()) / 1000);
+            if (left > 0) {
+                setStopButtonLabel(`Stopping (${formatCountdown(left)})`);
+            } else {
+                window.clearInterval(stopCountdownTimer);
+                stopCountdownTimer = null;
+                setStopButtonLabel('Stopping');
+            }
+        }, 500);
+    }
+
+    function clearStopCountdown() {
+        if (stopCountdownTimer) {
+            try { window.clearInterval(stopCountdownTimer); } catch(_) {}
+            stopCountdownTimer = null;
+        }
+        stoppingCountdownActive = false;
+        stopCountdownEnd = 0;
+        // Restore original label
+        if (stopButton) {
+            try {
+                // Reset to default markup text "Stop" with icon
+                const icon = stopButton.querySelector('svg');
+                const iconHTML = icon ? icon.outerHTML : '';
+                stopButton.innerHTML = iconHTML + 'Stop';
+            } catch(_) {
+                stopButton.textContent = 'Stop';
+            }
+            toggleButtonSpinner(stopButton, false);
+            // Let button enabled/visibility be driven by updateControlButtons
+        }
+    }
+
+    // ---- Restart spinner helpers ----
+    function setRestartButtonLabel(label) {
+        if (!restartButton) return;
+        if (restartOriginalHTML == null) {
+            restartOriginalHTML = restartButton.innerHTML;
+        }
+        let iconHTML = '';
+        try {
+            const svg = restartButton.querySelector('svg');
+            if (svg) iconHTML = svg.outerHTML;
+        } catch(_) {}
+        if (!iconHTML && restartOriginalHTML) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = restartOriginalHTML;
+            const s = tmp.querySelector('svg');
+            if (s) iconHTML = s.outerHTML;
+        }
+        restartButton.innerHTML = (iconHTML ? iconHTML : '') + label;
+        if (restartingActive) toggleButtonSpinner(restartButton, true);
+    }
+
+    function startRestartSpinner() {
+        if (!restartButton) return;
+        if (restartingActive) return;
+        restartingActive = true;
+        restartSawStarting = false;
+        setButtonDisabled(restartButton, true);
+        toggleButtonSpinner(restartButton, true);
+        setRestartButtonLabel('Restarting');
+    }
+
+    function clearRestartSpinner() {
+        if (!restartButton) { restartingActive = false; restartSawStarting = false; return; }
+        restartingActive = false;
+        restartSawStarting = false;
+        try {
+            const icon = restartButton.querySelector('svg');
+            const iconHTML = icon ? icon.outerHTML : '';
+            restartButton.innerHTML = iconHTML + 'Restart';
+        } catch(_) {
+            restartButton.textContent = 'Restart';
+        }
+        toggleButtonSpinner(restartButton, false);
+        // Button disabled/enabled managed by updateControlButtons
     }
 
     function updateLiveCount(count) {
@@ -1073,7 +1277,7 @@
         if (!serverId) {
             return;
         }
-        fetch(`/server/${serverId}/status.json`, {
+        fetch(`/api/servers/${serverId}/status`, {
             credentials: 'same-origin',
             headers: {
                 'Accept': 'application/json'
@@ -1107,7 +1311,8 @@
             setButtonDisabled(stopButton, true);
             setButtonDisabled(restartButton, true);
             setButtonDisabled(pauseButton, true);
-            setButtonDisabled(saveButton, true);
+            setButtonDisabled(saveMainButton, true);
+            setButtonDisabled(saveMenuButton, true);
             setButtonDisabled(deleteButton, true);
             serverIsRunning = running;
             serverIsPaused = paused;
@@ -1122,20 +1327,46 @@
 
         if (stopButton) {
             showElement(stopButton, running);
-            setButtonDisabled(stopButton, !running || progressActive);
+            setButtonDisabled(stopButton, !running || progressActive || stoppingCountdownActive);
         }
 
         if (restartButton) {
-            setButtonDisabled(restartButton, progressActive || starting);
+            // Disable restart when server is not running (matches Pause behavior)
+            setButtonDisabled(restartButton, !running || progressActive || starting || restartingActive);
+            // Keep spinner on while restartingActive, even if not yet starting
+            if (restartingActive) {
+                toggleButtonSpinner(restartButton, true);
+            }
         }
 
         if (pauseButton) {
-            pauseButton.textContent = paused ? 'Resume' : 'Pause';
+            // Toggle label and semantic variant based on paused state
+            const wasResume = pauseButton.textContent && pauseButton.textContent.trim().toLowerCase() === 'resume';
+            const nextLabel = paused ? 'Resume' : 'Pause';
+            if (!wasResume || nextLabel !== 'Resume') {
+                pauseButton.textContent = nextLabel;
+            }
+            // Apply variant classes: Resume -> success (green), Pause -> warning (amber)
+            try {
+                pauseButton.classList.remove('btn-success', 'btn-warning');
+                if (paused) {
+                    pauseButton.classList.add('btn-success');
+                } else {
+                    pauseButton.classList.add('btn-warning');
+                }
+            } catch(_) {}
             setButtonDisabled(pauseButton, !running || progressActive || starting);
         }
 
-        if (saveButton) {
-            setButtonDisabled(saveButton, !running || progressActive || starting);
+        if (saveMainButton) {
+            setButtonDisabled(saveMainButton, !running || progressActive || starting);
+        }
+        if (saveMenuButton) {
+            setButtonDisabled(saveMenuButton, !running || progressActive || starting);
+        }
+        if (saveSplitRoot) {
+            const disabled = (!running || progressActive || starting);
+            saveSplitRoot.classList.toggle('is-disabled', disabled);
         }
 
         if (stormButton) {
@@ -1154,6 +1385,14 @@
 
         if (deleteButton) {
             setButtonDisabled(deleteButton, running || starting);
+        }
+
+        // Chat controls follow running state: disable when stopped
+        if (chatSendButton) {
+            setButtonDisabled(chatSendButton, !running || progressActive || starting);
+        }
+        if (chatInput) {
+            try { chatInput.disabled = !running || progressActive || starting; } catch(_) {}
         }
 
         serverIsRunning = running;
@@ -1357,14 +1596,10 @@
                 // Persist to server config asynchronously
                 const sid = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
                 if (!sid) return;
-                fetch(window.location.pathname, {
+                fetch(`/api/servers/${sid}/settings`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    body: 'set_player_saves=' + (checked ? '1' : '0'),
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ player_saves: checked }),
                     credentials: 'same-origin'
                 }).then((res) => {
                     try {
@@ -1730,14 +1965,10 @@
                     // POST set_language asynchronously
                     const sid = Number(rootEl.dataset.serverId || '0');
                     if (!sid) return;
-                    fetch(window.location.pathname, {
+                    fetch(`/api/servers/${sid}/language`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        body: 'set_language=1&language=' + encodeURIComponent(l),
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ language: l }),
                         credentials: 'same-origin'
                     }).then((res) => {
                         try {
@@ -1808,21 +2039,68 @@
         }
 
         const serverId = Number(rootEl.dataset.serverId || '0');
-        updateButton = document.querySelector('button[name="update_server"]');
+        // Intercept Startup Parameters form submit for async update + toast
+        (function(){
+            const form = document.getElementById('startup-params-form');
+            if (!form) return;
+            form.addEventListener('submit', function(e){
+                // Only async when JS-enabled; let default submit work if connection lost
+                if (connectionLost) return;
+                e.preventDefault();
+                const fd = new FormData(form);
+                // Signal update action explicitly
+                fd.set('update', '1');
+                const body = new URLSearchParams();
+                for (const [k, v] of fd.entries()) {
+                    body.append(k, String(v));
+                }
+                // Disable the submit button(s) during request
+                let submitBtns = Array.prototype.slice.call(form.querySelectorAll('button[name="update"]'));
+                submitBtns.forEach(b => { b.disabled = true; b.setAttribute('aria-disabled', 'true'); });
+                fetch(`/api/servers/${serverId}/settings`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: body.toString()
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                        }
+                    } catch(_) {}
+                    // Even on error, try to parse JSON for potential details
+                    return res.json().catch(() => ({}));
+                }).then(() => {
+                    // Refresh status snapshot in case something changed
+                    fetchStatus();
+                }).catch(() => {
+                    // No-op; toast already displayed via headers
+                }).finally(() => {
+                    submitBtns.forEach(b => { b.disabled = false; b.removeAttribute('aria-disabled'); });
+                });
+            });
+        })();
+        // Support multiple 'Update Server Files' buttons across cards
+        let updateButtons = Array.prototype.slice.call(document.querySelectorAll('button[name="update_server"]'));
         progressContainer = document.getElementById('server-update-progress');
         progressFill = progressContainer ? progressContainer.querySelector('.update-progress-fill') : null;
         progressText = progressContainer ? progressContainer.querySelector('.update-progress-text') : null;
 
         setUpdateButtonDisabled = function(disabled) {
-            if (!updateButton) {
-                return;
-            }
-            updateButton.disabled = !!disabled;
-            if (disabled) {
-                updateButton.setAttribute('aria-disabled', 'true');
-            } else {
-                updateButton.removeAttribute('aria-disabled');
-            }
+            if (!updateButtons || !updateButtons.length) return;
+            const d = !!disabled;
+            updateButtons.forEach(btn => {
+                btn.disabled = d;
+                if (d) btn.setAttribute('aria-disabled', 'true');
+                else btn.removeAttribute('aria-disabled');
+            });
         };
 
         function clampPercent(value) {
@@ -1847,7 +2125,7 @@
         };
 
         refreshUpdateButtonState = function() {
-            if (!updateButton) {
+            if (!updateButtons || !updateButtons.length) {
                 return;
             }
             if (connectionLost || serverIsRunning || serverIsStarting || progressActive) {
@@ -1906,7 +2184,7 @@
             if (!serverId) {
                 return;
             }
-            fetch(`/server/${serverId}/progress`, {
+            fetch(`/api/servers/${serverId}/progress`, {
                 headers: {
                     'Accept': 'application/json'
                 },
@@ -1925,7 +2203,8 @@
 
         function handleUpdateClick(event) {
             event.preventDefault();
-            if (!updateButton || updateButton.disabled || serverIsRunning || serverIsStarting) {
+            const srcBtn = event && event.currentTarget ? event.currentTarget : null;
+            if ((srcBtn && srcBtn.disabled) || serverIsRunning || serverIsStarting) {
                 return;
             }
 
@@ -1944,14 +2223,9 @@
                 progressText.textContent = 'Starting update...';
             }
 
-            fetch(window.location.pathname, {
+            fetch(`/api/servers/${serverId}/update-server`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                body: 'update_server=1',
+                headers: { 'Accept': 'application/json' },
                 credentials: 'same-origin'
             })
                 .then(res => {
@@ -1981,8 +2255,8 @@
                 });
         }
 
-        if (updateButton) {
-            updateButton.addEventListener('click', handleUpdateClick);
+        if (updateButtons && updateButtons.length) {
+            updateButtons.forEach(btn => btn.addEventListener('click', handleUpdateClick));
         }
 
         updateServerStatusUI = function(data) {
@@ -2005,12 +2279,13 @@
                 statusIndicator.classList.toggle('paused', serverIsPaused && !starting);
                 statusIndicator.classList.toggle('stopped', !running);
             }
-            // Apply unified pill variant classes to container for visual styling
+            // Apply pill variant classes to container for visual styling (starting, running, paused, stopped)
             if (statusContainer) {
-                // Map: running (incl. starting) -> is-running; paused or stopped -> is-stopped
-                const useRunningVariant = running && !serverIsPaused; // still consider starting as running variant
-                statusContainer.classList.toggle('is-running', useRunningVariant);
-                statusContainer.classList.toggle('is-stopped', !useRunningVariant);
+                statusContainer.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting');
+                statusContainer.classList.toggle('is-starting', running && starting);
+                statusContainer.classList.toggle('is-running', running && !serverIsPaused && !starting);
+                statusContainer.classList.toggle('is-paused', running && serverIsPaused);
+                statusContainer.classList.toggle('is-stopped', !running);
             }
             if (statusText) {
                 if (starting && running) {
@@ -2023,6 +2298,56 @@
                     statusText.textContent = 'Running';
                 }
             }
+
+            // If server is no longer running, clear any active stop countdown UI
+            if (!running && stoppingCountdownActive) {
+                clearStopCountdown();
+            }
+
+            // Manage restart spinner lifecycle:
+            // Keep spinner while 'starting' is observed at least once after clicking restart.
+            if (restartingActive) {
+                if (starting) {
+                    restartSawStarting = true;
+                    // Ensure spinner remains visible on the button
+                    try { toggleButtonSpinner(restartButton, true); } catch(_) {}
+                } else if (restartSawStarting) {
+                    // Starting finished (success) -> clear spinner and label
+                    clearRestartSpinner();
+                } else if (!running && !starting) {
+                    // Restart appears to have failed or server stopped without entering starting
+                    clearRestartSpinner();
+                }
+            }
+
+            // Update name in title bar and document title if changed
+            try {
+                const newName = (data && typeof data.name === 'string') ? data.name.trim() : '';
+                if (newName) {
+                    const nameEl = document.getElementById('server-name');
+                    if (nameEl && nameEl.textContent !== newName) {
+                        nameEl.textContent = newName;
+                    }
+                    const desiredTitle = newName + ' - SDSM';
+                    if (document.title !== desiredTitle) {
+                        document.title = desiredTitle;
+                    }
+                }
+            } catch(_) {}
+
+            // Update Port and Max Players if elements exist
+            try {
+                const portEl = document.getElementById('server-port-value');
+                if (portEl && typeof data.port !== 'undefined') {
+                    const p = Number(data.port) || 0;
+                    if (String(p) !== portEl.textContent) portEl.textContent = String(p);
+                }
+                const maxEl = document.getElementById('server-max-value');
+                if (maxEl && typeof data.max_clients !== 'undefined') {
+                    const mc = Number(data.max_clients) || 0;
+                    if (String(mc) !== maxEl.textContent) maxEl.textContent = String(mc);
+                }
+            } catch(_) {}
 
             const lastLine = data.last_log_line && data.last_log_line.trim() ? data.last_log_line : 'No log data';
             setTextContent(lastLogLineEl, lastLine);
@@ -2046,46 +2371,29 @@
             // Update storm button label/state first
             try {
                 serverIsStorming = !!data.storming;
+                // Update storm control button label
                 if (stormButton) {
-                    const label = serverIsStorming ? 'Storm Stop' : 'Storm Start';
-                    // Preserve icon markup while updating label
+                    const label = serverIsStorming ? 'Stop' : 'Start';
                     stormButton.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/><polyline points="13 11 9 17 15 17 11 23"/></svg>' + label;
                     stormButton.title = serverIsStorming ? 'Stop the storm event' : 'Start a storm event';
                 }
+                // Update storm status pill: show only when running AND storming
+                if (stormStatusPill) {
+                    if (serverIsRunning && serverIsStorming) {
+                        stormStatusPill.style.display = '';
+                        stormStatusPill.textContent = 'Storm';
+                        stormStatusPill.classList.remove('is-storm', 'is-clear');
+                        stormStatusPill.classList.add('is-storm');
+                    } else {
+                        stormStatusPill.style.display = 'none';
+                    }
+                }
             } catch (_) {}
 
-            // Detect new player connections and optionally trigger saveas
+            // Keep track of live players; backend handles player-save automation
             const playersArr = Array.isArray(data.players) ? data.players : [];
             try {
                 const currentSet = new Set(playersArr.map(p => (p && (p.steam_id || p.SteamID)) ? String(p.steam_id || p.SteamID) : '').filter(Boolean));
-                const enabled = !!(playerSavesToggle && playerSavesToggle.checked);
-                if (enabled && serverIsRunning && !serverIsStarting) {
-                    const newIds = [];
-                    currentSet.forEach(id => { if (!knownLiveSteam.has(id)) newIds.push(id); });
-                    if (newIds.length && Number(rootEl.dataset.serverId || '0')) {
-                        const sid = Number(rootEl.dataset.serverId);
-                        newIds.forEach(id => {
-                            const now = new Date();
-                            const ts = `${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
-                            const filename = `${id}-${ts}`;
-                            fetch(`/api/servers/${sid}/command`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                                credentials: 'same-origin',
-                                body: JSON.stringify({ type: 'console', payload: 'FILE saveas ' + filename })
-                            }).then((res) => {
-                                try {
-                                    if (typeof window.showToast === 'function') {
-                                        const type = res.headers.get('X-Toast-Type');
-                                        const title = res.headers.get('X-Toast-Title');
-                                        const message = res.headers.get('X-Toast-Message');
-                                        if (message) window.showToast({ type: type || 'info', title: title || '', message });
-                                    }
-                                } catch(_) {}
-                            }).catch(() => {});
-                        });
-                    }
-                }
                 knownLiveSteam = currentSet;
             } catch(_) { knownLiveSteam = new Set(); }
 
@@ -2126,7 +2434,7 @@
             if (!serverId) {
                 return;
             }
-            fetch(`/server/${serverId}/status.json`, {
+            fetch(`/api/servers/${serverId}/status`, {
                 headers: {
                     'Accept': 'application/json'
                 },
@@ -2328,14 +2636,14 @@
                 if (!message || chatBtn.disabled) return;
                 setButtonDisabled(chatBtn, true);
                 toggleButtonSpinner(chatBtn, true);
-                fetch(`/api/servers/${serverId}/command`, {
+                fetch(`/api/servers/${serverId}/chat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'chat', payload: message })
+                    body: JSON.stringify({ message })
                 })
                 .then((res) => {
                     try {
@@ -2373,14 +2681,11 @@
                         toggleButtonSpinner(addBtn, true);
                     }
                     input.disabled = true;
-                    fetch(window.location.pathname, {
+                    const serverId = Number(rootEl.dataset.serverId || '0');
+                    fetch(`/api/servers/${serverId}/ban`, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'Accept': 'application/json'
-                        },
-                        body: 'add_ban=1&ban_steam_id=' + encodeURIComponent(id),
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ steam_id: id }),
                         credentials: 'same-origin'
                     }).then((res) => {
                         try {
@@ -2406,7 +2711,7 @@
             }
         })();
 
-        // Intercept Unban button clicks in banned table
+        // Intercept Unban button clicks in banned table via API
         (function(){
             if (!playersBannedBody) return;
             playersBannedBody.addEventListener('click', function(e){
@@ -2418,14 +2723,11 @@
                 if (btn.disabled) return;
                 setButtonDisabled(btn, true);
                 toggleButtonSpinner(btn, true);
-                fetch(window.location.pathname, {
+                const serverId = Number(rootEl.dataset.serverId || '0');
+                fetch(`/api/servers/${serverId}/unban`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    body: 'unban=' + encodeURIComponent(id),
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ steam_id: id }),
                     credentials: 'same-origin'
                 }).then((res) => {
                     try {
@@ -2452,14 +2754,17 @@
                 if (!param) return;
                 if (btn && btn.disabled) return;
                 if (btn) { setButtonDisabled(btn, true); toggleButtonSpinner(btn, true); }
-                fetch(window.location.pathname, {
+                // If stopping, kick off local countdown UI based on configured delay
+                if (param === 'stop') {
+                    try { startStopCountdown(); } catch(_) {}
+                }
+                if (param === 'restart') {
+                    try { startRestartSpinner(); } catch(_) {}
+                }
+                const serverId = Number(rootEl.dataset.serverId || '0');
+                fetch(`/api/servers/${serverId}/` + param, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    body: encodeURIComponent(param) + '=1',
+                    headers: { 'Accept': 'application/json' },
                     credentials: 'same-origin'
                 })
                 .then((res) => {
@@ -2477,7 +2782,20 @@
                 })
                 .catch(() => { /* ignore, status poll will reconcile */ })
                 .finally(() => {
-                    if (btn) { toggleButtonSpinner(btn, false); setButtonDisabled(btn, false); }
+                    if (btn) {
+                        // For Stop during countdown, keep spinner+disabled
+                        if (param === 'stop' && stoppingCountdownActive) {
+                            setButtonDisabled(btn, true);
+                            toggleButtonSpinner(btn, true);
+                        // For Restart while active, keep spinner+disabled until starting completes
+                        } else if (param === 'restart' && restartingActive) {
+                            setButtonDisabled(btn, true);
+                            toggleButtonSpinner(btn, true);
+                        } else {
+                            toggleButtonSpinner(btn, false);
+                            setButtonDisabled(btn, false);
+                        }
+                    }
                 });
             }
 
@@ -2492,22 +2810,68 @@
             }
         })();
 
-        // Save button: sends FILE save console command via API
+        // Intercept Delete Server to call API and redirect on success
         (function(){
-            if (!saveButton || !serverId) return;
-            saveButton.addEventListener('click', function(e){
+            if (!deleteButton) return;
+            deleteButton.addEventListener('click', function(e){
+                if (deleteButton.disabled) return;
+                // Respect existing confirm() on the button
+                const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
+                if (!confirmed) return;
                 e.preventDefault();
-                if (saveButton.disabled) return;
-                setButtonDisabled(saveButton, true);
-                toggleButtonSpinner(saveButton, true);
-                fetch(`/api/servers/${serverId}/command`, {
+                setButtonDisabled(deleteButton, true);
+                toggleButtonSpinner(deleteButton, true);
+                const serverId = Number(rootEl.dataset.serverId || '0');
+                fetch(`/api/servers/${serverId}/delete`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || 'success', title: title || '', message });
+                        }
+                    } catch(_) {}
+                    // Redirect to dashboard after a short delay to allow toast to render
+                    setTimeout(() => { window.location.href = '/dashboard'; }, 300);
+                }).catch(() => {
+                    // stay on page
+                }).finally(() => {
+                    toggleButtonSpinner(deleteButton, false);
+                    setButtonDisabled(deleteButton, false);
+                });
+            });
+        })();
+
+        // Save split button: left click = Save, right caret opens dropdown with Save As…
+        (function(){
+            const saveMain = document.getElementById('btn-save-main');
+            const saveMenuBtn = document.getElementById('btn-save-menu');
+            const saveMenu = document.getElementById('save-menu');
+            const saveAsAction = document.getElementById('save-as-action');
+            if ((!saveMain && !saveMenuBtn) || !serverId) return;
+
+            function closeSaveMenu(){ if (saveMenu) saveMenu.classList.remove('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', 'false'); }
+            function toggleSaveMenu(){ if (!saveMenu) return; const active = saveMenu.classList.toggle('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', active ? 'true' : 'false'); }
+            document.addEventListener('click', (ev) => {
+                const root = document.getElementById('save-split');
+                if (!root) return;
+                if (!root.contains(ev.target)) { closeSaveMenu(); }
+            });
+
+            if (saveMain) saveMain.addEventListener('click', function(e){
+                e.preventDefault();
+                if (saveMain.disabled) return;
+                setButtonDisabled(saveMain, true);
+                toggleButtonSpinner(saveMain, true);
+                fetch(`/api/servers/${serverId}/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'console', payload: 'FILE save' })
+                    body: JSON.stringify({})
                 })
                 .then((res) => {
                     try {
@@ -2521,7 +2885,55 @@
                     fetchStatus();
                 })
                 .catch(() => { /* no-op */ })
-                .finally(() => { toggleButtonSpinner(saveButton, false); setButtonDisabled(saveButton, false); });
+                .finally(() => { toggleButtonSpinner(saveMain, false); setButtonDisabled(saveMain, false); });
+            });
+
+            if (saveMenuBtn) saveMenuBtn.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn.disabled) return; toggleSaveMenu(); });
+
+            // Save As… flow with input modal
+            const saveAsModal = document.getElementById('saveAsModal');
+            const saveAsInput = document.getElementById('saveAsName');
+            const saveAsConfirm = document.getElementById('saveAsConfirm');
+            const saveAsCancel = document.getElementById('saveAsCancel');
+
+            function openSaveAs(){
+                closeSaveMenu();
+                if (!saveAsModal) return;
+                saveAsModal.classList.add('active');
+                setTimeout(() => { try { saveAsInput && saveAsInput.focus(); saveAsInput && saveAsInput.select && saveAsInput.select(); } catch(_) {} }, 0);
+            }
+            function closeSaveAs(){ if (saveAsModal) saveAsModal.classList.remove('active'); }
+
+            if (saveAsAction) saveAsAction.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn && saveMenuBtn.disabled) return; openSaveAs(); });
+            if (saveAsCancel) saveAsCancel.addEventListener('click', function(){ closeSaveAs(); });
+            if (saveAsModal) saveAsModal.addEventListener('click', function(ev){ if (ev.target === saveAsModal) closeSaveAs(); });
+            if (saveAsConfirm) saveAsConfirm.addEventListener('click', function(){
+                if (!saveAsInput) { closeSaveAs(); return; }
+                const raw = (saveAsInput.value || '').trim();
+                if (!raw) { notifyError && notifyError('Please enter a name for your save.'); try { saveAsInput.focus(); } catch(_) {}; return; }
+                // Disable confirm while request is in-flight
+                setButtonDisabled(saveAsConfirm, true);
+                fetch(`/api/servers/${serverId}/save-as`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ name: raw })
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: type || (res.ok ? 'success' : 'error'), title: title || '', message });
+                        }
+                    } catch(_) {}
+                    fetchStatus();
+                    closeSaveAs();
+                }).catch(() => {
+                    // keep modal open on failure; toast should indicate error
+                }).finally(() => {
+                    setButtonDisabled(saveAsConfirm, false);
+                });
             });
         })();
 
@@ -2532,17 +2944,14 @@
                 e.preventDefault();
                 if (pauseButton.disabled) return;
                 const isPaused = serverIsPaused;
-                const command = isPaused ? 'PAUSE false' : 'PAUSE true';
+                const command = isPaused ? false : true;
                 setButtonDisabled(pauseButton, true);
                 toggleButtonSpinner(pauseButton, true);
-                fetch(`/api/servers/${serverId}/command`, {
+                fetch(`/api/servers/${serverId}/pause`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'console', payload: command })
+                    body: JSON.stringify({ pause: command })
                 })
                 .then((res) => {
                     try {
@@ -2566,17 +2975,14 @@
             stormButton.addEventListener('click', function(e){
                 e.preventDefault();
                 if (stormButton.disabled) return;
-                const cmd = serverIsStorming ? 'STORM stop' : 'STORM start';
+                const startFlag = !serverIsStorming;
                 setButtonDisabled(stormButton, true);
                 toggleButtonSpinner(stormButton, true);
-                fetch(`/api/servers/${serverId}/command`, {
+                fetch(`/api/servers/${serverId}/storm`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'console', payload: cmd })
+                    body: JSON.stringify({ start: startFlag })
                 }).then((res) => {
                     try {
                         if (typeof window.showToast === 'function') {
@@ -2602,12 +3008,11 @@
                 if (!serverId || !option) return;
                 if (btn && btn.disabled) return;
                 if (btn) { setButtonDisabled(btn, true); toggleButtonSpinner(btn, true); }
-                const cmd = 'CLEANUPPLAYERS ' + option;
-                fetch(`/api/servers/${serverId}/command`, {
+                fetch(`/api/servers/${serverId}/cleanup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ type: 'console', payload: cmd })
+                    body: JSON.stringify({ scope: option })
                 }).then((res) => {
                     try {
                         if (typeof window.showToast === 'function') {
@@ -2670,14 +3075,17 @@
                         if (btn) { toggleBtnSpinner(btn, false); setBtnDisabled(btn, false); }
                         return;
                     }
-                    fetch(`/api/servers/${serverId}/command`, {
+                    // Heuristic: if value looks like a 17-digit SteamID, send steam_id; else treat as name
+                    const looksSteam = /^[0-9]{17}$/.test(value);
+                    const payload = looksSteam ? { steam_id: value } : { name: value };
+                    fetch(`/api/servers/${serverId}/kick`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json'
                         },
                         credentials: 'same-origin',
-                        body: JSON.stringify({ type: 'console', payload: 'KICK ' + value })
+                        body: JSON.stringify(payload)
                     })
                     .then((res) => { showToastFromResponse(res); fetchStatus(); return res.ok ? res.json().catch(() => ({})) : Promise.resolve({}); })
                     .catch(() => { /* ignore; polling will reconcile */ })
@@ -2685,17 +3093,13 @@
                     return;
                 }
                 
-                // For ban/unban, use existing form POST
-                const body = encodeURIComponent(action) + '=' + encodeURIComponent(value);
-                fetch(window.location.pathname, {
+                // For ban/unban, call API endpoints
+                const endpoint = action === 'ban' ? 'ban' : 'unban';
+                fetch(`/api/servers/${serverId}/${endpoint}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    body,
-                    credentials: 'same-origin'
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ steam_id: value })
                 })
                 .then((res) => { showToastFromResponse(res); fetchStatus(); return res.ok ? res.json().catch(() => ({})) : Promise.resolve({}); })
                 .catch(() => { /* ignore; polling will reconcile */ })

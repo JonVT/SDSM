@@ -56,4 +56,80 @@
         z-index: 6000; /* above other cards/grids on the page, below toasts/modals */
         overflow: visible; /* prevent any accidental clipping around the title bar */
     }
+
+    /* Split button styling for Save/Save As */
+    /* Render caret overlayed so total width matches a single control button */
+    .split-button { display: inline-block; position: relative; vertical-align: middle; border-radius: var(--radius-full); overflow: hidden; }
+    .button-group .split-button { margin: 0; }
+    /* Remove pill radii and margins from inner halves so they render as one control */
+    .split-button > .btn { margin: 0; border-radius: 0 !important; box-shadow: none; }
+    /* Ensure split-button halves match other control button heights */
+    .card-control .button-group .btn-control,
+    .card-control .split-button > .btn { min-height: 36px; }
+    /* Keep only outer corners rounded to match pill buttons */
+    .split-button > .btn:first-child { border-top-left-radius: var(--radius-full) !important; border-bottom-left-radius: var(--radius-full) !important; border-right: 0; padding-right: calc(var(--space-4) + 38px); /* leave room for caret overlay */ }
+    .split-button > .btn:last-of-type { border-top-right-radius: var(--radius-full) !important; border-bottom-right-radius: var(--radius-full) !important; }
+    /* Position caret overlayed on the right, not increasing overall width */
+    .split-button > .btn.btn-split-caret {
+        position: absolute; right: 0; top: 0; bottom: 0; z-index: 2;
+        width: 38px; min-width: 38px !important; padding-left: 0; padding-right: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-left: 1px solid var(--border-color) !important;
+    }
+    /* Match divider color to primary variant so seam blends with button color */
+    .split-button > .btn.btn-primary.btn-split-caret { border-left-color: rgba(59, 130, 246, 0.42) !important; }
+    /* Prevent hover lift that visually splits the halves */
+    .split-button > .btn:hover,
+    .split-button > .btn:focus { transform: none !important; box-shadow: none !important; }
+    .split-button .btn-split-caret svg { pointer-events: none; }
+
+    /* Keep button gradient styling; rely on :disabled opacity. Only the dropdown panel swaps to neutral when disabled. */
+    /* Ensure caret half visually dims even if disabled state is controlled at the group level */
+    #save-split.is-disabled > .btn.btn-split-caret { opacity: 0.55; pointer-events: none; }
+    .split-button > .btn[disabled] + .btn { opacity: .9; }
+
+    /* Dropdown animation & interaction improvements (applies to language/save menus) */
+    .lang-dropdown { transition: opacity 120ms ease, transform 120ms ease; opacity: 0; transform: translateY(-6px); pointer-events: none; }
+    .lang-dropdown.active { display: block; opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    /* Make Save As modal neutral in tone */
+    #saveAsModal .modal-header .icon { color: var(--text-secondary, #9aa0a6); }
+
+    /* Fixed label width for More-section rows to align controls */
+    .card-more-section .more-label { flex: 0 0 160px; }
+
+    /* Save split dropdown: match the primary button look */
+    #save-split #save-menu {
+        background: linear-gradient(125deg, var(--primary-500) 0%, var(--primary-600) 100%);
+        color: #f8fafc;
+        border-color: rgba(59, 130, 246, 0.42);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        padding: 6px;
+    }
+    /* When save controls are disabled, reflect neutral panel color */
+    #save-split.is-disabled #save-menu {
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        border-color: var(--border-color);
+    }
+    #save-split #save-menu .dropdown-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 10px;
+        border: none;
+        background: transparent;
+        color: #f8fafc;
+        border-radius: var(--radius-sm);
+        font: inherit;
+        cursor: pointer;
+    }
+    #save-split #save-menu .dropdown-item:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+    #save-split.is-disabled #save-menu .dropdown-item:hover {
+        background: var(--surface-soft);
+        color: var(--text-primary);
+    }
 </style>

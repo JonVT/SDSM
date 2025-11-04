@@ -172,6 +172,12 @@
                                        value="{{ index $form "restart_delay_seconds" }}" placeholder="10">
                                 <p class="help-text">Wait time between stop and restart (0-3600)</p>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (seconds)</label>
+                                <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" min="0" max="3600"
+                                       value="{{ or (index $form "shutdown_delay_seconds") 2 }}" placeholder="2">
+                                <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
+                            </div>
                             
                             <div class="form-group">
                                 <label class="form-label" for="auth_secret">Auth Secret</label>
@@ -196,6 +202,14 @@
                     <div class="form-section">
                         <h3 class="section-title">Startup Options</h3>
                         <div class="form-grid">
+                            <div class="form-group form-grid-full">
+                                <label class="form-label" for="welcome_message">Welcome Message</label>
+                                <input type="text" id="welcome_message" name="welcome_message" class="form-control"
+                                       value="{{ index $form "welcome_message" }}"
+                                       placeholder="Optional message sent to chat when a player connects">
+                                <p class="help-text">If set, this message will be broadcast to chat on player connect.</p>
+                            </div>
+
                             <div class="form-group">
                                 <label class="checkbox-label">
                                     <input type="checkbox" id="auto_save" name="auto_save" {{ if index $form "auto_save" }}checked{{ end }}>
@@ -649,6 +663,55 @@
 
             // Initial progress update
             updateProgressTracker();
+
+            // Intercept form submit to call API and redirect to new server page
+            const form = document.getElementById('serverForm');
+            if (form) {
+                form.addEventListener('submit', function(e){
+                    e.preventDefault();
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn && submitBtn.disabled) return;
+                    if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute('aria-disabled', 'true'); }
+                    const fd = new FormData(form);
+                    const body = new URLSearchParams();
+                    for (const [k, v] of fd.entries()) {
+                        body.append(k, String(v));
+                    }
+                    fetch('/api/servers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: body.toString()
+                    })
+                    .then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        if (!res.ok) return res.json().catch(() => ({})).then((d) => Promise.reject(d));
+                        return res.json().catch(() => ({}));
+                    })
+                    .then((data) => {
+                        const id = data && (data.id || data.server_id || data.ID);
+                        if (id) {
+                            window.location.href = `/server/${id}`;
+                        } else {
+                            // Fallback to dashboard
+                            window.location.href = '/dashboard';
+                        }
+                    })
+                    .catch(() => {
+                        // keep on page; user can adjust and resubmit
+                    })
+                    .finally(() => {
+                        if (submitBtn) { submitBtn.disabled = false; submitBtn.removeAttribute('aria-disabled'); }
+                    });
+                });
+            }
         });
     </script>
     

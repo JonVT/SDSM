@@ -107,8 +107,12 @@ type ServerConfig struct {
 	DisconnectTimeout     int
 	// PlayerSaves enables automatic save creation when players connect.
 	PlayerSaves           bool
+	// ShutdownDelaySeconds: seconds to wait after Stop is requested before issuing QUIT
+	ShutdownDelaySeconds int
 	Mods                []string
 	RestartDelaySeconds int
+	// WelcomeMessage is an optional chat message broadcast when a player connects
+	WelcomeMessage      string
 }
 
 // Server represents a managed dedicated server instance, including
@@ -147,9 +151,13 @@ type Server struct {
 	PlayerSaves         bool          `json:"player_saves"`
 	// PlayerSaveExcludes lists Steam IDs for which player-save automation should be skipped
 	PlayerSaveExcludes []string      `json:"player_save_excludes"`
+	// ShutdownDelaySeconds controls how long to wait after stop button before issuing QUIT
+	ShutdownDelaySeconds int           `json:"shutdown_delay_seconds"`
 	Mods                []string      `json:"mods"`
 	RestartDelaySeconds int           `json:"restart_delay_seconds"`
 	SCONPort            int           `json:"scon_port"` // Port for SCON plugin HTTP API
+	// WelcomeMessage is sent as a chat/SAY message each time a player connects (if non-empty)
+	WelcomeMessage      string        `json:"welcome_message"`
 	ServerStarted       *time.Time    `json:"server_started,omitempty"`
 	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
 	Clients             []*Client     `json:"-"`
@@ -171,6 +179,111 @@ type Server struct {
 	restartMu           sync.Mutex
 	playerHistoryLoaded bool
 	playersLogDirty     bool
+	// pendingPlayerSave holds filenames (e.g., ddmmyy_hhmmss_steamid.save) queued to move
+	// from manualsave to playersave once the game logs indicate the save completed.
+	pendingPlayerSaveMu sync.Mutex
+	pendingPlayerSave   []string
+	lastPlayerSaveQueued map[string]time.Time
+}
+
+// queuePendingPlayerSave enqueues a manual save filename to be moved to playersave once completed.
+func (s *Server) queuePendingPlayerSave(filename string) {
+	if s == nil || strings.TrimSpace(filename) == "" {
+		return
+	}
+	s.pendingPlayerSaveMu.Lock()
+	// Init structures lazily
+	if s.lastPlayerSaveQueued == nil {
+		s.lastPlayerSaveQueued = make(map[string]time.Time)
+	}
+	// Skip duplicate filenames already queued
+	for _, f := range s.pendingPlayerSave {
+		if strings.EqualFold(f, filename) {
+			s.pendingPlayerSaveMu.Unlock()
+			return
+		}
+	}
+	s.pendingPlayerSave = append(s.pendingPlayerSave, filename)
+	s.pendingPlayerSaveMu.Unlock()
+	if s.Logger != nil {
+		s.Logger.Write("Queued player save for move: " + filename)
+	}
+}
+
+// shouldEnqueuePlayerSave dedupes rapid successive queues per steam ID.
+// Returns true if we should enqueue now; enforce a min interval of 10s per SteamID.
+func (s *Server) shouldEnqueuePlayerSave(steamID string, at time.Time) bool {
+	if s == nil { return false }
+	id := strings.TrimSpace(steamID)
+	if id == "" { return false }
+	s.pendingPlayerSaveMu.Lock()
+	defer s.pendingPlayerSaveMu.Unlock()
+	if s.lastPlayerSaveQueued == nil {
+		s.lastPlayerSaveQueued = make(map[string]time.Time)
+	}
+	prev, ok := s.lastPlayerSaveQueued[id]
+	if ok {
+		// if previous within 10 seconds, skip
+		if at.Sub(prev) < 10*time.Second {
+			return false
+		}
+	}
+	s.lastPlayerSaveQueued[id] = at
+	return true
+}
+
+// tryMoveNextPendingPlayerSave attempts to move the oldest queued manual save into playersave.
+// If the source file is not yet present, it leaves the item queued for a future attempt.
+func (s *Server) tryMoveNextPendingPlayerSave() {
+	if s == nil || s.Paths == nil || strings.TrimSpace(s.Name) == "" {
+		return
+	}
+	s.pendingPlayerSaveMu.Lock()
+	defer s.pendingPlayerSaveMu.Unlock()
+	if len(s.pendingPlayerSave) == 0 {
+		return
+	}
+	fname := s.pendingPlayerSave[0]
+	srcDir := filepath.Join(s.Paths.ServerSavesDir(s.ID), s.Name, "manualsave")
+	dstDir := filepath.Join(s.Paths.ServerSavesDir(s.ID), s.Name, "playersave")
+	_ = os.MkdirAll(dstDir, 0o755)
+	srcPath := filepath.Join(srcDir, fname)
+	dstPath := filepath.Join(dstDir, fname)
+	// If expected file isn't present yet, check for legacy double-extension case (".save.save")
+	if _, err := os.Stat(srcPath); err != nil {
+		legacySrc := srcPath + ".save"
+		if _, err2 := os.Stat(legacySrc); err2 == nil {
+			// Move and normalize to single-extension at destination
+			if errMove := os.Rename(legacySrc, dstPath); errMove != nil {
+				if s.Logger != nil {
+					s.Logger.Write(fmt.Sprintf("Failed to normalize and move player save %s -> %s: %v", legacySrc, dstPath, errMove))
+				}
+				return
+			}
+			if s.Logger != nil {
+				s.Logger.Write("Normalized double-extension and moved player save to playersave: " + dstPath)
+			}
+			// Pop the moved filename
+			s.pendingPlayerSave = s.pendingPlayerSave[1:]
+			return
+		}
+		// Not yet on disk; keep queued and try again on next save completion
+		if s.Logger != nil {
+			s.Logger.Write("Pending player save not found yet: " + srcPath)
+		}
+		return
+	}
+	if err := os.Rename(srcPath, dstPath); err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Failed to move player save %s -> %s: %v", srcPath, dstPath, err))
+		}
+		return
+	}
+	if s.Logger != nil {
+		s.Logger.Write("Moved player save to playersave: " + dstPath)
+	}
+	// Pop the moved filename
+	s.pendingPlayerSave = s.pendingPlayerSave[1:]
 }
 
 // HasPlayerSaveExclude returns true if the Steam ID is present in the exclusion list.
@@ -839,6 +952,15 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 	}
 	// Persist PlayerSaves preference (defaults to false when not provided)
 	s.PlayerSaves = cfg.PlayerSaves
+	// Persist ShutdownDelaySeconds (defaults to 2 when not provided/negative)
+	if cfg.ShutdownDelaySeconds >= 0 {
+		s.ShutdownDelaySeconds = cfg.ShutdownDelaySeconds
+	} else {
+		s.ShutdownDelaySeconds = 2
+	}
+
+	// Welcome message (optional)
+	s.WelcomeMessage = strings.TrimSpace(cfg.WelcomeMessage)
 
 	if cfg.RestartDelaySeconds >= 0 {
 		s.RestartDelaySeconds = cfg.RestartDelaySeconds
@@ -861,6 +983,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		Paused:              false,
 		Running:             false,
 		RestartDelaySeconds: DefaultRestartDelaySeconds,
+		ShutdownDelaySeconds: 2,
 	}
 
 	s.EnsureLogger(paths)
@@ -891,6 +1014,12 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		if s.DisconnectTimeout <= 0 {
 			s.DisconnectTimeout = 10000
 		}
+		// Backfill default for ShutdownDelaySeconds if absent (legacy default 2s)
+		if s.ShutdownDelaySeconds < 0 {
+			s.ShutdownDelaySeconds = 2
+		}
+		// Backfill WelcomeMessage to empty if missing
+		s.WelcomeMessage = strings.TrimSpace(s.WelcomeMessage)
 	} else {
 		s.Name = fmt.Sprintf("Stationeers Server %d", serverID)
 		s.World = "Mars2"
@@ -916,6 +1045,8 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.DisconnectTimeout = 10000
 		s.PlayerSaves = false
 		s.SCONPort = s.Port + 1
+		s.SCONPort = s.Port + 1
+		s.WelcomeMessage = ""
 	}
 
 	s.Logger.Write("Server initialized.")
@@ -1210,13 +1341,47 @@ func (s *Server) installBepInEx(gameDir string) error {
 func (s *Server) Stop() {
 	// Send warning message to players if server is running
 	if s.Running && s.Proc != nil {
-		if err := s.SendCommand("chat", "Server is shutting down..."); err != nil {
-			if s.Logger != nil {
-				s.Logger.Write(fmt.Sprintf("Failed to send shutdown warning: %v", err))
+		// Compute delay and announce schedule
+		delay := s.shutdownDelayDuration()
+		// Helper to format timeframe for chat ("Xs" or "M minutes S seconds")
+		formatTimeframe := func(d time.Duration) string {
+			secs := int(d.Seconds())
+			if secs < 60 {
+				if secs == 1 { return "1 second" }
+				return fmt.Sprintf("%d seconds", secs)
+			}
+			m := secs / 60
+			sRem := secs % 60
+			if sRem == 0 {
+				if m == 1 { return "1 minute" }
+				return fmt.Sprintf("%d minutes", m)
+			}
+			if m == 1 {
+				if sRem == 1 { return "1 minute 1 second" }
+				return fmt.Sprintf("1 minute %d seconds", sRem)
+			}
+			if sRem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+			return fmt.Sprintf("%d minutes %d seconds", m, sRem)
+		}
+
+		if delay > 0 {
+			// Initial notice with full timeframe
+			if err := s.SendCommand("chat", "Server is shutting down in "+formatTimeframe(delay)); err != nil {
+				if s.Logger != nil { s.Logger.Write(fmt.Sprintf("Failed to send shutdown notice: %v", err)) }
+			}
+			// Second notice at T-10s when there is enough time
+			if delay > 10*time.Second {
+				time.Sleep(delay - 10*time.Second)
+				if err := s.SendCommand("chat", "Server is shutting down in 10 seconds"); err != nil {
+					if s.Logger != nil { s.Logger.Write(fmt.Sprintf("Failed to send 10s notice: %v", err)) }
+				}
+				time.Sleep(10 * time.Second)
+			} else {
+				time.Sleep(delay)
 			}
 		} else {
-			// Give players a moment to see the message
-			time.Sleep(2 * time.Second)
+			// No delay: still announce an immediate shutdown
+			_ = s.SendCommand("chat", "Shutting down")
 		}
 		// Send QUIT command for graceful shutdown
 		if err := s.SendCommand("console", "QUIT"); err != nil {
@@ -1285,6 +1450,20 @@ func (s *Server) restartDelayDuration() time.Duration {
 		return 0
 	}
 	return time.Duration(DefaultRestartDelaySeconds) * time.Second
+}
+
+func (s *Server) shutdownDelayDuration() time.Duration {
+	if s == nil {
+		return 0
+	}
+	if s.ShutdownDelaySeconds > 0 {
+		return time.Duration(s.ShutdownDelaySeconds) * time.Second
+	}
+	if s.ShutdownDelaySeconds == 0 {
+		return 0
+	}
+	// Negative values fallback to legacy default of 2s
+	return 2 * time.Second
 }
 
 func (s *Server) waitForShutdown(timeout time.Duration) {

@@ -326,7 +326,7 @@ func setupRouter() *gin.Engine {
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
 	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
-	managerHandlers := handlers.NewManagerHandlers(app.manager, app.userStore)
+	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
 
 	// Public routes
 	r.GET("/", func(c *gin.Context) {
@@ -392,8 +392,17 @@ func setupRouter() *gin.Engine {
 	{
 		api.GET("/stats", managerHandlers.APIStats)
 		api.GET("/servers", managerHandlers.APIServers)
+		api.POST("/servers", func(c *gin.Context) {
+			// Admin only create
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersCreate(c)
+		})
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
 		api.GET("/servers/:server_id/status", managerHandlers.APIServerStatus)
+		api.GET("/servers/:server_id/progress", managerHandlers.ServerProgressGET)
 		api.GET("/servers/:server_id/saves", managerHandlers.APIServerSaves)
 		api.DELETE("/servers/:server_id/saves", managerHandlers.APIServerSaveDelete)
 		api.GET("/servers/:server_id/logs", managerHandlers.APIServerLogsList)
@@ -401,8 +410,22 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/log/tail", managerHandlers.APIServerLogTail)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
-		api.POST("/servers/:server_id/command", managerHandlers.APIServerCommand)
+		// legacy generic command removed; use explicit endpoints below
+		api.POST("/servers/:server_id/chat", managerHandlers.APIServerChat)
+		api.POST("/servers/:server_id/save", managerHandlers.APIServerSave)
+		api.POST("/servers/:server_id/save-as", managerHandlers.APIServerSaveAs)
+		api.POST("/servers/:server_id/load", managerHandlers.APIServerLoad)
+		api.POST("/servers/:server_id/pause", managerHandlers.APIServerPause)
+		api.POST("/servers/:server_id/storm", managerHandlers.APIServerStorm)
+		api.POST("/servers/:server_id/cleanup", managerHandlers.APIServerCleanup)
+		api.POST("/servers/:server_id/kick", managerHandlers.APIServerKick)
+		api.POST("/servers/:server_id/restart", managerHandlers.APIServerRestart)
+		api.POST("/servers/:server_id/ban", managerHandlers.APIServerBan)
+		api.POST("/servers/:server_id/unban", managerHandlers.APIServerUnban)
 		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
+		api.POST("/servers/:server_id/settings", managerHandlers.APIServerUpdateSettings)
+		api.POST("/servers/:server_id/language", managerHandlers.APIServerSetLanguage)
+		api.POST("/servers/:server_id/update-server", managerHandlers.APIServerUpdateServerFiles)
 		// Admin-only delete via API
 		api.POST("/servers/:server_id/delete", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {

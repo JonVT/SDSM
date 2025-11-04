@@ -203,7 +203,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if isAsync {
 			c.Header("X-Toast-Type", "success")
 			c.Header("X-Toast-Title", "Server Started")
-			c.Header("X-Toast-Message", s.Name+" is starting…")
+			c.Header("X-Toast-Message", s.Name+" is starting...")
 			c.JSON(http.StatusOK, gin.H{"status": "started"})
 			return
 		}
@@ -212,7 +212,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if isAsync {
 			c.Header("X-Toast-Type", "info")
 			c.Header("X-Toast-Title", "Server Restarting")
-			c.Header("X-Toast-Message", s.Name+" is restarting…")
+			c.Header("X-Toast-Message", s.Name+" is restarting...")
 			c.JSON(http.StatusOK, gin.H{"status": "restarting"})
 			return
 		}
@@ -308,6 +308,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		return
 	case c.PostForm("update") != "":
 		if role != "admin" {
+			if isAsync {
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Permission Denied")
+				c.Header("X-Toast-Message", "Admin privileges required to change startup parameters.")
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
 			h.renderServerPage(c, http.StatusForbidden, s, username, "Admin privileges required to change startup parameters.")
 			return
 		}
@@ -319,6 +326,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 
 		if name := middleware.SanitizeString(c.PostForm("name")); name != "" {
 			if !h.manager.IsServerNameAvailable(name, s.ID) {
+				if isAsync {
+					c.Header("X-Toast-Type", "error")
+					c.Header("X-Toast-Title", "Update Failed")
+					c.Header("X-Toast-Message", "Server name already exists. Please choose a unique name.")
+					c.JSON(http.StatusBadRequest, gin.H{"error": "name not available"})
+					return
+				}
 				h.renderServerPage(c, http.StatusBadRequest, s, username, "Server name already exists. Please choose a unique name.")
 				return
 			}
@@ -347,6 +361,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 					s.Port = port
 				} else {
 					suggestedPort := h.manager.GetNextAvailablePort(port)
+					if isAsync {
+						c.Header("X-Toast-Type", "error")
+						c.Header("X-Toast-Title", "Update Failed")
+						c.Header("X-Toast-Message", fmt.Sprintf("Port %d is not available. Try %d.", port, suggestedPort))
+						c.JSON(http.StatusBadRequest, gin.H{"error": "port not available", "suggested": suggestedPort})
+						return
+					}
 					h.renderServerPage(c, http.StatusBadRequest, s, username, fmt.Sprintf("Port %d is not available. Try port %d.", port, suggestedPort))
 					return
 				}
@@ -372,6 +393,20 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			if restartDelay, err := strconv.Atoi(restartDelayStr); err == nil && restartDelay >= 0 && restartDelay <= 3600 {
 				s.RestartDelaySeconds = restartDelay
 			}
+		}
+
+		if shutdownDelayStr := c.PostForm("shutdown_delay_seconds"); shutdownDelayStr != "" {
+			if shutdownDelay, err := strconv.Atoi(shutdownDelayStr); err == nil && shutdownDelay >= 0 && shutdownDelay <= 3600 {
+				s.ShutdownDelaySeconds = shutdownDelay
+			}
+		}
+
+		// Welcome Message (optional, single-line)
+		if wm := middleware.SanitizeString(c.PostForm("welcome_message")); wm != "" || c.PostForm("welcome_message") == "" {
+			// Always set (allow clearing)
+			clean := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(wm, "\r", " "), "\n", " "))
+			if len(clean) > 300 { clean = clean[:300] }
+			s.WelcomeMessage = clean
 		}
 
 		// Extended settings
@@ -416,6 +451,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if s.Beta != originalBeta {
 			h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) game version changed; redeploying...", s.Name, s.ID))
 			if err := s.Deploy(); err != nil {
+				if isAsync {
+					c.Header("X-Toast-Type", "error")
+					c.Header("X-Toast-Title", "Redeploy Failed")
+					c.Header("X-Toast-Message", err.Error())
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
 				h.renderServerPage(c, http.StatusInternalServerError, s, username, fmt.Sprintf("Redeploy failed: %v", err))
 				return
 			}
@@ -423,6 +465,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 
 		h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) configuration updated.", s.Name, s.ID))
 		h.manager.Save()
+		if isAsync {
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Settings Updated")
+			c.Header("X-Toast-Message", "Startup parameters saved.")
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			return
+		}
 	case c.PostForm("set_language") != "":
 		// Language is no longer a startup parameter; handle dedicated async change
 		lang := middleware.SanitizeString(c.PostForm("language"))
@@ -521,6 +570,8 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		}
 	}
 	serverVisible := c.PostForm("server_visible") == "on"
+	welcomeMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_message")), "\r", " "), "\n", " "))
+	if len(welcomeMessage) > 300 { welcomeMessage = welcomeMessage[:300] }
 
 	formState := gin.H{
 		"name":                  name,
@@ -546,6 +597,7 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		"delete_skeleton_on_decay": deleteSkeletonOnDecay,
 		"use_steam_p2p":         useSteamP2P,
 		"disconnect_timeout":    disconnectTimeout,
+		"welcome_message":       welcomeMessage,
 	}
 	// Reflect Player Saves already included; keep extended settings for redisplay
 	// Player Saves preference for UI (client-side feature)
@@ -660,6 +712,19 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 			return
 		}
 	}
+	// Shutdown delay (seconds) before issuing QUIT on Stop
+	shutdownDelay := 2
+	if shutdownDelayStr := c.PostForm("shutdown_delay_seconds"); shutdownDelayStr != "" {
+		if val, convErr := strconv.Atoi(shutdownDelayStr); convErr == nil && val >= 0 && val <= 3600 {
+			shutdownDelay = val
+		} else {
+			h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
+				"error": "Invalid shutdown delay (0-3600)",
+				"form":  formState,
+			})
+			return
+		}
+	}
 	formState["restart_delay_seconds"] = fmt.Sprintf("%d", restartDelay)
 	worldID := h.manager.ResolveWorldID(world, beta)
 	if worldID == "" {
@@ -692,6 +757,8 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		UseSteamP2P:         useSteamP2P,
 		DisconnectTimeout:   disconnectTimeout,
 		RestartDelaySeconds: restartDelay,
+		ShutdownDelaySeconds: shutdownDelay,
+		WelcomeMessage:      welcomeMessage,
 	}
 
 	// Set default language based on selected channel

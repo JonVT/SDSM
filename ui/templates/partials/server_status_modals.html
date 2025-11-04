@@ -33,3 +33,25 @@
         </div>
     </div>
 </div>
+
+    <!-- Save As Modal -->
+    <div id="saveAsModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="saveAsModalTitle" aria-describedby="saveAsModalDesc">
+        <div class="modal-card">
+            <div class="modal-header">
+                <svg class="icon-inline icon modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                <h3 id="saveAsModalTitle" class="modal-title">Save As…</h3>
+            </div>
+            <div id="saveAsModalDesc" class="modal-body">
+                <label for="saveAsName" class="form-label">Enter a name for your save</label>
+                <input type="text" id="saveAsName" class="input" placeholder="e.g., MyBase_NightShift" maxlength="100" />
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="saveAsCancel" class="btn btn-secondary">Cancel</button>
+                <button type="button" id="saveAsConfirm" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+        </div>

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -39,6 +40,21 @@ var (
 				s.ServerSaved = &t
 			},
 		},
+		// Recognize completion line like: "17:13:57: Saved <ServerName>"
+		{
+			match: func(line string) []string {
+				if strings.Contains(line, ": Saved ") {
+					return []string{}
+				}
+				return nil
+			},
+			handle: func(s *Server, line string, _ []string) {
+				t := s.parseTime(line)
+				s.ServerSaved = &t
+				// Try to move the next pending manual save into playersave
+				s.tryMoveNextPendingPlayerSave()
+			},
+		},
 		{
 			match: func(line string) []string {
 				return clientReadyRegex.FindStringSubmatch(line)
@@ -57,6 +73,41 @@ var (
 				}
 				if s.recordClientSession(client) {
 					s.appendPlayerLog(client)
+				}
+
+				// Player Saves automation: on player connect, if enabled and not excluded,
+				// issue a FILE saveas <ddmmyy_hhmmss_steamid> (the game appends .save in manualsave),
+				// then move the resulting file to playersave when we see the 'Saved' log line.
+				if s != nil && s.PlayerSaves {
+					// Skip if SteamID is excluded
+					if steamID != "" && !s.HasPlayerSaveExclude(steamID) {
+						// Build base name ddmmyy_hhmmss_steamid using the connect timestamp
+						yy := t.Year() % 100
+						mm := int(t.Month())
+						stamp := fmt.Sprintf("%02d%02d%02d_%02d%02d%02d", t.Day(), mm, yy, t.Hour(), t.Minute(), t.Second())
+						baseName := fmt.Sprintf("%s_%s", stamp, steamID)
+						// The created file on disk will be baseName.save
+						fileName := baseName + ".save"
+						// Rate-limit per steamID and avoid duplicate queueing
+						if s.shouldEnqueuePlayerSave(steamID, t) {
+							// Queue the filename (with .save) to be moved after save completes
+							s.queuePendingPlayerSave(fileName)
+							// Only attempt when server is running. Pass base name without extension;
+							// the game will append .save automatically. This avoids *.save.save.
+							if s.IsRunning() {
+								_ = s.SendCommand("console", "FILE saveas "+baseName)
+							}
+						}
+					}
+				}
+
+				// Welcome message: if configured, emit a chat/SAY on player connect.
+				if s != nil {
+					msg := strings.TrimSpace(s.WelcomeMessage)
+					if msg != "" && s.IsRunning() {
+						// Best effort; ignore error
+						_ = s.SendCommand("chat", msg)
+					}
 				}
 			},
 		},

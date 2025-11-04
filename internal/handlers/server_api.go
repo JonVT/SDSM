@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"sdsm/internal/middleware"
 	"sdsm/internal/models"
 	"sdsm/internal/utils"
 	"strconv"
@@ -14,6 +17,60 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// --- Realtime update helpers ---
+
+func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
+	if h == nil || h.hub == nil || s == nil {
+		return
+	}
+	payload := map[string]any{
+		"type":     "server_status",
+		"serverId": s.ID,
+		"status": map[string]any{
+			"name":        s.Name,
+			"port":        s.Port,
+			"world":       s.World,
+			"playerCount": s.ClientCount(),
+			"maxPlayers":  s.MaxClients,
+			"running":     s.IsRunning(),
+			"starting":    s.Starting,
+			"paused":      s.Paused,
+			"storming":    s.Storming,
+		},
+	}
+	if msg, err := json.Marshal(payload); err == nil {
+		h.hub.Broadcast(msg)
+	}
+}
+
+func (h *ManagerHandlers) broadcastStats() {
+	if h == nil || h.hub == nil {
+		return
+	}
+	stats := map[string]int{
+		"totalServers":  h.manager.ServerCount(),
+		"activeServers": h.manager.ServerCountActive(),
+		"totalPlayers":  h.manager.GetTotalPlayers(),
+	}
+	payload := map[string]any{
+		"type":  "stats_update",
+		"stats": stats,
+	}
+	if msg, err := json.Marshal(payload); err == nil {
+		h.hub.Broadcast(msg)
+	}
+}
+
+func (h *ManagerHandlers) broadcastServersChanged() {
+	if h == nil || h.hub == nil {
+		return
+	}
+	payload := map[string]any{"type": "servers_changed"}
+	if msg, err := json.Marshal(payload); err == nil {
+		h.hub.Broadcast(msg)
+	}
+}
 
 func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
@@ -115,6 +172,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"running":        s.IsRunning(),
 		"starting":       s.Starting,
 		"port":           s.Port,
+		"max_clients":    s.MaxClients,
 		"player_count":   len(liveClients),
 		"players":        players,
 		"last_log_line":  lastLine,
@@ -164,19 +222,22 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	}
 
 	s.Start()
+	// Broadcast status + stats for realtime dashboards
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
 	// If requested via HTMX for HTML swap, return a single server card fragment
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
 		c.Header("HX-Trigger", "refresh")
 		c.Header("X-Toast-Type", "success")
 		c.Header("X-Toast-Title", "Server Started")
-		c.Header("X-Toast-Message", s.Name+" is starting…")
+		c.Header("X-Toast-Message", s.Name+" is starting...")
 		c.HTML(http.StatusOK, "server_card.html", s)
 		return
 	}
 	c.Header("X-Toast-Type", "success")
 	c.Header("X-Toast-Title", "Server Started")
-	c.Header("X-Toast-Message", s.Name+" is starting…")
+	c.Header("X-Toast-Message", s.Name+" is starting...")
 	c.JSON(http.StatusOK, gin.H{"status": "started"})
 }
 
@@ -206,6 +267,9 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	}
 
 	s.Stop()
+	// Broadcast status + stats for realtime dashboards
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
 		c.Header("HX-Trigger", "refresh")
@@ -219,6 +283,41 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	c.Header("X-Toast-Title", "Server Stopped")
 	c.Header("X-Toast-Message", s.Name+" has been stopped.")
 	c.JSON(http.StatusOK, gin.H{"status": "stopped"})
+}
+
+// APIServerRestart restarts a server asynchronously
+func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	go s.Restart()
+	// Early broadcast to indicate restarting/starting state; follow-ups will arrive via polling
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
+	c.Header("X-Toast-Type", "info")
+	c.Header("X-Toast-Title", "Server Restarting")
+	c.Header("X-Toast-Message", s.Name+" is restarting...")
+	c.JSON(http.StatusOK, gin.H{"status": "restarting"})
 }
 
 func (h *ManagerHandlers) APIServerDelete(c *gin.Context) {
@@ -268,6 +367,10 @@ func (h *ManagerHandlers) APIServerDelete(c *gin.Context) {
 		}
 	}
 	h.manager.Save()
+
+	// Broadcast that server roster changed and stats should update
+	h.broadcastServersChanged()
+	h.broadcastStats()
 
 	// If requested via HTMX for HTML swap, return empty body and trigger stats refresh + toast
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
@@ -418,6 +521,301 @@ func (h *ManagerHandlers) APIServerLogsList(c *gin.Context) {
 	sort.Strings(files)
 	c.JSON(http.StatusOK, gin.H{"files": files})
 }
+
+// APIServerUpdateSettings updates server startup/config parameters (admin-only for many fields).
+// Accepts either application/json or x-www-form-urlencoded similar to ServerPOST("update").
+func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+
+	role := c.GetString("role")
+	if role != "admin" {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Permission Denied")
+		c.Header("X-Toast-Message", "Admin privileges required to change startup parameters.")
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+
+	// Extract inputs from JSON or form
+	var body map[string]string
+	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
+		var tmp map[string]any
+		if err := c.ShouldBindJSON(&tmp); err == nil {
+			body = make(map[string]string, len(tmp))
+			for k, v := range tmp { body[k] = strings.TrimSpace(fmt.Sprint(v)) }
+		}
+	}
+	if body == nil {
+		body = map[string]string{}
+		_ = c.Request.ParseForm()
+		for k, v := range c.Request.PostForm { if len(v) > 0 { body[k] = strings.TrimSpace(v[0]) } }
+	}
+
+	// Capture originals to decide on save purge flag and redeploy
+	originalBeta := s.Beta
+	origWorld := s.World
+	origStartLoc := s.StartLocation
+	origStartCond := s.StartCondition
+
+	if name := middleware.SanitizeString(body["name"]); name != "" {
+		if !h.manager.IsServerNameAvailable(name, s.ID) {
+			c.Header("X-Toast-Type", "error"); c.Header("X-Toast-Title", "Update Failed"); c.Header("X-Toast-Message", "Server name already exists. Please choose a unique name.")
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name not available"}); return
+		}
+		s.Name = name
+	}
+	if world := middleware.SanitizeString(body["world"]); world != "" { s.World = world }
+	if startLocation := middleware.SanitizeString(body["start_location"]); startLocation != "" { s.StartLocation = startLocation }
+	if startCondition := middleware.SanitizeString(body["start_condition"]); startCondition != "" { s.StartCondition = startCondition }
+	if difficulty := middleware.SanitizeString(body["difficulty"]); difficulty != "" { s.Difficulty = difficulty }
+
+	if portStr := body["port"]; portStr != "" {
+		if port, err := middleware.ValidatePort(portStr); err == nil {
+			if h.manager.IsPortAvailable(port, s.ID) { s.Port = port } else {
+				suggestedPort := h.manager.GetNextAvailablePort(port)
+				c.Header("X-Toast-Type", "error")
+				c.Header("X-Toast-Title", "Update Failed")
+				c.Header("X-Toast-Message", fmt.Sprintf("Port %d is not available. Try %d.", port, suggestedPort))
+				c.JSON(http.StatusBadRequest, gin.H{"error": "port not available", "suggested": suggestedPort})
+				return
+			}
+		}
+	}
+
+	if v := body["password"]; v != "" { s.Password = v }
+	if v := body["auth_secret"]; v != "" { s.AuthSecret = v }
+
+	if maxClientsStr := body["max_clients"]; maxClientsStr != "" {
+		if maxClients, err := strconv.Atoi(maxClientsStr); err == nil && maxClients >= 1 && maxClients <= 100 { s.MaxClients = maxClients }
+	}
+	if saveIntervalStr := body["save_interval"]; saveIntervalStr != "" {
+		if saveInterval, err := strconv.Atoi(saveIntervalStr); err == nil && saveInterval >= 60 && saveInterval <= 3600 { s.SaveInterval = saveInterval }
+	}
+	if restartDelayStr := body["restart_delay_seconds"]; restartDelayStr != "" {
+		if restartDelay, err := strconv.Atoi(restartDelayStr); err == nil && restartDelay >= 0 && restartDelay <= 3600 { s.RestartDelaySeconds = restartDelay }
+	}
+	if shutdownDelayStr := body["shutdown_delay_seconds"]; shutdownDelayStr != "" {
+		if shutdownDelay, err := strconv.Atoi(shutdownDelayStr); err == nil && shutdownDelay >= 0 && shutdownDelay <= 3600 { s.ShutdownDelaySeconds = shutdownDelay }
+	}
+	if v := strings.TrimSpace(body["max_auto_saves"]); v != "" { if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 { s.MaxAutoSaves = n } }
+	if v := strings.TrimSpace(body["max_quick_saves"]); v != "" { if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 { s.MaxQuickSaves = n } }
+	s.DeleteSkeletonOnDecay = body["delete_skeleton_on_decay"] == "on" || body["delete_skeleton_on_decay"] == "true" || body["delete_skeleton_on_decay"] == "1"
+	s.UseSteamP2P = body["use_steam_p2p"] == "on" || body["use_steam_p2p"] == "true" || body["use_steam_p2p"] == "1"
+	if v := strings.TrimSpace(body["disconnect_timeout"]); v != "" { if n, err := strconv.Atoi(v); err == nil && n >= 1000 && n <= 600000 { s.DisconnectTimeout = n } }
+
+	s.Visible = body["server_visible"] == "on" || body["server_visible"] == "true" || body["server_visible"] == "1"
+	s.Beta = body["beta"] == "true"
+	s.AutoStart = body["auto_start"] == "on" || body["auto_start"] == "true" || body["auto_start"] == "1"
+	s.AutoUpdate = body["auto_update"] == "on" || body["auto_update"] == "true" || body["auto_update"] == "1"
+	s.AutoSave = body["auto_save"] == "on" || body["auto_save"] == "true" || body["auto_save"] == "1"
+	s.AutoPause = body["auto_pause"] == "on" || body["auto_pause"] == "true" || body["auto_pause"] == "1"
+	// Allow toggling PlayerSaves via API as part of settings
+	if pv, ok := body["player_saves"]; ok {
+		v := strings.TrimSpace(pv)
+		s.PlayerSaves = v == "on" || v == "true" || v == "1"
+	}
+	s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
+
+	// Core change flag
+	coreChanged := (strings.TrimSpace(origWorld) != strings.TrimSpace(s.World)) || (strings.TrimSpace(origStartLoc) != strings.TrimSpace(s.StartLocation)) || (strings.TrimSpace(origStartCond) != strings.TrimSpace(s.StartCondition))
+	if coreChanged {
+		s.PendingSavePurge = true
+		if s.Logger != nil { s.Logger.Write("Core start parameters changed; pending save purge flagged (stub, no deletion yet)") }
+	}
+
+	if s.Beta != originalBeta {
+		h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) game version changed; redeploying...", s.Name, s.ID))
+		if err := s.Deploy(); err != nil {
+			c.Header("X-Toast-Type", "error"); c.Header("X-Toast-Title", "Redeploy Failed"); c.Header("X-Toast-Message", err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) configuration updated.", s.Name, s.ID))
+	h.manager.Save()
+
+	// Broadcast realtime update to dashboard clients if hub is available
+	if h.hub != nil {
+		payload := map[string]any{
+			"type":     "server_status",
+			"serverId": s.ID,
+			"status": map[string]any{
+				"name":        s.Name,
+				"port":        s.Port,
+				"world":       s.World,
+				"playerCount": len(s.LiveClients()),
+				"maxPlayers":  s.MaxClients,
+				"running":     s.IsRunning(),
+				"starting":    s.Starting,
+				"paused":      s.Paused,
+			},
+		}
+		if msg, err := json.Marshal(payload); err == nil {
+			h.hub.Broadcast(msg)
+		}
+		// Also broadcast updated stats after a settings change (e.g., max players change)
+		h.broadcastStats()
+	}
+
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Settings Updated"); c.Header("X-Toast-Message", "Startup parameters saved.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerSetLanguage updates only the language setting (no redeploy here).
+func (h *ManagerHandlers) APIServerSetLanguage(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+	var req struct{ Language string `json:"language"` }
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Language) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "language required"})
+		return
+	}
+	allowed := h.manager.GetLanguagesForVersion(s.Beta)
+	ok := false
+	for _, a := range allowed { if strings.EqualFold(a, req.Language) { ok = true; break } }
+	if !ok && len(allowed) > 0 {
+		c.Header("X-Toast-Type", "error"); c.Header("X-Toast-Title", "Invalid Language"); c.Header("X-Toast-Message", "Selected language is not available for this version.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid language"})
+		return
+	}
+	s.Language = req.Language
+	h.manager.Save()
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Language Updated"); c.Header("X-Toast-Message", fmt.Sprintf("Language set to %s", req.Language))
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerUpdateServerFiles starts server files redeploy/update
+func (h *ManagerHandlers) APIServerUpdateServerFiles(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" { c.JSON(http.StatusForbidden, gin.H{"error": "admin required"}); return }
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"}); return }
+	if h.manager.IsServerUpdateRunning(s.ID) {
+		c.Header("X-Toast-Type", "info"); c.Header("X-Toast-Title", "Update Running"); c.Header("X-Toast-Message", s.Name+" update already running.")
+		c.JSON(http.StatusOK, gin.H{"status": "running"})
+		return
+	}
+	h.startServerUpdateAsync(s)
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Update Started"); c.Header("X-Toast-Message", s.Name+" update started.")
+	c.JSON(http.StatusOK, gin.H{"status": "started"})
+}
+
+// APIServersCreate creates a new server (admin only). Expects JSON body mapping fields of ServerConfig.
+func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
+	if c.GetString("role") != "admin" { c.JSON(http.StatusForbidden, gin.H{"error":"admin required"}); return }
+	var req struct {
+		Name string `json:"name"`
+		World string `json:"world"`
+		StartLocation string `json:"start_location"`
+		StartCondition string `json:"start_condition"`
+		Difficulty string `json:"difficulty"`
+		Port int `json:"port"`
+		MaxClients int `json:"max_clients"`
+		Password string `json:"password"`
+		AuthSecret string `json:"auth_secret"`
+		SaveInterval int `json:"save_interval"`
+		RestartDelaySeconds int `json:"restart_delay_seconds"`
+		ShutdownDelaySeconds int `json:"shutdown_delay_seconds"`
+		Beta bool `json:"beta"`
+		AutoStart bool `json:"auto_start"`
+		AutoUpdate bool `json:"auto_update"`
+		AutoSave bool `json:"auto_save"`
+		AutoPause bool `json:"auto_pause"`
+		PlayerSaves bool `json:"player_saves"`
+		MaxAutoSaves int `json:"max_auto_saves"`
+		MaxQuickSaves int `json:"max_quick_saves"`
+		DeleteSkeletonOnDecay bool `json:"delete_skeleton_on_decay"`
+		UseSteamP2P bool `json:"use_steam_p2p"`
+		DisconnectTimeout int `json:"disconnect_timeout"`
+		Visible bool `json:"server_visible"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid body"}); return }
+
+	// Validation similar to NewServerPOST
+	if strings.TrimSpace(req.Name) == "" { c.JSON(http.StatusBadRequest, gin.H{"error":"Server name is required."}); return }
+	if strings.TrimSpace(req.World) == "" { c.JSON(http.StatusBadRequest, gin.H{"error":"World selection is required."}); return }
+	if strings.TrimSpace(req.StartLocation) == "" { c.JSON(http.StatusBadRequest, gin.H{"error":"Start location is required."}); return }
+	if strings.TrimSpace(req.StartCondition) == "" { c.JSON(http.StatusBadRequest, gin.H{"error":"Start condition is required."}); return }
+	if strings.TrimSpace(req.Difficulty) == "" { c.JSON(http.StatusBadRequest, gin.H{"error":"Difficulty selection is required."}); return }
+	if !h.manager.IsServerNameAvailable(req.Name, -1) { c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Server name '%s' already exists.", req.Name)}); return }
+	if _, err := middleware.ValidatePort(fmt.Sprintf("%d", req.Port)); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"Invalid port"}); return }
+	if !h.manager.IsPortAvailable(req.Port, -1) {
+		suggested := h.manager.GetNextAvailablePort(req.Port)
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Port %d not available", req.Port), "suggested": suggested})
+		return
+	}
+	if req.MaxClients < 1 || req.MaxClients > 100 { c.JSON(http.StatusBadRequest, gin.H{"error":"Invalid max players (1-100)"}); return }
+	if req.SaveInterval < 60 || req.SaveInterval > 3600 { c.JSON(http.StatusBadRequest, gin.H{"error":"Invalid save interval (60-3600)"}); return }
+	if req.RestartDelaySeconds < 0 || req.RestartDelaySeconds > 3600 { c.JSON(http.StatusBadRequest, gin.H{"error":"Invalid restart delay (0-3600)"}); return }
+	if req.ShutdownDelaySeconds < 0 || req.ShutdownDelaySeconds > 3600 { c.JSON(http.StatusBadRequest, gin.H{"error":"Invalid shutdown delay (0-3600)"}); return }
+
+	worldID := h.manager.ResolveWorldID(req.World, req.Beta)
+	if worldID == "" { worldID = req.World }
+
+	cfg := &models.ServerConfig{
+		Name: req.Name,
+		World: req.World,
+		WorldID: worldID,
+		Language: "",
+		StartLocation: req.StartLocation,
+		StartCondition: req.StartCondition,
+		Difficulty: req.Difficulty,
+		Port: req.Port,
+		Password: req.Password,
+		AuthSecret: req.AuthSecret,
+		MaxClients: req.MaxClients,
+		SaveInterval: req.SaveInterval,
+		Visible: req.Visible,
+		Beta: req.Beta,
+		AutoStart: req.AutoStart,
+		AutoUpdate: req.AutoUpdate,
+		AutoSave: req.AutoSave,
+		AutoPause: req.AutoPause,
+		PlayerSaves: req.PlayerSaves,
+		MaxAutoSaves: ifZero(req.MaxAutoSaves, 5),
+		MaxQuickSaves: ifZero(req.MaxQuickSaves, 5),
+		DeleteSkeletonOnDecay: req.DeleteSkeletonOnDecay,
+		UseSteamP2P: req.UseSteamP2P,
+		DisconnectTimeout: ifZero(req.DisconnectTimeout, 10000),
+		RestartDelaySeconds: req.RestartDelaySeconds,
+		ShutdownDelaySeconds: req.ShutdownDelaySeconds,
+	}
+
+	// Default language selection similar to page flow
+	langs := h.manager.GetLanguagesForVersion(req.Beta)
+	if len(langs) > 0 {
+		cfg.Language = langs[0]
+		for _, l := range langs { if strings.EqualFold(l, "english") { cfg.Language = l; break } }
+	}
+
+	newServer, err := h.manager.AddServer(cfg)
+	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error":"Failed to create server"}); return }
+	if err := newServer.Deploy(); err != nil { h.manager.Log.Write(fmt.Sprintf("Initial deploy failed for %s (ID:%d): %v", newServer.Name, newServer.ID, err)) }
+
+	// Broadcast that a new server exists + updated stats
+	h.broadcastServersChanged()
+	h.broadcastStats()
+	h.broadcastServerStatus(newServer)
+
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Server Created"); c.Header("X-Toast-Message", newServer.Name+" created.")
+	c.JSON(http.StatusOK, gin.H{"server_id": newServer.ID})
+}
+
+func ifZero[T ~int](val T, def T) T { if val == 0 { return def }; return val }
 
 // APIServerLogTail streams a chunk of a log starting from a byte offset. It supports:
 //  - offset >= 0: read from offset up to 'max' bytes
@@ -581,13 +979,17 @@ func (h *ManagerHandlers) APIServerLogTail(c *gin.Context) {
 
 // APIServerCommand accepts a command to be sent to the running server process via stdin.
 // JSON body: { "type": "console"|"chat", "payload": "..." }
-func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
+// Legacy APIServerCommand removed in favor of explicit endpoints.
+
+// APIServerChat sends a chat message to the server. JSON: { "message": "..." }
+func (h *ManagerHandlers) APIServerChat(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
 	}
 
+	// RBAC
 	role := c.GetString("role")
 	if role != "admin" {
 		if val, ok := c.Get("username"); ok {
@@ -606,38 +1008,498 @@ func (h *ManagerHandlers) APIServerCommand(c *gin.Context) {
 		return
 	}
 
-	// Parse JSON body
-	var req struct {
-		Type    string `json:"type"`
-		Payload string `json:"payload"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var req struct{ Message string `json:"message"` }
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Message) == "" {
 		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Command Failed")
-		c.Header("X-Toast-Message", "Invalid request body.")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		c.Header("X-Toast-Title", "Chat Failed")
+		c.Header("X-Toast-Message", "Message is required.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message required"})
 		return
 	}
-	if strings.TrimSpace(req.Payload) == "" {
+	if err := s.SendCommand("chat", req.Message); err != nil {
 		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Command Failed")
-		c.Header("X-Toast-Message", "Empty command.")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "empty command"})
-		return
-	}
-
-	if err := s.SendCommand(req.Type, req.Payload); err != nil {
-		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Title", "Chat Failed")
 		c.Header("X-Toast-Message", err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.Header("X-Toast-Type", "success")
-	c.Header("X-Toast-Title", "Command Sent")
-	c.Header("X-Toast-Message", "Your command was sent to the server.")
+	c.Header("X-Toast-Title", "Message Sent")
+	c.Header("X-Toast-Message", "Chat message sent.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerSave triggers a manual save using the FILE save command.
+func (h *ManagerHandlers) APIServerSave(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if err := s.SendCommand("console", "FILE save"); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Save Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Save Requested")
+	c.Header("X-Toast-Message", "Manual save requested.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerSaveAs triggers a manual named save via FILE saveas <name>.
+// JSON: { "name": "<filename base without .save>" }
+func (h *ManagerHandlers) APIServerSaveAs(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	var req struct{ Name string `json:"name"` }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Save As Failed")
+		c.Header("X-Toast-Message", "Invalid request")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	base := middleware.SanitizeFilename(strings.TrimSpace(req.Name))
+	base = strings.TrimSuffix(base, ".save")
+	base = strings.TrimSuffix(base, ".SAVE")
+	if base == "" {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Save As Failed")
+		c.Header("X-Toast-Message", "Name is required.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
+	}
+	if len(base) > 100 {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Save As Failed")
+		c.Header("X-Toast-Message", "Name too long (max 100).")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long"})
+		return
+	}
+	if err := s.SendCommand("console", "FILE saveas "+base); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Save As Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Save As Requested")
+	c.Header("X-Toast-Message", "Manual save requested.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// resolveLoadPath determines a safe absolute path for a save file given a logical type and filename.
+func (h *ManagerHandlers) resolveLoadPath(s *models.Server, saveType, filename string) (string, error) {
+	if s == nil || strings.TrimSpace(filename) == "" {
+		return "", errors.New("invalid request")
+	}
+	// Normalize
+	t := strings.ToLower(strings.TrimSpace(saveType))
+	base := filepath.Base(filename)
+	if !strings.HasSuffix(strings.ToLower(base), ".save") {
+		return "", errors.New("invalid filename")
+	}
+	var savesDir string
+	if s.Paths != nil {
+		savesDir = s.Paths.ServerSavesDir(s.ID)
+	} else if h.manager.Paths != nil {
+		savesDir = h.manager.Paths.ServerSavesDir(s.ID)
+	}
+	if strings.TrimSpace(savesDir) == "" {
+		return "", errors.New("saves directory unavailable")
+	}
+	var dir string
+	switch t {
+	case "auto", "autosave", "autosaves":
+		dir = filepath.Join(savesDir, s.Name, "autosave")
+	case "quick", "quicksave", "quicksaves":
+		dir = filepath.Join(savesDir, s.Name, "quicksave")
+	case "manual", "manualsave", "manuals":
+		// manual saves may be in either manualsave/ or server root
+		d1 := filepath.Join(savesDir, s.Name, "manualsave", base)
+		// Prefer manualsave folder if exists; else fallback to root
+		if st, err := os.Stat(d1); err == nil && !st.IsDir() {
+			return d1, nil
+		}
+		dir = filepath.Join(savesDir, s.Name)
+		// compose at bottom
+	case "player", "players", "playersave", "playersaves":
+		dir = filepath.Join(savesDir, s.Name, "playersave")
+	default:
+		// Unknown type; reject
+		return "", errors.New("unsupported type")
+	}
+	target := filepath.Join(dir, base)
+	// Ensure target resides within dir
+	cleanDir := filepath.Clean(dir)
+	cleanTarget := filepath.Clean(target)
+	if rel, err := filepath.Rel(cleanDir, cleanTarget); err != nil || strings.HasPrefix(rel, "..") {
+		return "", errors.New("invalid path")
+	}
+	if st, err := os.Stat(cleanTarget); err != nil || st.IsDir() {
+		return "", errors.New("save file not found")
+	}
+	return cleanTarget, nil
+}
+
+// APIServerLoad loads a save file from a whitelisted location. JSON: { "type": "auto|quick|manual|player", "name": "file.save" }
+func (h *ManagerHandlers) APIServerLoad(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	var req struct{ Type, Name string }
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Load Failed")
+		c.Header("X-Toast-Message", "Invalid request.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	full, err := h.resolveLoadPath(s, req.Type, req.Name)
+	if err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Load Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.SendCommand("console", "FILE load "+full); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Load Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Loading Save")
+	c.Header("X-Toast-Message", "Requested loading of selected save.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerPause toggles pause state. JSON: { "pause": true|false }
+func (h *ManagerHandlers) APIServerPause(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	var req struct{ Pause bool `json:"pause"` }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	cmd := "PAUSE false"
+	if req.Pause { cmd = "PAUSE true" }
+	if err := s.SendCommand("console", cmd); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Pause Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Pause Updated")
+	c.Header("X-Toast-Message", "Pause state updated.")
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
+}
+
+// APIServerStorm toggles storm. JSON: { "start": true|false }
+func (h *ManagerHandlers) APIServerStorm(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	var req struct{ Start bool `json:"start"` }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	cmd := "STORM stop"
+	if req.Start { cmd = "STORM start" }
+	if err := s.SendCommand("console", cmd); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Storm Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	if req.Start {
+		c.Header("X-Toast-Title", "Storm Started")
+		c.Header("X-Toast-Message", "Storm started.")
+	} else {
+		c.Header("X-Toast-Title", "Storm Ended")
+		c.Header("X-Toast-Message", "Storm ended.")
+	}
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
+}
+
+// APIServerCleanup runs CLEANUPPLAYERS for a specific scope. JSON: { "scope": "dead|disconnected|all" }
+func (h *ManagerHandlers) APIServerCleanup(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	var req struct{ Scope string `json:"scope"` }
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	scope := strings.ToLower(strings.TrimSpace(req.Scope))
+	if scope != "dead" && scope != "disconnected" && scope != "all" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scope"})
+		return
+	}
+	if err := s.SendCommand("console", "CLEANUPPLAYERS "+scope); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Cleanup Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Cleanup Started")
+	c.Header("X-Toast-Message", "Cleanup command sent.")
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
+}
+
+// APIServerKick kicks a player by SteamID or name. JSON: { "steam_id": "..." } or { "name": "..." }
+func (h *ManagerHandlers) APIServerKick(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	// Capture request allowing either steam_id or name
+	type kickReq struct{ SteamID string `json:"steam_id"`; Name string `json:"name"` }
+	var r kickReq
+	if err := c.ShouldBindJSON(&r); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid request"}); return }
+	steam := strings.TrimSpace(r.SteamID)
+	name := strings.TrimSpace(r.Name)
+	if steam == "" && name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error":"steam_id or name required"})
+		return
+	}
+	// If name provided but no steam id, attempt resolve from live clients
+	if steam == "" && name != "" {
+		lower := strings.ToLower(name)
+		for _, cl := range s.LiveClients() {
+			if cl != nil && strings.EqualFold(strings.ToLower(cl.Name), lower) {
+				steam = cl.SteamID
+				break
+			}
+		}
+		// Fallback to history
+		if steam == "" {
+			for _, cl := range s.Clients {
+				if cl != nil && strings.EqualFold(strings.ToLower(cl.Name), lower) {
+					steam = cl.SteamID
+					break
+				}
+			}
+		}
+		if steam == "" { steam = name }
+	}
+	if err := s.SendCommand("console", "KICK "+steam); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Kick Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	// Realtime: player list and counts may change
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Player Kicked")
+	c.Header("X-Toast-Message", "Kick command sent.")
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
+}
+
+// APIServerBan bans a player by SteamID or name.
+// JSON: { "steam_id": "7656..." } or { "name": "PlayerName" }
+func (h *ManagerHandlers) APIServerBan(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	type banReq struct{ SteamID string `json:"steam_id"`; Name string `json:"name"` }
+	var r banReq
+	if err := c.ShouldBindJSON(&r); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid request"}); return }
+	steam := strings.TrimSpace(r.SteamID)
+	name := strings.TrimSpace(r.Name)
+	if steam == "" && name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error":"steam_id or name required"})
+		return
+	}
+	// Resolve by name if needed
+	if steam == "" && name != "" {
+		candidate := strings.ToLower(name)
+		for _, cl := range s.LiveClients() { if cl != nil && strings.EqualFold(cl.Name, candidate) { steam = cl.SteamID; break } }
+		if steam == "" { for _, cl := range s.Clients { if cl != nil && strings.EqualFold(cl.Name, candidate) { steam = cl.SteamID; break } } }
+		if steam == "" { steam = name } // fallback
+	}
+	// Try console BAN when running, else write to blacklist file
+	if s.Running {
+		if err := s.SendCommand("console", "BAN "+steam); err != nil {
+			c.Header("X-Toast-Type", "error"); c.Header("X-Toast-Title", "Ban Failed"); c.Header("X-Toast-Message", err.Error())
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return
+		}
+		// Realtime: a live player may be removed as a result of BAN
+		h.broadcastServerStatus(s)
+		h.broadcastStats()
+		c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Player Banned"); c.Header("X-Toast-Message", "BAN command sent.")
+		c.JSON(http.StatusOK, gin.H{"status":"ok"}); return
+	}
+	if err := s.AddBlacklistID(steam); err != nil {
+		c.Header("X-Toast-Type", "error"); c.Header("X-Toast-Title", "Ban Failed"); c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()}); return
+	}
+	// Realtime: ban list changed; broadcast stats (player counts unchanged) and status for consistency
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Player Banned"); c.Header("X-Toast-Message", steam+" added to blacklist.")
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
+}
+
+// APIServerUnban removes a SteamID from blacklist.
+// JSON: { "steam_id": "7656..." }
+func (h *ManagerHandlers) APIServerUnban(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"Server not found"}); return }
+	var r struct{ SteamID string `json:"steam_id"` }
+	if err := c.ShouldBindJSON(&r); err != nil || strings.TrimSpace(r.SteamID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error":"steam_id required"}); return
+	}
+	_ = s.RemoveBlacklistID(strings.TrimSpace(r.SteamID))
+	// Realtime: unban list changed; broadcast status and stats
+	h.broadcastServerStatus(s)
+	h.broadcastStats()
+	c.Header("X-Toast-Type", "success"); c.Header("X-Toast-Title", "Player Unbanned"); c.Header("X-Toast-Message", "Removed from blacklist.")
+	c.JSON(http.StatusOK, gin.H{"status":"ok"})
 }
 
 // APIServerSaves lists server save files for a given type (e.g., auto, manual).

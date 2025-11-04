@@ -22,18 +22,21 @@
         <line x1="6" y1="18" x2="6.01" y2="18"></line>
       </svg>
       {{ end }}
-      {{ $srv.Name }}
+      <span data-server-name>{{ $srv.Name }}</span>
     </div>
-    {{/* Determine visual variants to mirror server page semantics:
+        {{/* Determine visual variants to mirror server page semantics:
          - Indicator classes: starting, paused, running, stopped
          - Pill variant: is-running when running and not paused; otherwise is-stopped
          - Text label: Starting > Stopped > Paused > Running (same precedence as server page)
     */}}
-    <span class="status-pill {{ if and $srv.IsRunning (not $srv.Paused) }}is-running{{ else }}is-stopped{{ end }}" data-status>
-      <span class="status-dot-indicator {{ if and $srv.IsRunning $srv.Starting }}starting{{ else if not $srv.IsRunning }}stopped{{ else if $srv.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
-      <span class="sr-only">Status:</span>
-      {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}
-    </span>
+    <div class="status-badges">
+        <span class="status-pill storm-pill" data-storm style="display:none;" aria-label="Clear" title="Clear"></span>
+        <span class="status-pill {{ if and $srv.IsRunning $srv.Starting }}is-starting{{ else if and $srv.IsRunning (not $srv.Paused) }}is-running{{ else if and $srv.IsRunning $srv.Paused }}is-paused{{ else }}is-stopped{{ end }}" data-status aria-label="Status: {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}" title="{{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}">
+          <span class="status-dot-indicator {{ if and $srv.IsRunning $srv.Starting }}starting{{ else if not $srv.IsRunning }}stopped{{ else if $srv.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
+          <span class="sr-only">Status:</span>
+          {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}
+        </span>
+    </div>
   </div>
 
   {{ if $srv.LastError }}
@@ -58,11 +61,11 @@
   <div class="server-info">
     <div class="info-item">
       <div class="info-label">World</div>
-      <div class="info-value">{{ $srv.World }}</div>
+      <div class="info-value"><span data-world-value>{{ $srv.World }}</span></div>
     </div>
     <div class="info-item">
       <div class="info-label">Port</div>
-      <div class="info-value">{{ $srv.Port }}</div>
+      <div class="info-value" data-port-value>{{ $srv.Port }}</div>
     </div>
     <div class="info-item">
       <div class="info-label">Players</div>

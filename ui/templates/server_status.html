@@ -13,7 +13,7 @@
     {{ template "server_status_styles.html" . }}
     
     </head>
-    <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}" data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}">
+    <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}" data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}" data-shutdown-delay="{{.server.ShutdownDelaySeconds}}">
         <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
             <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
             <button type="button" id="connection-banner-action" title="Reload the page">Reload</button>
@@ -103,7 +103,7 @@
                             <line x1="6" y1="18" x2="6.01" y2="18"></line>
                         </svg>
                         {{ end }}
-                        {{.server.Name}}
+                        <span id="server-name">{{.server.Name}}</span>
                     </h3>
                     <div class="lang-control" style="position:relative;">
                         <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
@@ -133,10 +133,10 @@
                             <span class="info-value world" title="{{.server.WorldID}}">{{ if .worldInfo }}{{ .worldInfo.Name }}{{ else }}{{ .server.WorldID }}{{ end }}</span>
                             <span class="info-sep" aria-hidden="true">•</span>
                             <span class="info-label">Port</span>
-                            <span class="info-value port">{{.server.Port}}</span>
+                            <span id="server-port-value" class="info-value port">{{.server.Port}}</span>
                             <span class="info-sep" aria-hidden="true">•</span>
                             <span class="info-label">Max Players</span>
-                            <span class="info-value max">{{ .server.MaxClients }}</span>
+                            <span id="server-max-value" class="info-value max">{{ .server.MaxClients }}</span>
                         </div>
                     </div>
                 </div>

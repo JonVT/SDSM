@@ -57,7 +57,7 @@
                     <span id="refresh-indicator" class="hidden">⟳</span>
                     Refresh
                 </button>
-                <a href="/manager" class="btn btn-secondary">
+                <a href="/manager" class="btn btn-primary">
                     {{ template "icon_manager" . }}
                     Manager
                 </a>
@@ -269,6 +269,14 @@
                 case 'server_status':
                     updateServerStatus(data.serverId, data.status);
                     break;
+                case 'server_update':
+                    updateServerStatus(data.serverId, data.status);
+                    break;
+                case 'servers_changed':
+                    // Immediately refresh server grid and stats
+                    try { htmx.trigger('#server-grid', 'refresh'); } catch (e) {}
+                    try { htmx.trigger('.stats-grid', 'refresh'); } catch (e) {}
+                    break;
                 case 'stats_update':
                     updateStats(data.stats);
                     break;
@@ -283,55 +291,65 @@
                 return;
             }
             const statusBadge = serverCard.querySelector('[data-status]');
+            const stormBadge = serverCard.querySelector('[data-storm]');
             if (statusBadge) {
                 const isRunning = !!status.running;
                 const isStarting = !!status.starting && isRunning;
                 const isPaused = !!status.paused && isRunning && !isStarting;
 
-                // Normalize pill variant classes (use running style when running and not paused)
-                statusBadge.classList.remove('status-running', 'status-idle', 'is-running', 'is-stopped');
-                statusBadge.classList.toggle('is-running', isRunning && !isPaused);
-                statusBadge.classList.toggle('is-stopped', !isRunning || isPaused);
+                // Normalize pill variant classes (running, paused, stopped)
+                statusBadge.classList.remove('status-running', 'status-idle', 'is-running', 'is-stopped', 'is-paused', 'is-starting');
+                statusBadge.classList.toggle('is-starting', isStarting);
+                statusBadge.classList.toggle('is-running', isRunning && !isPaused && !isStarting);
+                statusBadge.classList.toggle('is-paused', isRunning && isPaused);
+                statusBadge.classList.toggle('is-stopped', !isRunning);
 
-                // Ensure dot indicator + label structure
-                let indicator = statusBadge.querySelector('.status-dot-indicator');
-                if (!indicator) {
-                    indicator = document.createElement('span');
-                    indicator.className = 'status-dot-indicator';
-                    statusBadge.prepend(indicator);
-                    let sr = statusBadge.querySelector('.sr-only');
-                    if (!sr) {
-                        sr = document.createElement('span');
-                        sr.className = 'sr-only';
-                        sr.textContent = 'Status:';
-                        indicator.after(sr);
-                    }
-                }
-                // Update indicator state classes
-                indicator.classList.remove('running', 'stopped', 'warning', 'starting', 'paused');
-                if (isStarting) indicator.classList.add('starting');
-                else if (!isRunning) indicator.classList.add('stopped');
-                else if (isPaused) indicator.classList.add('paused');
-                else indicator.classList.add('running');
-
-                // Update label after sr-only
+                // For cards, render as a dot only. Provide an accessible label.
                 const desiredLabel = isStarting ? 'Starting' : (!isRunning ? 'Stopped' : (isPaused ? 'Paused' : 'Running'));
-                let srOnly = statusBadge.querySelector('.sr-only');
-                if (!srOnly) {
-                    srOnly = document.createElement('span');
-                    srOnly.className = 'sr-only';
-                    srOnly.textContent = 'Status:';
-                    indicator.after(srOnly);
+                statusBadge.setAttribute('aria-label', `Status: ${desiredLabel}`);
+                statusBadge.setAttribute('title', desiredLabel);
+            }
+            // Update storm badge
+            if (stormBadge) {
+                const isRunning = !!status.running;
+                const isStorming = !!status.storming && isRunning;
+                if (isRunning && isStorming) {
+                    stormBadge.style.display = '';
+                    stormBadge.classList.remove('is-storm', 'is-clear');
+                    stormBadge.classList.add('is-storm');
+                    stormBadge.setAttribute('aria-label', 'Storm');
+                    stormBadge.setAttribute('title', 'Storm');
+                    // Ensure no visible text for dot-only UI
+                    stormBadge.textContent = '';
+                } else {
+                    stormBadge.style.display = 'none';
                 }
-                while (srOnly.nextSibling) {
-                    srOnly.nextSibling.remove();
+            }
+            // Update server name if provided
+            if (status.name !== undefined) {
+                const nameEl = serverCard.querySelector('[data-server-name]');
+                if (nameEl) {
+                    nameEl.textContent = status.name;
                 }
-                statusBadge.append(document.createTextNode(desiredLabel));
+            }
+            // Update port if provided
+            if (status.port !== undefined) {
+                const portEl = serverCard.querySelector('[data-port-value]');
+                if (portEl) {
+                    portEl.textContent = String(status.port);
+                }
             }
             if (status.playerCount !== undefined) {
                 const playerInfo = serverCard.querySelector('[data-player-count]');
                 if (playerInfo) {
                     playerInfo.textContent = `${status.playerCount}/${status.maxPlayers || '?'}`;
+                }
+            }
+            // Update world if provided
+            if (status.world !== undefined) {
+                const worldEl = serverCard.querySelector('[data-world-value]');
+                if (worldEl) {
+                    worldEl.textContent = status.world;
                 }
             }
         }

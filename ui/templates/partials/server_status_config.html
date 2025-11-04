@@ -57,24 +57,29 @@
                     <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-input-inline" placeholder="8" autocomplete="off">
                 </div>
                 <div>
-                    <label for="server_visible">Server Visible:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}>
-                        <span>Public</span>
-                    </div>
+                    <label for="save_interval">Save Interval (sec):</label>
+                    <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-input-inline" placeholder="300" autocomplete="off">
                 </div>
             </div>
 
             <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
                 <div>
-                    <label for="save_interval">Save Interval (sec):</label>
-                    <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-input-inline" placeholder="300" autocomplete="off">
-                </div>
-                <div>
                     <label for="restart_delay_seconds">Restart Delay (sec):</label>
                     <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off">
                 </div>
+                <div>
+                    <label for="shutdown_delay_seconds">Shutdown Delay (sec):</label>
+                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off">
+                </div>
             </div>
+
+            <div class="form-row form-row-full">
+                <label for="welcome_message">Welcome Message:</label>
+                <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" autocomplete="off">
+                <p class="help-text">If set, this message will be broadcast to chat when a player connects.</p>
+            </div>
+
+            
 
             <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
                 <div>
@@ -100,44 +105,14 @@
                     </div>
                 </div>
                 <div>
-                    <label for="auto_start">Auto Start:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:center;">
-                <div>
-                    <label for="auto_save">Auto Save:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
-                </div>
-                <div>
-                    <label for="auto_pause">Auto Pause:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="auto_pause" name="auto_pause" {{if .server.AutoPause}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:center;">
-                <div>
-                    <label for="auto_update">Auto Update:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="auto_update" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
-                </div>
-                <div>
                     <label for="disconnect_timeout">Disconnect Timeout (ms):</label>
                     <input type="number" id="disconnect_timeout" name="disconnect_timeout" value="{{.server.DisconnectTimeout}}" class="form-input-inline" min="1000" max="600000" step="1000" placeholder="10000" autocomplete="off">
                 </div>
             </div>
+
+            
+
+            
 
             <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
                 <div>
@@ -150,22 +125,29 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:center;">
-                <div>
-                    <label for="delete_skeleton_on_decay">Delete Skeleton On Decay:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
-                </div>
-                <div>
-                    <label for="use_steam_p2p">Use Steam P2P:</label>
-                    <div class="checkbox-inline">
-                        <input type="checkbox" id="use_steam_p2p" name="use_steam_p2p" {{if .server.UseSteamP2P}}checked{{end}}>
-                        <span>Enable</span>
-                    </div>
+            
+            <!-- Group all checkbox options together (compact, no visible label) -->
+            <div class="form-row form-row-full" style="display:block;">
+                <div class="checkbox-inline" style="display:flex; flex-wrap: wrap; gap: var(--space-3);">
+                    <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
+                    <label class="radio-label"><input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}> Auto Start</label>
+                    <label class="radio-label"><input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}> Auto Save</label>
+                    <label class="radio-label"><input type="checkbox" id="auto_pause" name="auto_pause" {{if .server.AutoPause}}checked{{end}}> Auto Pause</label>
+                    <label class="radio-label"><input type="checkbox" id="auto_update" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}> Auto Update</label>
+                    <label class="radio-label"><input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}> Delete Skeleton On Decay</label>
+                    <label class="radio-label"><input type="checkbox" id="use_steam_p2p" name="use_steam_p2p" {{if .server.UseSteamP2P}}checked{{end}}> Use Steam P2P</label>
                 </div>
             </div>
+        </div>
+        <div class="control-actions" style="margin-top: var(--space-3);">
+            <button type="submit" name="update" value="true" class="btn btn-primary btn-min-lg" title="Apply the startup parameter changes for this server">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a 2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Update
+            </button>
         </div>
     </form>
 </div>

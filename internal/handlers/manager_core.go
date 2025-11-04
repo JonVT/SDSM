@@ -9,6 +9,7 @@ import (
 
 	"sdsm/internal/manager"
 	"sdsm/internal/models"
+	"sdsm/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,11 +20,17 @@ const updateLogFallback = "No update activity recorded yet."
 type ManagerHandlers struct {
 	manager   *manager.Manager
 	userStore *manager.UserStore
+	hub       *middleware.Hub
 }
 
 // NewManagerHandlers constructs a handler set bound to the provided Manager and UserStore.
 func NewManagerHandlers(mgr *manager.Manager, us *manager.UserStore) *ManagerHandlers {
 	return &ManagerHandlers{manager: mgr, userStore: us}
+}
+
+// NewManagerHandlersWithHub constructs handlers with an attached websocket hub for realtime updates.
+func NewManagerHandlersWithHub(mgr *manager.Manager, us *manager.UserStore, hub *middleware.Hub) *ManagerHandlers {
+	return &ManagerHandlers{manager: mgr, userStore: us, hub: hub}
 }
 
 func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[string]map[string]gin.H) {

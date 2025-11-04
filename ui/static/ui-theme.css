@@ -263,8 +263,8 @@ body {
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
     text-decoration: none;
-    background: rgba(255, 255, 255, 0.08);
-    color: inherit;
+    background: var(--surface-subtle);
+    color: var(--text-primary);
     backdrop-filter: blur(6px);
 }
 
@@ -287,9 +287,10 @@ body {
 }
 
 .btn-secondary {
-    background: rgba(15, 23, 42, 0.16);
-    color: rgba(248, 250, 252, 0.96);
-    border-color: rgba(255, 255, 255, 0.2);
+    /* Make secondary buttons visibly active (not disabled-looking) */
+    background: linear-gradient(128deg, #9ca3af 0%, #6b7280 100%); /* gray-400 -> gray-500 */
+    color: #f8fafc;
+    border-color: rgba(107, 114, 128, 0.5);
 }
 
 .btn-danger,
@@ -304,6 +305,17 @@ body {
     background: linear-gradient(128deg, #22c55e 0%, #16a34a 100%);
     color: white;
     border-color: rgba(34, 197, 94, 0.42);
+}
+
+/* Default look for control buttons without explicit variant (e.g., Save/Resume) */
+.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm) {
+    background: linear-gradient(128deg, #0ea5e9 0%, #0284c7 100%); /* sky-500 -> sky-600 */
+    color: #f0f9ff;
+    border-color: rgba(14, 165, 233, 0.48);
+}
+
+.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm):hover {
+    box-shadow: 0 12px 28px rgba(2, 132, 199, 0.35);
 }
 
 /* Storm (gray) action */
@@ -430,6 +442,13 @@ body {
     align-items: center;
     justify-content: space-between;
     gap: var(--space-2);
+}
+
+/* Right-aligned group for header badges (status + storm) */
+.card-header .status-badges {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
 }
 
 .card-title {
@@ -727,6 +746,58 @@ body {
     border-color: rgba(239, 68, 68, 0.3);
     color: #fca5a5;
 }
+
+/* Paused: distinct amber tone so it's not confused with stopped */
+.status-pill.is-paused {
+    background: rgba(245, 158, 11, 0.16); /* amber tint */
+    border-color: rgba(245, 158, 11, 0.30);
+    color: #fbbf24; /* amber-400 */
+}
+
+/* Starting: brighter yellow tone distinct from paused */
+.status-pill.is-starting {
+    background: rgba(250, 204, 21, 0.18); /* yellow-400 tint */
+    border-color: rgba(250, 204, 21, 0.32);
+    color: #facc15; /* yellow-400 */
+}
+
+/* Storm status pill variants */
+.status-pill.is-clear {
+    background: rgba(14, 165, 233, 0.16); /* sky-500 tint */
+    border-color: rgba(14, 165, 233, 0.28);
+    color: #38bdf8; /* sky-400 */
+}
+.status-pill.is-storm {
+    background: rgba(147, 51, 234, 0.16); /* purple-600 tint */
+    border-color: rgba(147, 51, 234, 0.28);
+    color: #a855f7; /* purple-500 */
+}
+
+/* Place multiple pills with a small gap */
+.card-header .status-pill + .status-pill { margin-left: var(--space-2); }
+
+/* Dashboard server card: render status pills as simple dots */
+.server-card .card-header .status-pill {
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: middle;
+    line-height: 0;
+    font-size: 0; /* hide any text nodes */
+}
+.server-card .card-header .status-pill > * { display: none !important; }
+.server-card .card-header .status-pill + .status-pill { margin-left: 6px; }
+
+/* Make dot colors solid for visibility at small size */
+.server-card .card-header .status-pill.is-running { background: var(--success-500); }
+.server-card .card-header .status-pill.is-stopped { background: var(--danger-500); }
+.server-card .card-header .status-pill.is-paused { background: var(--warning-500); }
+.server-card .card-header .status-pill.is-starting { background: #facc15; }
+.server-card .card-header .status-pill.is-clear { background: #38bdf8; }
+.server-card .card-header .status-pill.is-storm { background: #a855f7; }
 
 .form-grid {
     display: grid;
