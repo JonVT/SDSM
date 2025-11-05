@@ -77,15 +77,14 @@
                     View Log
                 </button>
             </div>
-            <div class="control-row" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border-color); justify-content: space-between;">
-                <!-- More/Less toggle left-justified on the card, inline with buttons -->
+            <div class="control-row sep-top justify-between">
                 <button type="button" id="control-more-toggle" class="card-more-link" aria-expanded="false" title="Show advanced actions">
                     <svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                     <span style="margin-left:6px;">More</span>
                 </button>
-                <div class="control-actions" style="width:auto; margin-left:auto;">
+                <div class="control-actions ml-auto">
                     <div class="button-group">
                         <div id="server-update-progress" class="update-progress compact" aria-live="polite">
                             <div class="update-progress-bar">
@@ -114,7 +113,7 @@
             </div>
         </div>
 
-        <!-- Expandable More section placeholder -->
+        
         <div class="card-more-section" id="server-more-section" aria-hidden="true">
             <div class="control-section">
                 <div class="control-row">
@@ -147,7 +146,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- Footer removed: More/Less toggle moved inline with Update Server button -->
+        
     </form>
 </div>

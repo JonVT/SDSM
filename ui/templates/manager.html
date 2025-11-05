@@ -6,38 +6,21 @@
     <meta name="description" content="Stationeers Server Manager - Configuration and Updates">
     <title>Manager - Stationeers Server Manager</title>
     
-    <!-- Shared UI theme for consistent styling with Dashboard/Server pages -->
     <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
     <link rel="icon" href="/sdsm.png" type="image/png">
     
-    <!-- HTMX for dynamic interactions -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
-    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
-        .manager-header {
-            background: linear-gradient(120deg, rgba(37, 99, 235, 0.93) 0%, rgba(139, 92, 246, 0.93) 100%);
-            border-radius: var(--radius-xl);
-            padding: var(--space-4) var(--space-5);
-            margin-bottom: var(--space-5);
-            box-shadow: var(--shadow-lg);
-            color: #f8fafc;
-        }
-
+        
         /* Connection banner uses shared styles from ui-theme.css */
         
         
-        .button-group {
-            display: flex;
-            gap: var(--space-3);
-            justify-content: center;
-            margin-top: var(--space-4);
-            flex-wrap: wrap; /* allow wrapping when space is tight */
-        }
+        /* Use shared .button-group styles from ui-theme.css */
         
         #updating {
             max-height: 400px;
@@ -56,45 +39,7 @@
         }
         
         /* Theme toggle uses shared styles from ui-theme.css */
-
-        .setup-overlay {
-            position: fixed;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            backdrop-filter: blur(4px);
-            z-index: 10000;
-        }
-
-        .setup-overlay.hidden {
-            display: none;
-        }
-
-        .setup-modal {
-            background: var(--bg-secondary);
-            border-radius: var(--radius-xl, 24px);
-            padding: var(--space-7, 3rem);
-            max-width: 640px;
-            width: min(92%, 640px);
-            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
-            border: 1px solid var(--border-color);
-            max-height: 90vh;
-            overflow-y: auto;
-            animation: setupSlideIn 0.25s ease-out;
-        }
-
-        @keyframes setupSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-24px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+        
 
         /* Software card: keep long messages and progress text from pushing layout */
         .update-message {
@@ -125,203 +70,7 @@
         /* Allow long titles and progress text to wrap within first column */
         .component-title, .progress-text { overflow-wrap: anywhere; word-break: break-word; }
 
-        .setup-header {
-            text-align: center;
-            margin-bottom: var(--space-6, 2rem);
-        }
-
-        .setup-icon {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto var(--space-4);
-            border-radius: var(--radius-lg);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 32px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-        }
-
-        .setup-header h2 {
-            margin-bottom: var(--space-2);
-            font-size: var(--text-2xl);
-            color: var(--text-primary);
-        }
-
-        .setup-header p {
-            color: var(--text-secondary);
-            font-size: var(--text-sm);
-        }
-
-        .missing-components {
-            background: rgba(234, 179, 8, 0.1);
-            border-left: 4px solid rgba(202, 138, 4, 0.85);
-            border-radius: var(--radius-lg);
-            padding: var(--space-4, 1.5rem);
-            margin-bottom: var(--space-5, 1.5rem);
-        }
-
-        .missing-components h3 {
-            font-size: var(--text-base);
-            font-weight: 600;
-            color: #b45309;
-            margin-bottom: var(--space-2);
-        }
-
-        .missing-components ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .missing-components li {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2, 0.75rem);
-            padding: var(--space-2, 0.75rem) 0;
-            color: #92400e;
-            font-size: var(--text-sm);
-        }
-
-        .missing-components li::before {
-            content: "⚠️";
-        }
-
-        .missing-components.empty {
-            border-left-color: rgba(22, 163, 74, 0.7);
-            background: rgba(22, 163, 74, 0.12);
-        }
-
-        .missing-components.empty h3 {
-            color: #166534;
-        }
-
-        .missing-components .empty-message {
-            display: none;
-            color: #166534;
-            font-weight: 600;
-            font-size: var(--text-sm);
-        }
-
-        .missing-components.empty .empty-message {
-            display: block;
-        }
-
-        .missing-components.empty ul {
-            display: none;
-        }
-
-        .setup-error-box {
-            display: none;
-            background: rgba(248, 113, 113, 0.12);
-            border-left: 4px solid rgba(220, 38, 38, 0.9);
-            border-radius: var(--radius-lg);
-            padding: var(--space-4, 1.5rem);
-            margin-bottom: var(--space-5, 1.5rem);
-        }
-
-        .setup-error-box.active {
-            display: block;
-        }
-
-        .setup-error-box h3 {
-            font-size: var(--text-base);
-            font-weight: 600;
-            color: #b91c1c;
-            margin-bottom: var(--space-2);
-        }
-
-        .setup-error-box ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-
-        .setup-error-box li {
-            display: flex;
-            align-items: center;
-            gap: var(--space-2, 0.75rem);
-            padding: var(--space-2, 0.75rem) 0;
-            color: #b91c1c;
-            font-size: var(--text-sm);
-        }
-
-        .setup-error-box li::before {
-            content: "⛔";
-        }
-
-        .error-hint {
-            font-size: var(--text-xs);
-            color: #b91c1c;
-            margin-top: var(--space-2);
-        }
-
-        .setup-progress {
-            display: none;
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border-color);
-            padding: var(--space-4, 1.5rem);
-            margin-bottom: var(--space-5, 1.5rem);
-        }
-
-        .setup-progress.active {
-            display: block;
-        }
-
-        .setup-progress-text {
-            color: var(--text-secondary);
-            font-size: var(--text-sm);
-            margin-bottom: var(--space-3, 1rem);
-            text-align: center;
-        }
-
-        .setup-progress-bar {
-            width: 100%;
-            height: 10px;
-            background: var(--border-color);
-            border-radius: 999px;
-            overflow: hidden;
-        }
-
-        .setup-progress-fill {
-            height: 100%;
-            width: 0;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.3s ease;
-        }
-
-        .setup-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: var(--space-3, 1rem);
-        }
-
-        .setup-actions .btn {
-            min-width: 140px;
-        }
-
-        .setup-log-footer {
-            display: flex;
-            align-items: center;
-            gap: var(--space-3, 1rem);
-            margin-top: var(--space-5, 1.5rem);
-        }
-
-        .setup-log-footer .setup-log-text {
-            flex: 1;
-            font-size: var(--text-sm);
-            color: var(--text-secondary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            min-width: 0;
-        }
-
-        .setup-log-footer .btn {
-            flex-shrink: 0;
-        }
+        
 
         /* Inline spinner for action buttons */
         .btn-spinner {
@@ -623,31 +372,12 @@
 
             document.addEventListener('DOMContentLoaded', () => {
                 const buttons = Array.from(document.querySelectorAll('.update-trigger'));
-                const messageEl = document.getElementById('updateMessage');
                 const configForm = document.getElementById('configForm');
                 const configBtn = document.getElementById('updateConfigBtn');
                 const shutdownBtn = document.getElementById('shutdownBtn');
                 const restartBtn = document.getElementById('restartBtn');
                 
 
-                function showMessage(text, isError) {
-                    if (!messageEl) return;
-                    if (!text) {
-                        messageEl.classList.remove('active', 'error');
-                        messageEl.textContent = '';
-                        return;
-                    }
-                    messageEl.textContent = text;
-                    messageEl.classList.add('active');
-                    messageEl.classList.toggle('error', !!isError);
-                }
-
-                function setButtonsDisabled(disabled) {
-                    buttons.forEach((btn) => {
-                        btn.disabled = disabled;
-                        if (!disabled) showButtonSpinner(btn, false);
-                    });
-                }
 
                 // Wire up update buttons
                 buttons.forEach((btn) => {
@@ -1154,7 +884,7 @@
         <span id="connectionBannerText">Connection lost. Attempting to reconnect...</span>
         <button type="button" id="connectionBannerAction">Reload</button>
     </div>
-    <!-- Header (identical to Dashboard width: wrap in .container) -->
+    
     <div class="container">
     <header class="hero-card">
         <div class="hero-main">
@@ -1173,8 +903,8 @@
             </p>
             <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
         </div>
-        <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-            <div style="display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;">
+        <div class="hero-actions flex-col items-end">
+            <div class="row wrap">
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                 <span id="theme-icon">🌙</span>
             </button>
@@ -1208,7 +938,7 @@
     <main class="container">
         {{ if .game_data_warnings }}
         {{ if gt (len .game_data_warnings) 0 }}
-        <div class="alert alert-warning" role="status" aria-live="polite" style="margin-bottom: var(--space-4);">
+        <div class="alert alert-warning mb-4" role="status" aria-live="polite">
             <div class="alert-icon" aria-hidden="true">
                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -1271,7 +1001,7 @@
                 <div class="glass-card">
                     {{if not .updating}}
                     <div id="versions">
-                        <h3>Software Versions</h3><h6>(WIP)</h6>
+                        <h3>Software Versions</h3>
                         <form action="/update" method="POST" id="updateForm">
                             <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
                             <div class="table-container">
@@ -1285,7 +1015,7 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <!-- Move steamcmd to the top -->
+                                        
                                         <tr>
                                             <td>
                                                 <div class="component-title">steamcmd</div>
@@ -1439,7 +1169,6 @@
                 </div>
             </div>
             
-            <!-- User Management (collapsible) -->
             <div class="glass-card" id="userMgmtCard">
                 <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
                     <h3 class="card-title" style="margin:0;">User Management</h3>
@@ -1493,10 +1222,10 @@
                 </div>
             </div>
 
-            <!-- Footer with Actions -->
+            
             <div class="glass-card">
                 <p>There are <strong>{{.server_count_active}}</strong> servers currently running.</p>
-                <div class="button-group">
+                <div class="button-group centered gap-3 mt-4">
                     <form id="footerActionsForm" action="/update" method="POST" style="display: contents;">
                         <button id="shutdownBtn" type="submit" name="shutdown" value="1" class="btn btn-danger" {{if .updating}}disabled{{end}}>
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1610,351 +1339,7 @@
             });
         })();
     </script>
-
-        {{ $missingCount := len .missing_components }}
-        {{ $errorCount := len .deploy_errors }}
-        {{ $shouldShowSetup := or .needs_setup (or .setup_in_progress (or (gt $missingCount 0) (gt $errorCount 0))) }}
-        <div id="setupOverlay" class="setup-overlay{{if not $shouldShowSetup}} hidden{{end}}" data-needs="{{if .needs_setup}}true{{else}}false{{end}}" data-in-progress="{{if .setup_in_progress}}true{{else}}false{{end}}" data-log-fallback="{{.setup_log_fallback}}" data-last-log="{{.setup_last_log_line}}">
-            <div class="setup-modal" role="dialog" aria-modal="true" aria-labelledby="setupTitle">
-                <div class="setup-header">
-                    <div class="setup-icon">🔧</div>
-                    <h2 id="setupTitle">Initial Setup Required</h2>
-                    <p>We need to download a few components before everything is ready.</p>
-                </div>
-
-                <div id="setupMissingContainer" class="missing-components{{if eq $missingCount 0}} empty{{end}}">
-                    <h3>Missing Components</h3>
-                    <p id="setupMissingEmpty" class="empty-message">All components are present. You're good to go!</p>
-                    <ul id="setupMissingList">
-                        {{range .missing_components}}
-                        <li>{{.}}</li>
-                        {{end}}
-                    </ul>
-                </div>
-
-                <div id="setupErrorBox" class="setup-error-box{{if gt $errorCount 0}} active{{end}}">
-                    <h3>Installation Issues Detected</h3>
-                    <ul id="setupErrorList">
-                        {{range .deploy_errors}}
-                        <li>{{.}}</li>
-                        {{end}}
-                    </ul>
-                    <p class="error-hint">Review the setup log for details, then try again.</p>
-                </div>
-
-                <div id="setupProgress" class="setup-progress{{if .setup_in_progress}} active{{end}}">
-                    <div class="setup-progress-text" id="setupProgressText">{{if .setup_in_progress}}⏳ Installing components, please wait...{{else}}Ready when you are.{{end}}</div>
-                    <div class="setup-progress-bar">
-                        <div class="setup-progress-fill" id="setupProgressFill"></div>
-                    </div>
-                </div>
-
-                <div class="setup-actions">
-                    <button type="button" class="btn btn-secondary" id="setupSkipBtn">Skip for Now</button>
-                    <button type="button" class="btn btn-primary" id="setupStartBtn">Start Setup</button>
-                </div>
-
-                <div class="setup-log-footer">
-                    <a id="setupViewLogBtn" class="btn btn-secondary" href="/logs/updates" target="_blank" rel="noopener">
-                        View Log
-                    </a>
-                    <div class="setup-log-text" id="setupLogLine">
-                        {{if .setup_last_log_line}}Last log entry: {{.setup_last_log_line}}{{else}}Last log entry: {{.setup_log_fallback}}{{end}}
-                    </div>
-                </div>
-            </div>
-        </div>
     
-    <!-- Theme Toggle Script -->
-        <script>
-            (function () {
-                const overlay = document.getElementById('setupOverlay');
-                if (!overlay) {
-                    return;
-                }
-
-                const progressContainer = document.getElementById('setupProgress');
-                const progressFill = document.getElementById('setupProgressFill');
-                const progressText = document.getElementById('setupProgressText');
-                const setupButton = document.getElementById('setupStartBtn');
-                const skipButton = document.getElementById('setupSkipBtn');
-                const errorBox = document.getElementById('setupErrorBox');
-                const errorList = document.getElementById('setupErrorList');
-                const missingContainer = document.getElementById('setupMissingContainer');
-                const missingList = document.getElementById('setupMissingList');
-                const missingEmpty = document.getElementById('setupMissingEmpty');
-                const logLineElement = document.getElementById('setupLogLine');
-                const logFallback = overlay.dataset.logFallback || 'No update activity recorded yet.';
-                const logPrefix = '';
-                let lastLogValue = overlay.dataset.lastLog ? overlay.dataset.lastLog.trim() : '';
-
-                if (logLineElement) {
-                    logLineElement.textContent = logPrefix + (lastLogValue || logFallback);
-                }
-
-                let statusInterval = null;
-                let progressInterval = null;
-
-                function setButtonsDisabled(disabled) {
-                    if (setupButton) {
-                        setupButton.disabled = disabled;
-                    }
-                    if (skipButton) {
-                        skipButton.disabled = disabled;
-                    }
-                }
-
-                function updateErrorBox(errors) {
-                    if (!errorBox || !errorList) {
-                        return;
-                    }
-
-                    errorList.innerHTML = '';
-
-                    if (errors && errors.length) {
-                        errors.forEach((msg) => {
-                            const item = document.createElement('li');
-                            item.textContent = msg;
-                            errorList.appendChild(item);
-                        });
-                        errorBox.classList.add('active');
-                    } else {
-                        errorBox.classList.remove('active');
-                    }
-                }
-
-                function updateMissingComponents(items) {
-                    if (!missingContainer || !missingList || !missingEmpty) {
-                        return;
-                    }
-
-                    missingList.innerHTML = '';
-
-                    if (!items || !items.length) {
-                        missingContainer.classList.add('empty');
-                        return;
-                    }
-
-                    missingContainer.classList.remove('empty');
-                    items.forEach((item) => {
-                        const li = document.createElement('li');
-                        li.textContent = item;
-                        missingList.appendChild(li);
-                    });
-                }
-
-                function stopProgressAnimation() {
-                    if (progressInterval) {
-                        clearInterval(progressInterval);
-                        progressInterval = null;
-                    }
-                }
-
-                function startProgressAnimation() {
-                    stopProgressAnimation();
-                    if (progressFill) {
-                        progressFill.style.width = '0%';
-                    }
-                    let width = 0;
-                    progressInterval = setInterval(() => {
-                        width += 1;
-                        if (progressFill && width <= 95) {
-                            progressFill.style.width = width + '%';
-                        }
-                        if (width > 95) {
-                            stopProgressAnimation();
-                        }
-                    }, 300);
-                }
-
-                function showOverlay() {
-                    overlay.classList.remove('hidden');
-                }
-
-                function hideOverlay() {
-                    overlay.classList.add('hidden');
-                    overlay.dataset.needs = 'false';
-                    overlay.dataset.inProgress = 'false';
-                }
-
-                function stopStatusPolling() {
-                    if (statusInterval) {
-                        clearInterval(statusInterval);
-                        statusInterval = null;
-                    }
-                }
-
-                function startStatusPolling() {
-                    stopStatusPolling();
-                    statusInterval = setInterval(checkSetupStatus, 2000);
-                    checkSetupStatus();
-                }
-
-                function handleSetupStart() {
-                    setButtonsDisabled(true);
-                    if (progressContainer) {
-                        progressContainer.classList.add('active');
-                    }
-                    if (progressText) {
-                        progressText.textContent = '⏳ Installing components, please wait...';
-                    }
-                    startProgressAnimation();
-                    showOverlay();
-
-                    fetch('/setup/install', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        }
-                    }).then((response) => {
-                        if (!response.ok) {
-                            throw new Error('Failed to start setup');
-                        }
-                        overlay.dataset.inProgress = 'true';
-                        startStatusPolling();
-                    }).catch((error) => {
-                        stopProgressAnimation();
-                        if (progressText) {
-                            progressText.textContent = `⚠️ ${error.message}`;
-                        }
-                        setButtonsDisabled(false);
-                    });
-                }
-
-                function skipSetup() {
-                    setButtonsDisabled(true);
-                    fetch('/setup/skip', {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    }).then((response) => {
-                        if (!response.ok) {
-                            throw new Error('Failed to skip setup');
-                        }
-                        return response.json();
-                    }).then(() => {
-                        stopProgressAnimation();
-                        stopStatusPolling();
-                        hideOverlay();
-                    }).catch((error) => {
-                        if (progressText) {
-                            progressText.textContent = `⚠️ ${error.message}`;
-                        }
-                        setButtonsDisabled(false);
-                    });
-                }
-
-                function checkSetupStatus() {
-                    fetch('/setup/status', {
-                        headers: {
-                            'Accept': 'application/json'
-                        }
-                    })
-                        .then((response) => response.json())
-                        .then((data) => {
-                            overlay.dataset.needs = data.needsUploadPrompt ? 'true' : 'false';
-                            overlay.dataset.inProgress = data.inProgress ? 'true' : 'false';
-
-                            updateMissingComponents(data.missingComponents || []);
-                            updateErrorBox(data.errors || []);
-
-                            const lastLog = (data.lastUpdateLog || '').trim();
-                            lastLogValue = lastLog;
-                            overlay.dataset.lastLog = lastLog;
-                            if (logLineElement) {
-                                logLineElement.textContent = logPrefix + (lastLog || logFallback);
-                            }
-
-                            const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
-
-                            if (data.inProgress) {
-                                if (progressContainer) {
-                                    progressContainer.classList.add('active');
-                                }
-                                if (progressText) {
-                                    progressText.textContent = '⏳ Installing components, please wait...';
-                                }
-                                if (!progressInterval) {
-                                    startProgressAnimation();
-                                }
-                                setButtonsDisabled(true);
-                                showOverlay();
-                                return;
-                            }
-
-                            stopProgressAnimation();
-                            if (progressFill) {
-                                progressFill.style.width = stillMissing ? '0%' : '100%';
-                            }
-
-                            if (data.errors && data.errors.length) {
-                                if (progressContainer) {
-                                    progressContainer.classList.add('active');
-                                }
-                                if (progressText) {
-                                    progressText.textContent = '⚠️ Setup encountered errors. Review the details below.';
-                                }
-                                setButtonsDisabled(false);
-                                showOverlay();
-                                return;
-                            }
-
-                            if (!data.needsUploadPrompt && !stillMissing) {
-                                if (progressContainer) {
-                                    progressContainer.classList.add('active');
-                                }
-                                if (progressText) {
-                                    progressText.textContent = '✅ Setup complete! Refreshing…';
-                                }
-                                setButtonsDisabled(true);
-                                stopStatusPolling();
-                                setTimeout(() => {
-                                    hideOverlay();
-                                    window.location.reload();
-                                }, 800);
-                            } else {
-                                if (progressContainer) {
-                                    progressContainer.classList.add('active');
-                                }
-                                if (progressText) {
-                                    progressText.textContent = '⚠️ Some components are still missing. Please try again.';
-                                }
-                                setButtonsDisabled(false);
-                                showOverlay();
-                            }
-                        })
-                        .catch((error) => {
-                            console.error('Error checking setup status:', error);
-                        });
-                }
-
-                if (setupButton) {
-                    setupButton.addEventListener('click', handleSetupStart);
-                }
-
-                if (skipButton) {
-                    skipButton.addEventListener('click', skipSetup);
-                }
-
-                const shouldAutoShow = overlay.dataset.needs === 'true' || overlay.dataset.inProgress === 'true';
-                if (shouldAutoShow) {
-                    showOverlay();
-                    if (overlay.dataset.inProgress === 'true') {
-                        setButtonsDisabled(true);
-                        if (progressContainer) {
-                            progressContainer.classList.add('active');
-                        }
-                        if (progressText) {
-                            progressText.textContent = '⏳ Installing components, please wait...';
-                        }
-                        startProgressAnimation();
-                    }
-                    startStatusPolling();
-                }
-            })();
-        </script>
     <script>
         // Theme management
         function getStoredTheme() {
@@ -1980,6 +1365,7 @@
     
     
     {{ template "toast.html" . }}
+    {{ template "footer" . }}
 </body>
 
 </html>

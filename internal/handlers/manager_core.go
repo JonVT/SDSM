@@ -8,13 +8,13 @@ import (
 	"strings"
 
 	"sdsm/internal/manager"
-	"sdsm/internal/models"
 	"sdsm/internal/middleware"
+	"sdsm/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
 
-const updateLogFallback = "No update activity recorded yet."
+// note: setup overlay moved to /setup; no fallback string needed here
 
 // ManagerHandlers wires HTTP handlers to a Manager instance.
 type ManagerHandlers struct {
@@ -362,7 +362,12 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	deployErrors := h.manager.GetDeployErrors()
 	needsSetup := h.manager.NeedsUploadPrompt
 	setupInProgress := h.manager.SetupInProgress
-	lastLogLine := h.manager.LastUpdateLogLine()
+
+	// If setup is required or in progress, send users to the dedicated Setup page
+	if needsSetup || setupInProgress || len(missingComponents) > 0 || len(deployErrors) > 0 {
+		c.Redirect(http.StatusFound, "/setup")
+		return
+	}
 
 	// Build lightweight game-data warnings if scanners return empty sets
 	relLangs := h.manager.GetLanguagesForVersion(false)
@@ -419,12 +424,6 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"server_count":        h.manager.ServerCount(),
 		"server_count_active": h.manager.ServerCountActive(),
 		"updating":            h.manager.IsUpdating(),
-		"needs_setup":         needsSetup,
-		"setup_in_progress":   setupInProgress,
-		"missing_components":  missingComponents,
-		"deploy_errors":       deployErrors,
-		"setup_last_log_line": lastLogLine,
-		"setup_log_fallback":  updateLogFallback,
 		"game_data_warnings":  warnings,
 	}
 	c.HTML(http.StatusOK, "manager.html", data)

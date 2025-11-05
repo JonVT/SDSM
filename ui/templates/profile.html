@@ -16,8 +16,8 @@
     .profile-form .form-group label { margin: 0; color: var(--text-secondary); font-weight: 600; }
     @media (max-width: 640px) { .profile-form .form-group { grid-template-columns: 1fr; } }
     .hint { font-size: var(--text-sm); margin-top: 4px; }
-    .hint.ok { color: #16a34a; }
-    .hint.bad { color: #dc2626; }
+    .hint.ok { color: var(--success-500); }
+    .hint.bad { color: var(--danger-500); }
   </style>
 </head>
 <body class="page-shell">
@@ -36,8 +36,8 @@
           <strong>{{ .username }}</strong> • <span class="pill">{{ if .role }}{{ .role }}{{ else }}user{{ end }}</span>
         </p>
       </div>
-      <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-        <div style="display: flex; align-items: center; gap: var(--space-2);">
+      <div class="hero-actions flex-col items-end">
+        <div class="row">
           <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
             <span id="theme-icon">🌙</span>
           </button>
@@ -51,7 +51,7 @@
           </a>
           {{ template "user_menu" . }}
         </div>
-        <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+        <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
       </div>
     </header>
   </div>
@@ -61,7 +61,7 @@
       <h3>Change Password</h3>
       <div id="profile-flags" data-success="{{ if .success }}{{ .success }}{{ end }}" data-error="{{ if .error }}{{ .error }}{{ end }}" hidden></div>
       {{ if .error }}
-        <div class="alert alert-error" role="alert" style="margin-bottom: var(--space-3);">
+        <div class="alert alert-error mb-3" role="alert">
           <div class="alert-content">
             <div class="alert-title">Update Failed</div>
             <div class="alert-message">{{ .error }}</div>
@@ -69,7 +69,7 @@
         </div>
       {{ end }}
       {{ if .success }}
-        <div class="alert alert-success" role="status" style="margin-bottom: var(--space-3);">
+        <div class="alert alert-success mb-3" role="status">
           <div class="alert-content">
             <div class="alert-title">Success</div>
             <div class="alert-message">{{ .success }}</div>

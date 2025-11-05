@@ -81,24 +81,24 @@ type Chat struct {
 // ServerConfig is a lightweight input model used to create a new server.
 // It mirrors fields persisted on Server for initial setup.
 type ServerConfig struct {
-	Name                string
-	World               string
-	WorldID             string
-	Language            string
-	StartLocation       string
-	StartCondition      string
-	Difficulty          string
-	Port                int
-	Password            string
-	AuthSecret          string
-	MaxClients          int
-	SaveInterval        int
-	Visible             bool
-	Beta                bool
-	AutoStart           bool
-	AutoUpdate          bool
-	AutoSave            bool
-	AutoPause           bool
+	Name           string
+	World          string
+	WorldID        string
+	Language       string
+	StartLocation  string
+	StartCondition string
+	Difficulty     string
+	Port           int
+	Password       string
+	AuthSecret     string
+	MaxClients     int
+	SaveInterval   int
+	Visible        bool
+	Beta           bool
+	AutoStart      bool
+	AutoUpdate     bool
+	AutoSave       bool
+	AutoPause      bool
 	// Additional server settings
 	MaxAutoSaves          int
 	MaxQuickSaves         int
@@ -106,67 +106,67 @@ type ServerConfig struct {
 	UseSteamP2P           bool
 	DisconnectTimeout     int
 	// PlayerSaves enables automatic save creation when players connect.
-	PlayerSaves           bool
+	PlayerSaves bool
 	// ShutdownDelaySeconds: seconds to wait after Stop is requested before issuing QUIT
 	ShutdownDelaySeconds int
-	Mods                []string
-	RestartDelaySeconds int
+	Mods                 []string
+	RestartDelaySeconds  int
 	// WelcomeMessage is an optional chat message broadcast when a player connects
-	WelcomeMessage      string
+	WelcomeMessage string
 }
 
 // Server represents a managed dedicated server instance, including
 // runtime state, settings, logs, and client/chat history.
 type Server struct {
-	ID                  int           `json:"id"`
-	Proc                *exec.Cmd     `json:"-"`
-	Thrd                chan bool     `json:"-"`
-	Logger              *utils.Logger `json:"-"`
-	Paths               *utils.Paths  `json:"-"`
-	Name                string        `json:"name"`
-	World               string        `json:"world"`
-	WorldID             string        `json:"world_id"`
-	Language            string        `json:"language"`
-	StartLocation       string        `json:"start_location"`
-	StartCondition      string        `json:"start_condition"`
-	Difficulty          string        `json:"difficulty"`
-	Port                int           `json:"port"`
-	SaveInterval        int           `json:"save_interval"`
-	AuthSecret          string        `json:"auth_secret"`
-	Password            string        `json:"password"`
-	MaxClients          int           `json:"max_clients"`
-	Visible             bool          `json:"visible"`
-	Beta                bool          `json:"beta"`
-	AutoStart           bool          `json:"auto_start"`
-	AutoUpdate          bool          `json:"auto_update"`
-	AutoSave            bool          `json:"auto_save"`
-	AutoPause           bool          `json:"auto_pause"`
+	ID             int           `json:"id"`
+	Proc           *exec.Cmd     `json:"-"`
+	Thrd           chan bool     `json:"-"`
+	Logger         *utils.Logger `json:"-"`
+	Paths          *utils.Paths  `json:"-"`
+	Name           string        `json:"name"`
+	World          string        `json:"world"`
+	WorldID        string        `json:"world_id"`
+	Language       string        `json:"language"`
+	StartLocation  string        `json:"start_location"`
+	StartCondition string        `json:"start_condition"`
+	Difficulty     string        `json:"difficulty"`
+	Port           int           `json:"port"`
+	SaveInterval   int           `json:"save_interval"`
+	AuthSecret     string        `json:"auth_secret"`
+	Password       string        `json:"password"`
+	MaxClients     int           `json:"max_clients"`
+	Visible        bool          `json:"visible"`
+	Beta           bool          `json:"beta"`
+	AutoStart      bool          `json:"auto_start"`
+	AutoUpdate     bool          `json:"auto_update"`
+	AutoSave       bool          `json:"auto_save"`
+	AutoPause      bool          `json:"auto_pause"`
 	// Additional server settings persisted in sdsm.config
-	MaxAutoSaves          int           `json:"max_auto_saves"`
-	MaxQuickSaves         int           `json:"max_quick_saves"`
-	DeleteSkeletonOnDecay bool          `json:"delete_skeleton_on_decay"`
-	UseSteamP2P           bool          `json:"use_steam_p2p"`
-	DisconnectTimeout     int           `json:"disconnect_timeout"`
+	MaxAutoSaves          int  `json:"max_auto_saves"`
+	MaxQuickSaves         int  `json:"max_quick_saves"`
+	DeleteSkeletonOnDecay bool `json:"delete_skeleton_on_decay"`
+	UseSteamP2P           bool `json:"use_steam_p2p"`
+	DisconnectTimeout     int  `json:"disconnect_timeout"`
 	// PlayerSaves persists the preference to auto-save when players connect
-	PlayerSaves         bool          `json:"player_saves"`
+	PlayerSaves bool `json:"player_saves"`
 	// PlayerSaveExcludes lists Steam IDs for which player-save automation should be skipped
-	PlayerSaveExcludes []string      `json:"player_save_excludes"`
+	PlayerSaveExcludes []string `json:"player_save_excludes"`
 	// ShutdownDelaySeconds controls how long to wait after stop button before issuing QUIT
-	ShutdownDelaySeconds int           `json:"shutdown_delay_seconds"`
-	Mods                []string      `json:"mods"`
-	RestartDelaySeconds int           `json:"restart_delay_seconds"`
-	SCONPort            int           `json:"scon_port"` // Port for SCON plugin HTTP API
+	ShutdownDelaySeconds int      `json:"shutdown_delay_seconds"`
+	Mods                 []string `json:"mods"`
+	RestartDelaySeconds  int      `json:"restart_delay_seconds"`
+	SCONPort             int      `json:"scon_port"` // Port for SCON plugin HTTP API
 	// WelcomeMessage is sent as a chat/SAY message each time a player connects (if non-empty)
-	WelcomeMessage      string        `json:"welcome_message"`
-	ServerStarted       *time.Time    `json:"server_started,omitempty"`
-	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
-	Clients             []*Client     `json:"-"`
-	Chat                []*Chat       `json:"-"`
-	Storming            bool          `json:"-"`
-	Paused              bool          `json:"-"`
-	Starting            bool          `json:"-"`
-	Running             bool          `json:"-"`
-	LastLogLine         string        `json:"-"`
+	WelcomeMessage string     `json:"welcome_message"`
+	ServerStarted  *time.Time `json:"server_started,omitempty"`
+	ServerSaved    *time.Time `json:"server_saved,omitempty"`
+	Clients        []*Client  `json:"-"`
+	Chat           []*Chat    `json:"-"`
+	Storming       bool       `json:"-"`
+	Paused         bool       `json:"-"`
+	Starting       bool       `json:"-"`
+	Running        bool       `json:"-"`
+	LastLogLine    string     `json:"-"`
 	// LastError is a human-readable description of the last fatal/startup error detected from logs.
 	LastError string `json:"last_error,omitempty"`
 	// LastErrorAt records when LastError was updated.
@@ -181,8 +181,8 @@ type Server struct {
 	playersLogDirty     bool
 	// pendingPlayerSave holds filenames (e.g., ddmmyy_hhmmss_steamid.save) queued to move
 	// from manualsave to playersave once the game logs indicate the save completed.
-	pendingPlayerSaveMu sync.Mutex
-	pendingPlayerSave   []string
+	pendingPlayerSaveMu  sync.Mutex
+	pendingPlayerSave    []string
 	lastPlayerSaveQueued map[string]time.Time
 }
 
@@ -213,9 +213,13 @@ func (s *Server) queuePendingPlayerSave(filename string) {
 // shouldEnqueuePlayerSave dedupes rapid successive queues per steam ID.
 // Returns true if we should enqueue now; enforce a min interval of 10s per SteamID.
 func (s *Server) shouldEnqueuePlayerSave(steamID string, at time.Time) bool {
-	if s == nil { return false }
+	if s == nil {
+		return false
+	}
 	id := strings.TrimSpace(steamID)
-	if id == "" { return false }
+	if id == "" {
+		return false
+	}
 	s.pendingPlayerSaveMu.Lock()
 	defer s.pendingPlayerSaveMu.Unlock()
 	if s.lastPlayerSaveQueued == nil {
@@ -289,9 +293,13 @@ func (s *Server) tryMoveNextPendingPlayerSave() {
 // HasPlayerSaveExclude returns true if the Steam ID is present in the exclusion list.
 func (s *Server) HasPlayerSaveExclude(id string) bool {
 	id = strings.TrimSpace(id)
-	if id == "" || s == nil { return false }
+	if id == "" || s == nil {
+		return false
+	}
 	for _, v := range s.PlayerSaveExcludes {
-		if strings.EqualFold(v, id) { return true }
+		if strings.EqualFold(v, id) {
+			return true
+		}
 	}
 	return false
 }
@@ -299,8 +307,12 @@ func (s *Server) HasPlayerSaveExclude(id string) bool {
 // AddPlayerSaveExclude appends a Steam ID to the exclusion list if missing.
 func (s *Server) AddPlayerSaveExclude(id string) bool {
 	id = strings.TrimSpace(id)
-	if id == "" || s == nil { return false }
-	if s.HasPlayerSaveExclude(id) { return false }
+	if id == "" || s == nil {
+		return false
+	}
+	if s.HasPlayerSaveExclude(id) {
+		return false
+	}
 	s.PlayerSaveExcludes = append(s.PlayerSaveExcludes, id)
 	return true
 }
@@ -975,14 +987,14 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 
 func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 	s := &Server{
-		ID:                  serverID,
-		Paths:               paths,
-		Clients:             []*Client{},
-		Chat:                []*Chat{},
-		Mods:                []string{},
-		Paused:              false,
-		Running:             false,
-		RestartDelaySeconds: DefaultRestartDelaySeconds,
+		ID:                   serverID,
+		Paths:                paths,
+		Clients:              []*Client{},
+		Chat:                 []*Chat{},
+		Mods:                 []string{},
+		Paused:               false,
+		Running:              false,
+		RestartDelaySeconds:  DefaultRestartDelaySeconds,
 		ShutdownDelaySeconds: 2,
 	}
 
@@ -1347,33 +1359,45 @@ func (s *Server) Stop() {
 		formatTimeframe := func(d time.Duration) string {
 			secs := int(d.Seconds())
 			if secs < 60 {
-				if secs == 1 { return "1 second" }
+				if secs == 1 {
+					return "1 second"
+				}
 				return fmt.Sprintf("%d seconds", secs)
 			}
 			m := secs / 60
 			sRem := secs % 60
 			if sRem == 0 {
-				if m == 1 { return "1 minute" }
+				if m == 1 {
+					return "1 minute"
+				}
 				return fmt.Sprintf("%d minutes", m)
 			}
 			if m == 1 {
-				if sRem == 1 { return "1 minute 1 second" }
+				if sRem == 1 {
+					return "1 minute 1 second"
+				}
 				return fmt.Sprintf("1 minute %d seconds", sRem)
 			}
-			if sRem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+			if sRem == 1 {
+				return fmt.Sprintf("%d minutes 1 second", m)
+			}
 			return fmt.Sprintf("%d minutes %d seconds", m, sRem)
 		}
 
 		if delay > 0 {
 			// Initial notice with full timeframe
 			if err := s.SendCommand("chat", "Server is shutting down in "+formatTimeframe(delay)); err != nil {
-				if s.Logger != nil { s.Logger.Write(fmt.Sprintf("Failed to send shutdown notice: %v", err)) }
+				if s.Logger != nil {
+					s.Logger.Write(fmt.Sprintf("Failed to send shutdown notice: %v", err))
+				}
 			}
 			// Second notice at T-10s when there is enough time
 			if delay > 10*time.Second {
 				time.Sleep(delay - 10*time.Second)
 				if err := s.SendCommand("chat", "Server is shutting down in 10 seconds"); err != nil {
-					if s.Logger != nil { s.Logger.Write(fmt.Sprintf("Failed to send 10s notice: %v", err)) }
+					if s.Logger != nil {
+						s.Logger.Write(fmt.Sprintf("Failed to send 10s notice: %v", err))
+					}
 				}
 				time.Sleep(10 * time.Second)
 			} else {
@@ -1588,7 +1612,12 @@ func (s *Server) Start() {
 		"MaxQuickSaves", strconv.Itoa(max(1, s.MaxQuickSaves)),
 		"DeleteSkeletonOnDecay", strconv.FormatBool(s.DeleteSkeletonOnDecay),
 		"UseSteamP2P", strconv.FormatBool(s.UseSteamP2P),
-		"DisconnectTimeout", strconv.Itoa(func(v int) int { if v <= 0 { return 10000 } ; return v }(s.DisconnectTimeout)),
+		"DisconnectTimeout", strconv.Itoa(func(v int) int {
+			if v <= 0 {
+				return 10000
+			}
+			return v
+		}(s.DisconnectTimeout)),
 	}
 	s.Logger.Write(fmt.Sprintf("Starting server %d with command line: %v %v", s.ID, executablePath, args))
 
@@ -1765,9 +1794,15 @@ func (s *Server) SendRaw(line string) error {
 	}
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
+		if s.Logger != nil {
+			s.Logger.Write("Command send aborted: empty command")
+		}
 		return fmt.Errorf("empty command")
 	}
 	if !s.IsRunning() || s.Proc == nil {
+		if s.Logger != nil {
+			s.Logger.Write("Command send failed: server is not running")
+		}
 		return fmt.Errorf("server is not running")
 	}
 
@@ -1793,19 +1828,33 @@ func (s *Server) SendRaw(line string) error {
 	}
 	reqBody, err := json.Marshal(CommandRequest{Command: trimmed})
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Command marshal failed: %v", err))
+		}
 		return fmt.Errorf("failed to marshal command: %w", err)
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/command", rconPort)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(reqBody))
 	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("SCON HTTP POST failed: %v", err))
+		}
 		return fmt.Errorf("failed to send command to SCON API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("SCON API returned status %d: %s", resp.StatusCode, string(body))
+		// Log truncated body to avoid huge logs
+		bodyStr := string(body)
+		if len(bodyStr) > 1024 {
+			bodyStr = bodyStr[:1024] + "…"
+		}
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("SCON API error %d: %s", resp.StatusCode, bodyStr))
+		}
+		return fmt.Errorf("SCON API returned status %d: %s", resp.StatusCode, bodyStr)
 	}
 
 	return nil
@@ -1824,8 +1873,9 @@ func (s *Server) SendCommand(kind, payload string) error {
 	case "", "console":
 		return s.SendRaw(msg)
 	case "chat":
-		// Prefix with 'say' which many servers use; adjust if Stationeers expects a different verb
-		return s.SendRaw("say " + msg)
+		// Stationeers console command is 'SAY' (case-sensitive in some contexts)
+		// Use uppercase and pass the message directly.
+		return s.SendRaw("SAY " + msg)
 	default:
 		// Unknown type, treat as console
 		return s.SendRaw(msg)

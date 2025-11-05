@@ -1,20 +1,38 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>User Management - SDSM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/modern.css">
-  <link rel="stylesheet" href="/static/ui-theme.css">
+  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
   <link rel="icon" href="/sdsm.png" type="image/png">
 </head>
-<body>
-  <div class="container" style="max-width: 1000px; margin: 32px auto;">
-    <header style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 16px;">
-      <h1 class="h2">User Management</h1>
-      <a href="/manager" class="btn btn-secondary">Back to Manager</a>
+<body class="page-shell">
+  <div class="container">
+    <header class="hero-card">
+      <div class="hero-main">
+        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+        <div class="hero-heading">
+          <h1 class="hero-title">User Management</h1>
+          <p class="hero-subtitle">Create, update, and remove local users and roles.</p>
+        </div>
+      </div>
+      <div class="hero-actions row">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <span id="theme-icon">🌙</span>
+        </button>
+        <a href="/manager" class="btn btn-secondary">Back to Manager</a>
+        {{ template "user_menu" . }}
+      </div>
     </header>
 
+  </div>
+
+  <main class="container manager-content">
     {{ if .error }}
     <div class="alert alert-danger" role="alert">{{ .error }}</div>
     {{ end }}
@@ -63,7 +81,7 @@
               <td>{{ .Role }}</td>
               <td>{{ .CreatedAt }}</td>
               <td>
-                <form method="POST" action="/users" style="display:inline-flex; gap: 8px; align-items: center;">
+                <form method="POST" action="/users" class="inline-flex" style="gap: 8px; align-items: center;">
                   <input type="hidden" name="set_role_user" value="{{ .Username }}" />
                   <select name="set_role_value" class="form-input" style="width: 160px;">
                     <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
@@ -71,7 +89,7 @@
                   </select>
                   <button type="submit" class="btn btn-secondary">Update Role</button>
                 </form>
-                <form method="POST" action="/users" style="display:inline-flex; gap: 8px; align-items: center; margin-left: 8px;">
+                <form method="POST" action="/users" class="inline-flex" style="gap: 8px; align-items: center; margin-left: 8px;">
                   <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
                   <input name="reset_password_value" type="password" class="form-input" placeholder="new password" style="width: 160px;" />
                   <button type="submit" class="btn btn-secondary">Set Password</button>
@@ -86,6 +104,25 @@
         </table>
       </div>
     </section>
-  </div>
+  </main>
+
+  {{ template "footer" . }}
+
+  <script>
+    function getStoredTheme() {
+      return localStorage.getItem('theme') || 'dark';
+    }
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      const icon = document.getElementById('theme-icon');
+      if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    }
+    setTheme(getStoredTheme());
+  </script>
 </body>
 </html>

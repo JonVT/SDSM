@@ -10,7 +10,7 @@
                 <span class="readonly-field">{{.serverPath}}</span>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="name">Name:</label>
                     <input type="text" id="name" name="name" value="{{.server.Name}}" class="form-input-inline" placeholder="Server Name" autocomplete="off">
@@ -21,7 +21,7 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2);">
+            <div class="form-row grid-2">
                 <div>
                     <label for="world">World:</label>
                     <select name="world" id="world" class="form-select-inline" aria-label="World">
@@ -36,7 +36,7 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2);">
+            <div class="form-row grid-2">
                 <div>
                     <label for="start_condition">Start Condition:</label>
                     <select name="start_condition" id="start_condition" class="form-select-inline" aria-label="Start Condition">
@@ -51,7 +51,7 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="max_clients">Max Players:</label>
                     <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-input-inline" placeholder="8" autocomplete="off">
@@ -62,7 +62,7 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="restart_delay_seconds">Restart Delay (sec):</label>
                     <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off">
@@ -81,7 +81,7 @@
 
             
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="auth_secret">Auth Secret:</label>
                     <input type="text" id="auth_secret" name="auth_secret" value="{{.server.AuthSecret}}" class="form-input-inline" placeholder="Auth Secret" autocomplete="off">
@@ -92,7 +92,7 @@
                 </div>
             </div>
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:center;">
+            <div class="form-row grid-2 grid-items-center">
                 <div>
                     <label>Game Version:</label>
                     <div class="radio-group">
@@ -114,7 +114,7 @@
 
             
 
-            <div class="form-row" style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); align-items:end;">
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="max_auto_saves">Max Auto Saves:</label>
                     <input type="number" id="max_auto_saves" name="max_auto_saves" value="{{.server.MaxAutoSaves}}" class="form-input-inline" min="1" max="1000" placeholder="5" autocomplete="off">
@@ -126,7 +126,6 @@
             </div>
 
             
-            <!-- Group all checkbox options together (compact, no visible label) -->
             <div class="form-row form-row-full" style="display:block;">
                 <div class="checkbox-inline" style="display:flex; flex-wrap: wrap; gap: var(--space-3);">
                     <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
@@ -139,7 +138,7 @@
                 </div>
             </div>
         </div>
-        <div class="control-actions" style="margin-top: var(--space-3);">
+        <div class="control-actions mt-3">
             <button type="submit" name="update" value="true" class="btn btn-primary btn-min-lg" title="Apply the startup parameter changes for this server">
                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a 2 2 0 0 1-2 2z"></path>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css">
+    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
     <link rel="icon" href="/sdsm.png" type="image/png">
     <style>
         * {
@@ -16,40 +16,14 @@
             box-sizing: border-box;
         }
 
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: var(--space-4);
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            backdrop-filter: blur(4px);
-        }
-
         .setup-modal {
-            background: white;
-            border-radius: 16px;
-            padding: var(--space-8);
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            animation: slideIn 0.3s ease-out;
+            background: var(--bg-primary);
+            border-radius: var(--radius-xl);
+            padding: var(--space-6);
+            max-width: 960px;
+            width: 100%;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--panel-border);
         }
 
         @keyframes slideIn {
@@ -72,103 +46,35 @@
             width: 64px;
             height: 64px;
             margin: 0 auto var(--space-4);
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--surface-subtle);
+            border: 1px solid var(--panel-border);
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 32px;
+            color: var(--text-secondary);
         }
 
-        .setup-header h1 {
-            font-size: 24px;
-            font-weight: 700;
-            color: #1a202c;
-            margin-bottom: var(--space-2);
-        }
+        .setup-header h1 { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--space-2); }
 
-        .setup-header p {
-            color: #718096;
-            font-size: 14px;
-        }
+        .build-marker { display:inline-block; margin-left:8px; font-size:11px; font-weight:700; color: var(--chip-text); background: var(--chip-bg); border: 1px solid var(--panel-border); padding: 2px 6px; border-radius: 999px; vertical-align: middle; }
 
-        .missing-components {
-            background: #fef3c7;
-            border-left: 4px solid #f59e0b;
-            padding: var(--space-4);
-            border-radius: 8px;
-            margin-bottom: var(--space-6);
-        }
+        .setup-header p { color: var(--text-tertiary); font-size: 14px; }
 
-        .missing-components h2 {
-            font-size: 16px;
-            font-weight: 600;
-            color: #92400e;
-            margin-bottom: var(--space-3);
-        }
-
-        .missing-components ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-
-        .missing-components li {
-            padding: var(--space-2) 0;
-            color: #78350f;
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-        }
-
-        .missing-components li:before {
-            content: "⚠️";
-            font-size: 16px;
-        }
-
-        .missing-components .empty-message {
-            display: none;
-            margin-top: var(--space-3);
-            color: #047857;
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .missing-components.empty .empty-message {
-            display: block;
-        }
-
-        .missing-components.empty ul {
-            display: none;
-        }
-
-        .missing-components.empty h2 {
-            color: #047857;
-        }
+        /* removed missing-components panel */
 
         .is-hidden {
             display: none !important;
         }
 
-        .error-box {
-            background: #fee2e2;
-            border-left: 4px solid #dc2626;
-            padding: var(--space-4);
-            border-radius: 8px;
-            margin-bottom: var(--space-6);
-            display: none;
-        }
+        .error-box { background: rgba(239, 68, 68, 0.12); border-left: 4px solid var(--danger-500); padding: var(--space-4); border-radius: 8px; margin-bottom: var(--space-6); display:none; border: 1px solid var(--panel-border); }
 
         .error-box.active {
             display: block;
         }
 
-        .error-box h3 {
-            font-size: 16px;
-            font-weight: 600;
-            color: #991b1b;
-            margin-bottom: var(--space-3);
-        }
+        .error-box h3 { font-size:16px; font-weight:600; color: var(--danger-500); margin-bottom: var(--space-3); }
 
         .error-box ul {
             list-style: none;
@@ -176,105 +82,58 @@
             padding: 0;
         }
 
-        .error-box li {
-            padding: var(--space-2) 0;
-            color: #7f1d1d;
-            display: flex;
-            align-items: center;
-            gap: var(--space-2);
-        }
+        .error-box li { padding: var(--space-2) 0; color: var(--text-primary); display:flex; align-items:center; gap: var(--space-2); }
 
         .error-box li:before {
             content: "⛔";
             font-size: 16px;
         }
 
-        .error-hint {
-            margin-top: var(--space-3);
-            font-size: 13px;
-            color: #7f1d1d;
-        }
+        .error-hint { margin-top: var(--space-3); font-size: 13px; color: var(--text-tertiary); }
 
-        .instructions {
-            background: #f7fafc;
-            padding: var(--space-4);
-            border-radius: 8px;
-            margin-bottom: var(--space-6);
-            border: 1px solid #e2e8f0;
-        }
+        .instructions { background: var(--surface-subtle); padding: var(--space-4); border-radius: 8px; margin-bottom: var(--space-6); border: 1px solid var(--panel-border); }
 
-        .instructions h3 {
-            font-size: 14px;
+        .instructions h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-3); }
+
+        .instructions ol { margin-left: 0; padding-left: 0; list-style: none; color: var(--text-primary); font-size: 13px; line-height: 1.6; }
+
+        .step-badge {
+            display: inline-block;
+            min-width: 54px;
+            padding: 0 8px;
+            margin-right: 6px;
+            margin-top: 1px;
+            border: 1px solid var(--panel-border);
+            border-radius: 999px;
+            background: var(--surface-subtle);
+            color: var(--text-secondary);
             font-weight: 600;
-            color: #2d3748;
-            margin-bottom: var(--space-3);
+            font-size: 11px;
+            text-align: center;
         }
 
-        .instructions ol {
-            margin-left: var(--space-6);
-            color: #4a5568;
-            font-size: 13px;
-            line-height: 1.6;
-        }
+        .instructions li { margin-bottom: var(--space-2); }
+        #install-list li { display: flex; align-items: flex-start; gap: 8px; }
 
-        .instructions li {
-            margin-bottom: var(--space-2);
-        }
+        .instructions code { background: var(--input-surface); padding: 2px 8px; border-radius: 4px; font-family: 'Monaco', 'Courier New', monospace; color: var(--text-primary); font-size: 12px; border: 1px solid var(--input-border); }
 
-        .instructions code {
-            background: #edf2f7;
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            color: #2d3748;
-            font-size: 12px;
-        }
-
-        .instructions a {
-            color: #667eea;
-            text-decoration: none;
-        }
+        .instructions a { color: var(--primary-600); text-decoration: none; }
 
         .instructions a:hover {
             text-decoration: underline;
         }
 
-        .progress-container {
-            display: none;
-            margin-bottom: var(--space-6);
-            padding: var(--space-4);
-            background: #f7fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-        }
+        .progress-container { display:none; margin-bottom: var(--space-6); padding: var(--space-4); background: var(--surface-subtle); border-radius: 8px; border: 1px solid var(--panel-border); }
 
         .progress-container.active {
             display: block;
         }
 
-        .progress-text {
-            color: #4a5568;
-            font-size: 14px;
-            margin-bottom: var(--space-3);
-            text-align: center;
-            font-weight: 500;
-        }
+        .progress-text { color: var(--text-secondary); font-size: 14px; margin-bottom: var(--space-3); text-align:center; font-weight: 600; }
 
-        .progress-bar {
-            width: 100%;
-            height: 10px;
-            background: #e2e8f0;
-            border-radius: 10px;
-            overflow: hidden;
-        }
+        .progress-bar { width: 100%; height: 10px; background: var(--surface-soft); border-radius: 10px; overflow: hidden; }
 
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            width: 0%;
-            transition: width 0.3s ease;
-            border-radius: 10px;
-        }
+        .progress-fill { height: 100%; background: linear-gradient(120deg, rgba(37, 99, 235, 0.95), rgba(147, 51, 234, 0.95)); width: 0%; transition: width 0.3s ease; border-radius: 10px; }
 
         .action-buttons {
             display: flex;
@@ -282,37 +141,25 @@
             justify-content: flex-end;
         }
 
-        .btn-setup {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
+        .btn-setup { background: linear-gradient(125deg, var(--primary-500) 0%, var(--primary-600) 100%); color: #f8fafc; border: 1px solid rgba(59, 130, 246, 0.42); box-shadow: var(--shadow-sm); }
 
-        .btn-setup:hover:not(:disabled) {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
-        }
+        .btn-setup:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(59, 130, 246, 0.28); }
 
-        .btn-setup:disabled {
-            background: #cbd5e0;
-            color: #a0aec0;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
+        .btn-setup:disabled { background: var(--bg-tertiary); color: var(--text-tertiary); cursor: not-allowed; box-shadow: none; }
 
         /* rely on shared .btn and .btn-secondary from ui-theme.css */
 
         /* Dark theme support */
-        [data-theme="dark"] body {
-            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
-        }
-
-        [data-theme="dark"] .setup-modal {
-            background: #2d3748;
-        }
+        /* Dark theme adjustments handled via tokens */
 
         [data-theme="dark"] .setup-header h1 {
             color: #f7fafc;
+        }
+
+        [data-theme="dark"] .build-marker {
+            color: #c3dafe; /* indigo-200 */
+            background: rgba(99, 102, 241, 0.15);
+            border-color: rgba(129, 140, 248, 0.5);
         }
 
         [data-theme="dark"] .setup-header p {
@@ -360,13 +207,7 @@
             background: #4a5568;
         }
 
-        [data-theme="dark"] .missing-components.empty h2 {
-            color: #bbf7d0;
-        }
-
-        [data-theme="dark"] .missing-components .empty-message {
-            color: #bbf7d0;
-        }
+        /* removed missing-components dark variants */
 
         [data-theme="dark"] .error-box {
             background: rgba(239, 68, 68, 0.15);
@@ -380,25 +221,35 @@
         }
     </style>
 </head>
-<body>
-    <div class="modal-overlay">
-        <div class="setup-modal">
+<body class="page-shell">
+    <div class="container">
+        <header class="hero-card">
+            <div class="hero-main">
+                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+                <div class="hero-heading">
+                    <h1 class="hero-title">Initial Setup</h1>
+                    <p class="hero-subtitle">Install required components and get started.</p>
+                </div>
+            </div>
+            <div class="hero-actions row">
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <span id="theme-icon">🌙</span>
+                </button>
+            </div>
+        </header>
+    </div>
+    <main class="container" style="display:flex; justify-content:center;">
+        <div class="setup-modal glass-card" style="max-width: 820px;">
             <div class="setup-header">
                 <div class="setup-icon">🔧</div>
-                <h1>Initial Setup Required</h1>
+                <h1>
+                    Initial Setup Required
+                    <span class="build-marker" title="Setup progress UI enabled">setup-progress</span>
+                </h1>
                 <p>Some required components are missing. Let's get you set up!</p>
             </div>
 
-            {{ $missingCount := len .missingComponents }}
-            <div class="missing-components{{if eq $missingCount 0}} empty{{end}}">
-                <h2>Missing Components:</h2>
-                <p id="missingEmptyMessage" class="empty-message">All required components are installed. You're ready to continue!</p>
-                <ul id="missingList">
-                    {{range .missingComponents}}
-                    <li>{{.}}</li>
-                    {{end}}
-                </ul>
-            </div>
+            
 
             <div id="errorBox" class="error-box{{if .deployErrors}} active{{end}}">
                 <h3>Installation Issues Detected</h3>
@@ -410,33 +261,26 @@
                 <p class="error-hint">Review the setup log for details, then try again.</p>
             </div>
 
-            <div class="instructions">
-                <h3>What will be installed:</h3>
-                <ol>
+            <div class="instructions" id="install-section">
+                <h3>Pending components:</h3>
+                <ol id="install-list">
                     {{if has .missingComponents "SteamCMD"}}
-                    <li>
-                        <strong>SteamCMD</strong> - Command-line tool for downloading Steam games
-                    </li>
+                    <li data-component="STEAMCMD"><span class="step-badge">Step —</span> <strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
                     {{end}}
                     {{if has .missingComponents "Stationeers Release"}}
-                    <li>
-                        <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)
-                    </li>
+                    <li data-component="RELEASE"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
+                    {{end}}
+                    {{if has .missingComponents "Stationeers Beta"}}
+                    <li data-component="BETA"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
                     {{end}}
                     {{if has .missingComponents "BepInEx"}}
-                    <li>
-                        <strong>BepInEx</strong> - Modding framework for Stationeers
-                    </li>
+                    <li data-component="BEPINEX"><span class="step-badge">Step —</span> <strong>BepInEx</strong> - Modding framework for Stationeers</li>
                     {{end}}
                     {{if has .missingComponents "SCON"}}
-                    <li>
-                        <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)
-                    </li>
+                    <li data-component="SCON"><span class="step-badge">Step —</span> <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)</li>
                     {{end}}
                     {{if has .missingComponents "Stationeers LaunchPad"}}
-                    <li>
-                        <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup
-                    </li>
+                    <li data-component="LAUNCHPAD"><span class="step-badge">Step —</span> <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup</li>
                     {{end}}
                 </ol>
             </div>
@@ -445,6 +289,9 @@
                 <div class="progress-text">⏳ Installing components, please wait...</div>
                 <div class="progress-bar">
                     <div class="progress-fill"></div>
+                </div>
+                <div id="progressDetails" style="margin-top: var(--space-4);">
+                    
                 </div>
             </div>
 
@@ -457,11 +304,14 @@
                 </button>
             </div>
         </div>
-    </div>
+    </main>
+
+    {{ template "footer" . }}
 
     <script>
         let statusCheckInterval = null;
         let progressInterval = null;
+        let setupProgressInterval = null;
 
         const progressContainer = document.getElementById('progress');
         const progressFill = document.querySelector('.progress-fill');
@@ -470,9 +320,7 @@
         const skipBtn = document.getElementById('skipBtn');
         const errorBox = document.getElementById('errorBox');
         const errorList = document.getElementById('errorList');
-        const missingContainer = document.querySelector('.missing-components');
-        const missingList = document.getElementById('missingList');
-        const missingEmpty = document.getElementById('missingEmptyMessage');
+        const installSection = document.getElementById('install-section');
 
         function updateErrorBox(errors) {
             if (!errorBox || !errorList) {
@@ -493,25 +341,7 @@
             }
         }
 
-        function updateMissingComponents(items) {
-            if (!missingContainer || !missingList || !missingEmpty) {
-                return;
-            }
-
-            missingList.innerHTML = '';
-
-            if (!items || items.length === 0) {
-                missingContainer.classList.add('empty');
-                return;
-            }
-
-            missingContainer.classList.remove('empty');
-            items.forEach(item => {
-                const li = document.createElement('li');
-                li.textContent = item;
-                missingList.appendChild(li);
-            });
-        }
+        // removed updateMissingComponents; panel is no longer rendered
 
         function setButtonsDisabled(disabled) {
             setupBtn.disabled = disabled;
@@ -559,6 +389,9 @@
             }
             startProgressAnimation();
 
+            // Hide pending list once setup begins
+            if (installSection) installSection.style.display = 'none';
+
             fetch('/setup/install', {
                 method: 'POST',
                 headers: {
@@ -567,6 +400,11 @@
             }).then(response => {
                 if (response.ok) {
                     statusCheckInterval = setInterval(checkSetupStatus, 2000);
+                    if (!setupProgressInterval) {
+                        setupProgressInterval = setInterval(fetchSetupProgress, 2000);
+                    }
+                    // Start an immediate fetch so UI populates quickly
+                    fetchSetupProgress();
                 } else {
                     stopProgressAnimation();
                     if (progressText) {
@@ -588,7 +426,6 @@
                 .then(response => response.json())
                 .then(data => {
                     updateErrorBox(data.errors || []);
-                    updateMissingComponents(data.missingComponents || []);
 
                     const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
 
@@ -596,6 +433,10 @@
                         if (statusCheckInterval) {
                             clearInterval(statusCheckInterval);
                             statusCheckInterval = null;
+                        }
+                        if (setupProgressInterval) {
+                            clearInterval(setupProgressInterval);
+                            setupProgressInterval = null;
                         }
                         stopProgressAnimation();
 
@@ -610,6 +451,8 @@
                             if (progressContainer) {
                                 progressContainer.classList.add('active');
                             }
+                            // Show pending list again if setup ended with errors
+                            if (installSection) installSection.style.display = '';
                             return;
                         }
 
@@ -634,6 +477,8 @@
                             if (progressContainer) {
                                 progressContainer.classList.add('active');
                             }
+                            // Show pending list for remaining components
+                            if (installSection) installSection.style.display = '';
                         }
                     }
                 })
@@ -641,6 +486,142 @@
                     console.error('Error checking setup status:', error);
                 });
         }
+
+        function fetchSetupProgress() {
+            fetch('/setup/progress')
+                .then(r => r.json())
+                .then(data => {
+                    renderSetupProgress(data);
+                    updateInstallList(data && Array.isArray(data.stages) ? data.stages : []);
+                    // If backend provides overall percent, reflect in bar
+                    if (typeof data.overall_percent === 'number' && progressFill) {
+                        const pct = Math.max(0, Math.min(100, data.overall_percent));
+                        progressFill.style.width = pct + '%';
+                    }
+                    // Ensure container visible when any activity or parsed state exists
+                    if (progressContainer) {
+                        const hasStages = Array.isArray(data.stages) && data.stages.length > 0;
+                        const anyActive = hasStages && data.stages.some(s => (s.status||'').toLowerCase() !== 'pending');
+                        if (data.in_progress || anyActive) {
+                            progressContainer.classList.add('active');
+                        }
+                    }
+                })
+                .catch(err => {
+                    // noop
+                });
+        }
+
+        function renderSetupProgress(data) {
+            const container = document.getElementById('progressDetails');
+            if (!container || !data || !Array.isArray(data.stages)) return;
+
+            const stageToIcon = (status) => {
+                switch ((status || '').toLowerCase()) {
+                    case 'completed': return '✅';
+                    case 'running': return '⏳';
+                    case 'error': return '⚠️';
+                    default: return '⏺️';
+                }
+            };
+
+            const rows = data.stages.map((s, idx) => {
+                const pct = typeof s.percent === 'number' ? Math.max(0, Math.min(100, s.percent)) : 0;
+                const icon = stageToIcon(s.status);
+                const status = s.status || 'Pending';
+                const stepNum = idx + 1;
+                const label = s.display_name || s.component;
+                return `
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                        <div style="width:20px; text-align:center;">${icon}</div>
+                        <div style="flex:1;">
+                            <div style="display:flex; justify-content:space-between; font-size:13px; color: var(--text-secondary);">
+                                <span><span class="step-badge">Step ${stepNum}</span> ${label}</span>
+                                <span>${status}${status.toLowerCase()==='running' && pct?` • ${pct}%`:''}</span>
+                            </div>
+                            <div style="height:6px; background: var(--surface-soft); border-radius:6px; overflow:hidden; margin-top:6px;">
+                                <div style="height:100%; width:${pct}%; background: linear-gradient(120deg, rgba(37, 99, 235, 0.95), rgba(147, 51, 234, 0.95));"></div>
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = rows;
+        }
+
+        function updateInstallList(stages) {
+            const list = document.getElementById('install-list');
+            if (!list) return;
+            const items = list.querySelectorAll('li[data-component]');
+            if (!items || items.length === 0) return;
+
+            const byKey = new Map();
+            items.forEach(li => {
+                const key = (li.getAttribute('data-component') || '').toUpperCase();
+                if (key) byKey.set(key, li);
+            });
+
+            const ordered = [];
+            let step = 1;
+            if (Array.isArray(stages)) {
+                stages.forEach(s => {
+                    const key = (s.component || '').toUpperCase();
+                    const li = byKey.get(key);
+                    if (li) {
+                        const badge = li.querySelector('.step-badge');
+                        if (badge) badge.textContent = `Step ${step}`;
+                        ordered.push(li);
+                        byKey.delete(key);
+                        step++;
+                    }
+                });
+            }
+
+            // Append any remaining items not present in stages (fallback)
+            byKey.forEach(li => {
+                const badge = li.querySelector('.step-badge');
+                if (badge) badge.textContent = `Step ${step}`;
+                ordered.push(li);
+                step++;
+            });
+
+            // Rebuild the list in the new order
+            list.innerHTML = '';
+            ordered.forEach(li => list.appendChild(li));
+        }
+
+        // If user lands while an update is running, start polling immediately
+        (function init() {
+            // Always begin lightweight progress polling; it will show when data indicates activity
+            if (!setupProgressInterval) setupProgressInterval = setInterval(fetchSetupProgress, 2000);
+            fetchSetupProgress();
+            // If setup already running, also start status polling and animation
+            fetch('/setup/status')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.inProgress) {
+                        if (progressContainer) progressContainer.classList.add('active');
+                        if (progressText) progressText.textContent = '⏳ Installing components, please wait...';
+                        startProgressAnimation();
+                        if (!statusCheckInterval) statusCheckInterval = setInterval(checkSetupStatus, 2000);
+                        if (installSection) installSection.style.display = 'none';
+                    } else {
+                        // Show section only if backend reports missing components
+                        const hasMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
+                        if (installSection) installSection.style.display = hasMissing ? '' : 'none';
+                    }
+                }).catch(()=>{});
+        })();
+
+        function getStoredTheme() { return localStorage.getItem('theme') || 'dark'; }
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            const icon = document.getElementById('theme-icon');
+            if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); setTheme(current === 'dark' ? 'light' : 'dark'); }
+        setTheme(getStoredTheme());
     </script>
 </body>
 </html>

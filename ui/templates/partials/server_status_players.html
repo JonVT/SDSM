@@ -10,7 +10,7 @@
         <h2 class="card-title">Players Online</h2>
         <span class="pill" id="players-live-count">{{if gt $liveCount 0}}{{printf "%d online" $liveCount}}{{else}}0 online{{end}}</span>
     </div>
-    <div class="players-header-bar" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
+    <div class="players-header-bar row justify-between">
         <div class="tab-set">
             <button type="button" class="tab-btn active" data-target="players-live" title="View players currently online">Live</button>
             <button type="button" class="tab-btn" data-target="players-history" title="View previous player sessions">History</button>

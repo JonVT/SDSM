@@ -410,8 +410,7 @@
         <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
         <button type="button" id="connection-banner-action">Reload</button>
     </div>
-
-    <!-- Sidebar Navigation -->
+    
     <aside class="sidebar">
         <div class="sidebar-header">
             <img src="/sdsm.png" alt="SDSM" class="sidebar-logo">
@@ -420,8 +419,7 @@
                 <p>Server Manager</p>
             </div>
         </div>
-
-        <!-- Main Navigation -->
+        
         <nav class="nav-section">
             <div class="nav-section-title">Main</div>
             <a href="#" class="nav-item" data-target="dashboard" onclick="navigateTo('dashboard', event)">
@@ -438,8 +436,7 @@
                 <span>Manager</span>
             </a>
         </nav>
-
-        <!-- Servers Section -->
+        
         {{if .active}}
         <div class="nav-servers">
             <div class="nav-section-title">Servers</div>
@@ -462,8 +459,7 @@
             {{end}}
         </div>
         {{end}}
-
-        <!-- Footer Actions -->
+        
         <div class="sidebar-footer">
             <button class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle theme">
                 <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -479,8 +475,7 @@
             </a>
         </div>
     </aside>
-
-    <!-- Main Content Area -->
+    
     <main class="main-content">
         <header class="topbar">
             <div class="topbar-left">

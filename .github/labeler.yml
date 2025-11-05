@@ -1,0 +1,20 @@
+area/ui:
+  - 'ui/**'
+area/templates:
+  - 'ui/templates/**'
+area/backend:
+  - 'internal/**'
+  - 'cmd/**'
+area/steam:
+  - 'steam/**'
+area/assets:
+  - 'ui/static/**'
+  - 'webassets/**'
+  - 'ui/assets.go'
+type/docs:
+  - 'README.md'
+  - 'docs/**'
+type/ci:
+  - '.github/**'
+  - 'Makefile'
+  - 'tools/**'

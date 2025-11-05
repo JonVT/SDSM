@@ -2,19 +2,19 @@
     /* Lightweight modal styles (scoped to this page) */
     .confirm-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:1000}
     .confirm-modal.active{display:flex}
-    .confirm-modal .modal-card{max-width:520px;width:92%;background:var(--card-bg, #111);color:var(--text-color, #fff);border:1px solid var(--border-color, #333);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-    .confirm-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--border-color, #333);display:flex;align-items:center;gap:10px}
-    .confirm-modal .modal-header .icon{width:20px;height:20px;color:var(--danger, #e74c3c)}
+    .confirm-modal .modal-card{max-width:520px;width:92%;background:var(--panel-gradient);color:var(--text-primary);border:1px solid var(--panel-border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+    .confirm-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:10px}
+    .confirm-modal .modal-header .icon{width:20px;height:20px;color:var(--danger-500)}
     .confirm-modal .modal-title{font-size:16px;font-weight:600;margin:0}
     .confirm-modal .modal-body{padding:16px 20px;line-height:1.5}
-    .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--border-color, #333);display:flex;gap:10px;justify-content:flex-end}
-    .btn-danger-ghost{background:transparent;border:1px solid var(--danger, #e74c3c);color:var(--danger, #e74c3c)}
+    .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--panel-border);display:flex;gap:10px;justify-content:flex-end}
+    .btn-danger-ghost{background:transparent;border:1px solid var(--danger-500);color:var(--danger-500)}
 
     /* More/expand section for Server Control card */
     .card-control .card-more-footer{display:flex;justify-content:flex-start;align-items:center;margin-top:var(--space-2)}
-    .card-control .card-more-link{background:none;border:none;color:var(--text-muted,#9aa0a6);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
-    .card-control .card-more-link:hover{color:var(--text-color,#eaeaea)}
-    .card-control .card-more-section{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--border-color,#333)}
+    .card-control .card-more-link{background:none;border:none;color:var(--text-tertiary);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+    .card-control .card-more-link:hover{color:var(--text-primary)}
+    .card-control .card-more-section{display:none;margin-top:var(--space-3);padding-top:var(--space-3);border-top:1px solid var(--panel-border)}
     .card-control.expanded .card-more-section{display:block}
 
     /* Language dropdown anchored to the language button; ensure it can layer over other cards */
@@ -93,7 +93,7 @@
     .lang-dropdown.active { display: block; opacity: 1; transform: translateY(0); pointer-events: auto; }
 
     /* Make Save As modal neutral in tone */
-    #saveAsModal .modal-header .icon { color: var(--text-secondary, #9aa0a6); }
+    #saveAsModal .modal-header .icon { color: var(--text-secondary); }
 
     /* Fixed label width for More-section rows to align controls */
     .card-more-section .more-label { flex: 0 0 160px; }

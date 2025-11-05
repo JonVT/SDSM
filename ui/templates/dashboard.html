@@ -36,8 +36,8 @@
                 </p>
                 <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
             </div>
-            <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-                <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <div class="hero-actions flex-col items-end">
+                <div class="row">
                 <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                     <span id="theme-icon">🌙</span>
                 </button>
@@ -63,7 +63,7 @@
                 </a>
                 {{ template "user_menu" . }}
                 </div>
-                <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+                <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
             </div>
         </header>
     </div>
@@ -119,6 +119,8 @@
     {{ if .servers }}
     <button class="floating-action" onclick="createNewServer()" aria-label="Add new server">+</button>
     {{ end }}
+
+    {{ template "footer" . }}
 
     <script>
         let ws;

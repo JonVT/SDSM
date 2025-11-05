@@ -18,7 +18,7 @@
   .role-badge {
     position: absolute; right: -2px; bottom: -2px; min-width: 14px; height: 14px;
     padding: 0 3px;
-    border-radius: 999px; background: var(--accent-600, #6366f1);
+    border-radius: 999px; background: var(--accent-600);
     color: white; font-size: 9px; line-height: 14px; font-weight: 800;
     border: 1px solid var(--bg-secondary);
   }
@@ -110,8 +110,8 @@
           .then(data => {
             if(!data || !badge) return;
             const role = (data.role || '').toLowerCase();
-            if(role === 'admin') { badge.textContent = 'A'; badge.style.background = 'var(--danger-600, #dc2626)'; badge.title = 'Admin'; }
-            else { badge.textContent = 'O'; badge.style.background = 'var(--warning-600, #d97706)'; badge.title = 'Operator'; }
+            if(role === 'admin') { badge.textContent = 'A'; badge.style.background = 'var(--danger-600)'; badge.title = 'Admin'; }
+            else { badge.textContent = 'O'; badge.style.background = 'var(--warning-500)'; badge.title = 'Operator'; }
           })
           .catch(() => {});
       } catch(_) {}

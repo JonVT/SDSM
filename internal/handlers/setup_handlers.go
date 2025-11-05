@@ -143,6 +143,12 @@ func (h *ManagerHandlers) SetupStatusGET(c *gin.Context) {
 	})
 }
 
+// SetupProgressGET returns structured progress parsed from updates.log for the setup flow.
+func (h *ManagerHandlers) SetupProgressGET(c *gin.Context) {
+	progress := h.manager.ParseSetupProgressFromUpdateLog()
+	c.JSON(http.StatusOK, progress)
+}
+
 // SetupUpdatePOST starts a full deployment of all components.
 func (h *ManagerHandlers) SetupUpdatePOST(c *gin.Context) {
 	h.manager.NeedsUploadPrompt = false

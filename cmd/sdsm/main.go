@@ -322,6 +322,21 @@ func setupRouter() *gin.Engine {
 		})
 	})
 
+	// Public Terms of Use page
+	r.GET("/terms", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "terms.html", gin.H{})
+	})
+
+	// Public License page
+	r.GET("/license", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "license.html", gin.H{})
+	})
+
+	// Public Privacy page
+	r.GET("/privacy", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "privacy.html", gin.H{})
+	})
+
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
 	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
@@ -352,6 +367,7 @@ func setupRouter() *gin.Engine {
 	{
 		setup.GET("", managerHandlers.SetupGET)
 		setup.GET("/status", managerHandlers.SetupStatusGET)
+		setup.GET("/progress", managerHandlers.SetupProgressGET)
 		setup.POST("/skip", managerHandlers.SetupSkipPOST)
 		setup.POST("/install", managerHandlers.SetupInstallPOST)
 		setup.POST("/update", managerHandlers.SetupUpdatePOST)
@@ -412,6 +428,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
 		// legacy generic command removed; use explicit endpoints below
 		api.POST("/servers/:server_id/chat", managerHandlers.APIServerChat)
+		api.GET("/servers/:server_id/scon/health", managerHandlers.APIServerSCONHealth)
 		api.POST("/servers/:server_id/save", managerHandlers.APIServerSave)
 		api.POST("/servers/:server_id/save-as", managerHandlers.APIServerSaveAs)
 		api.POST("/servers/:server_id/load", managerHandlers.APIServerLoad)
@@ -423,6 +440,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/ban", managerHandlers.APIServerBan)
 		api.POST("/servers/:server_id/unban", managerHandlers.APIServerUnban)
 		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
+		api.POST("/servers/:server_id/player-saves/delete-all", managerHandlers.APIServerPlayerSaveDeleteAll)
 		api.POST("/servers/:server_id/settings", managerHandlers.APIServerUpdateSettings)
 		api.POST("/servers/:server_id/language", managerHandlers.APIServerSetLanguage)
 		api.POST("/servers/:server_id/update-server", managerHandlers.APIServerUpdateServerFiles)

@@ -101,12 +101,15 @@ var (
 					}
 				}
 
-				// Welcome message: if configured, emit a chat/SAY on player connect.
+				// Welcome message: if configured, emit a chat on player connect.
+				// Send shortly after the client is marked ready to avoid races with resume.
 				if s != nil {
 					msg := strings.TrimSpace(s.WelcomeMessage)
 					if msg != "" && s.IsRunning() {
-						// Best effort; ignore error
-						_ = s.SendCommand("chat", msg)
+						go func(srv *Server, text string) {
+							time.Sleep(1 * time.Second)
+							_ = srv.SendCommand("chat", text)
+						}(s, msg)
 					}
 				}
 			},

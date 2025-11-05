@@ -3,6 +3,8 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -88,8 +90,8 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if isAsync {
 			c.Header("X-Toast-Type", "success")
 			c.Header("X-Toast-Title", "Preference Saved")
-			c.Header("X-Toast-Message", fmt.Sprintf("Player Saves %s", map[bool]string{true:"enabled", false:"disabled"}[enabled]))
-			c.JSON(http.StatusOK, gin.H{"status":"ok", "player_saves": enabled})
+			c.Header("X-Toast-Message", fmt.Sprintf("Player Saves %s", map[bool]string{true: "enabled", false: "disabled"}[enabled]))
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "player_saves": enabled})
 			return
 		}
 		// Non-async fallthrough will redirect at the end
@@ -324,6 +326,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		origStartLoc := s.StartLocation
 		origStartCond := s.StartCondition
 
+		oldName := s.Name
 		if name := middleware.SanitizeString(c.PostForm("name")); name != "" {
 			if !h.manager.IsServerNameAvailable(name, s.ID) {
 				if isAsync {
@@ -405,7 +408,9 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if wm := middleware.SanitizeString(c.PostForm("welcome_message")); wm != "" || c.PostForm("welcome_message") == "" {
 			// Always set (allow clearing)
 			clean := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(wm, "\r", " "), "\n", " "))
-			if len(clean) > 300 { clean = clean[:300] }
+			if len(clean) > 300 {
+				clean = clean[:300]
+			}
 			s.WelcomeMessage = clean
 		}
 
@@ -460,6 +465,47 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 				}
 				h.renderServerPage(c, http.StatusInternalServerError, s, username, fmt.Sprintf("Redeploy failed: %v", err))
 				return
+			}
+		}
+
+		// If the server name changed, rename the saves/<ServerName> directory accordingly.
+		if strings.TrimSpace(oldName) != "" && strings.TrimSpace(s.Name) != "" && !strings.EqualFold(strings.TrimSpace(oldName), strings.TrimSpace(s.Name)) {
+			var savesBase string
+			if s.Paths != nil {
+				savesBase = s.Paths.ServerSavesDir(s.ID)
+			} else if h.manager.Paths != nil {
+				savesBase = h.manager.Paths.ServerSavesDir(s.ID)
+			}
+			if strings.TrimSpace(savesBase) != "" {
+				oldDir := filepath.Join(savesBase, oldName)
+				newDir := filepath.Join(savesBase, s.Name)
+				if st, err := os.Stat(oldDir); err == nil && st.IsDir() {
+					if _, err2 := os.Stat(newDir); os.IsNotExist(err2) {
+						// Simple rename when target doesn't exist
+						if err := os.Rename(oldDir, newDir); err != nil && s.Logger != nil {
+							s.Logger.Write(fmt.Sprintf("Failed to rename saves directory %s -> %s: %v", oldDir, newDir, err))
+						} else if s.Logger != nil {
+							s.Logger.Write(fmt.Sprintf("Renamed saves directory: %s -> %s", oldDir, newDir))
+						}
+					} else {
+						// Target exists: merge contents best-effort, then remove old dir if empty
+						entries, _ := os.ReadDir(oldDir)
+						for _, e := range entries {
+							src := filepath.Join(oldDir, e.Name())
+							dst := filepath.Join(newDir, e.Name())
+							// If destination exists, skip to avoid overwriting
+							if _, err := os.Stat(dst); err == nil {
+								continue
+							}
+							_ = os.Rename(src, dst)
+						}
+						// Attempt to remove oldDir if empty
+						_ = os.Remove(oldDir)
+						if s.Logger != nil {
+							s.Logger.Write(fmt.Sprintf("Merged saves from %s into %s due to name change", oldDir, newDir))
+						}
+					}
+				}
 			}
 		}
 
@@ -571,33 +617,35 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	}
 	serverVisible := c.PostForm("server_visible") == "on"
 	welcomeMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_message")), "\r", " "), "\n", " "))
-	if len(welcomeMessage) > 300 { welcomeMessage = welcomeMessage[:300] }
+	if len(welcomeMessage) > 300 {
+		welcomeMessage = welcomeMessage[:300]
+	}
 
 	formState := gin.H{
-		"name":                  name,
-		"world":                 world,
-		"start_location":        startLocation,
-		"start_condition":       startCondition,
-		"difficulty":            difficulty,
-		"port":                  c.PostForm("port"),
-		"max_clients":           c.PostForm("max_clients"),
-		"password":              password,
-		"auth_secret":           authSecret,
-		"save_interval":         c.PostForm("save_interval"),
-		"restart_delay_seconds": c.PostForm("restart_delay_seconds"),
-		"beta":                  betaRaw,
-		"auto_start":            autoStart,
-		"auto_update":           autoUpdate,
-		"auto_save":             autoSave,
-		"auto_pause":            autoPause,
-		"server_visible":        serverVisible,
-		"player_saves":          playerSaves,
-		"max_auto_saves":        maxAutoSaves,
-		"max_quick_saves":       maxQuickSaves,
+		"name":                     name,
+		"world":                    world,
+		"start_location":           startLocation,
+		"start_condition":          startCondition,
+		"difficulty":               difficulty,
+		"port":                     c.PostForm("port"),
+		"max_clients":              c.PostForm("max_clients"),
+		"password":                 password,
+		"auth_secret":              authSecret,
+		"save_interval":            c.PostForm("save_interval"),
+		"restart_delay_seconds":    c.PostForm("restart_delay_seconds"),
+		"beta":                     betaRaw,
+		"auto_start":               autoStart,
+		"auto_update":              autoUpdate,
+		"auto_save":                autoSave,
+		"auto_pause":               autoPause,
+		"server_visible":           serverVisible,
+		"player_saves":             playerSaves,
+		"max_auto_saves":           maxAutoSaves,
+		"max_quick_saves":          maxQuickSaves,
 		"delete_skeleton_on_decay": deleteSkeletonOnDecay,
-		"use_steam_p2p":         useSteamP2P,
-		"disconnect_timeout":    disconnectTimeout,
-		"welcome_message":       welcomeMessage,
+		"use_steam_p2p":            useSteamP2P,
+		"disconnect_timeout":       disconnectTimeout,
+		"welcome_message":          welcomeMessage,
 	}
 	// Reflect Player Saves already included; keep extended settings for redisplay
 	// Player Saves preference for UI (client-side feature)
@@ -732,33 +780,33 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	}
 
 	cfg := &models.ServerConfig{
-		Name:                name,
-		World:               world,
-		WorldID:             worldID,
-		Language:            "",
-		StartLocation:       startLocation,
-		StartCondition:      startCondition,
-		Difficulty:          difficulty,
-		Port:                port,
-		Password:            password,
-		AuthSecret:          authSecret,
-		MaxClients:          maxClients,
-		SaveInterval:        saveInterval,
-		Visible:             serverVisible,
-		Beta:                beta,
-		AutoStart:           autoStart,
-		AutoUpdate:          autoUpdate,
-		AutoSave:            autoSave,
-		AutoPause:           autoPause,
-		PlayerSaves:         playerSaves,
-		MaxAutoSaves:        maxAutoSaves,
-		MaxQuickSaves:       maxQuickSaves,
+		Name:                  name,
+		World:                 world,
+		WorldID:               worldID,
+		Language:              "",
+		StartLocation:         startLocation,
+		StartCondition:        startCondition,
+		Difficulty:            difficulty,
+		Port:                  port,
+		Password:              password,
+		AuthSecret:            authSecret,
+		MaxClients:            maxClients,
+		SaveInterval:          saveInterval,
+		Visible:               serverVisible,
+		Beta:                  beta,
+		AutoStart:             autoStart,
+		AutoUpdate:            autoUpdate,
+		AutoSave:              autoSave,
+		AutoPause:             autoPause,
+		PlayerSaves:           playerSaves,
+		MaxAutoSaves:          maxAutoSaves,
+		MaxQuickSaves:         maxQuickSaves,
 		DeleteSkeletonOnDecay: deleteSkeletonOnDecay,
-		UseSteamP2P:         useSteamP2P,
-		DisconnectTimeout:   disconnectTimeout,
-		RestartDelaySeconds: restartDelay,
-		ShutdownDelaySeconds: shutdownDelay,
-		WelcomeMessage:      welcomeMessage,
+		UseSteamP2P:           useSteamP2P,
+		DisconnectTimeout:     disconnectTimeout,
+		RestartDelaySeconds:   restartDelay,
+		ShutdownDelaySeconds:  shutdownDelay,
+		WelcomeMessage:        welcomeMessage,
 	}
 
 	// Set default language based on selected channel

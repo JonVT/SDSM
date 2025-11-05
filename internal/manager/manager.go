@@ -152,9 +152,10 @@ var deployDisplayNames = map[DeployType]string{
 }
 
 var progressOrder = []DeployType{
+	// Display SteamCMD first so setup progress shows it at the top
+	DeployTypeSteamCMD,
 	DeployTypeRelease,
 	DeployTypeBeta,
-	DeployTypeSteamCMD,
 	DeployTypeBepInEx,
 	DeployTypeLaunchPad,
 	DeployTypeSCON,

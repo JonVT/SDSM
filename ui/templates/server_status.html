@@ -19,7 +19,7 @@
             <button type="button" id="connection-banner-action" title="Reload the page">Reload</button>
         </div>
         <div class="container">
-            <!-- Consistent hero header -->
+            
             <header class="hero-card">
                 <div class="hero-main">
                     <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
@@ -31,10 +31,16 @@
                 <div class="hero-meta">
                     <div class="hero-meta-title">Controls &amp; Status</div>
                     <p class="hero-meta-text">Use the sections below to start, stop, and configure your server.</p>
-                    <span class="pill">Real-time</span>
+                    <div class="row" style="gap:8px; align-items:center;">
+                        <span class="pill">Real-time</span>
+                        <span id="scon-health-pill" class="pill" title="Stationeers Console HTTP health">
+                            <span id="scon-health-dot" aria-hidden="true">●</span>
+                            <span id="scon-health-text" style="margin-left:4px;">SCON: Checking…</span>
+                        </span>
+                    </div>
                 </div>
-                <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-                    <div style="display: flex; align-items: center; gap: var(--space-2);">
+                <div class="hero-actions flex-col items-end">
+                    <div class="row">
                         <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
                         <a href="/dashboard" class="btn btn-secondary">
                             {{ template "icon_dashboard" . }}
@@ -46,11 +52,11 @@
                         </a>
                         {{ template "user_menu" . }}
                     </div>
-                    <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+                    <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
                 </div>
             </header>
 
-            <!-- Server information moved out of the header into a dedicated card -->
+            
             <div class="server-content">
             {{ if .server.LastError }}
             <div id="server-error-banner" class="alert alert-danger" role="alert" aria-live="polite">
@@ -86,16 +92,14 @@
             </div>
             {{ end }}
             <div class="glass-card">
-                <div class="server-title-bar" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
+                <div class="server-title-bar row justify-between">
                     <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}" style="margin:0;">
                         {{ if .server.Beta }}
-                        <!-- Beta icon: lab flask (matches dashboard) -->
                         <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
                             <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
                             <path d="M7 14h10"/>
                         </svg>
                         {{ else }}
-                        <!-- Release icon: server stack (matches dashboard) -->
                         <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
                             <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
                             <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
@@ -105,7 +109,7 @@
                         {{ end }}
                         <span id="server-name">{{.server.Name}}</span>
                     </h3>
-                    <div class="lang-control" style="position:relative;">
+                    <div class="lang-control relative">
                         <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
                             <span aria-hidden="true">🌐</span>
                             <span id="current-language" style="margin-left:6px;">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
@@ -142,27 +146,27 @@
                 </div>
             </div>
 
-            <!-- Server Control moved here: full-width under Server Info -->
+            
             {{ template "server_status_control.html" . }}
 
-        <!-- Main grid layout: 2 columns x 2 rows -->
+        
         <div class="main-grid">
-            <!-- Top Left: Players List -->
+            
             {{ $live := .server.LiveClients }}
             {{ $liveCount := len $live }}
             {{ $history := .server.Clients }}
             {{ $historyCount := len $history }}
             {{ template "server_status_players.html" . }}
 
-            <!-- Top Right: Chat -->
+            
             {{ template "server_status_chat.html" . }}
 
-            <!-- Bottom Left: Saves (placeholder where Control used to be) -->
+            
             <div class="card card-saves">
                 <div class="card-header">
                     <h2 class="card-title">Saves</h2>
                 </div>
-                <!-- Saves filter tabs -->
+                
                 <div class="tabs" id="saves-tabs" role="tablist" aria-label="Save types">
                     <button class="tab tab-all active" role="tab" aria-selected="true" data-save-filter="all">All</button>
                     <button class="tab" role="tab" aria-selected="false" data-save-filter="auto">Auto</button>
@@ -174,13 +178,13 @@
                 <div id="saves-list" role="region" aria-label="Saves list" class="hidden"></div>
             </div>
 
-            <!-- Bottom Right: Startup Parameters -->
+            
             {{ template "server_status_config.html" . }}
 
             
         </div>
         
-        <!-- Server Logs: full-width card under the main grid -->
+        
         <div class="card" id="server-logs-card">
             <div class="card-header">
                 <h2 class="card-title">Server Logs</h2>
@@ -199,5 +203,6 @@
 
     {{ template "server_status_scripts.html" . }}
     {{ template "toast.html" . }}
+    {{ template "footer" . }}
 </body>
 </html>

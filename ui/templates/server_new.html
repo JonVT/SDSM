@@ -15,7 +15,7 @@
 <body class="page-shell">
     {{ $form := .form }}
     <div class="container">
-        <!-- Consistent hero header -->
+        
         <header class="hero-card">
             <div class="hero-main">
                 <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
@@ -29,8 +29,8 @@
                 <p class="hero-meta-text">Fill in the basic, network, and advanced settings below.</p>
                 <span class="pill">Step 1</span>
             </div>
-            <div class="hero-actions" style="flex-direction: column; align-items: flex-end;">
-                <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <div class="hero-actions flex-col items-end">
+                <div class="row">
                     <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
                     <a href="/dashboard" class="btn btn-secondary">
                         {{ template "icon_dashboard" . }}
@@ -38,19 +38,19 @@
                     </a>
                     {{ template "user_menu" . }}
                 </div>
-                <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+                <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
             </div>
         </header>
 
-        <!-- Main content grid: form left (wide), progress right -->
+        
         <div class="main-grid">
-            <!-- Left: Form -->
+            
             <div class="card">
                 {{ if .error }}
                 <div class="alert alert-error" role="alert">{{ .error }}</div>
                 {{ end }}
                 <form method="POST" action="/server/new" id="serverForm">
-                    <!-- Basic Settings -->
+                    
                     <div class="form-section">
                         <h3 class="section-title">Basic Settings</h3>
                         <div class="form-grid">
@@ -96,7 +96,7 @@
                         </div>
                     </div>
                     
-                    <!-- Network Settings -->
+                    
                     <div class="form-section">
                         <h3 class="section-title">Network Settings</h3>
                         <div class="form-grid">
@@ -134,9 +134,9 @@
                         </div>
                     </div>
                     
-                    <!-- Advanced Settings -->
+                    
                     <div class="form-section">
-                        <h3 class="section-title" style="display:flex;align-items:center;gap:var(--space-2)">
+                        <h3 class="section-title row">
                             Advanced Settings
                             <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -198,7 +198,7 @@
                         </div>
                     </div>
                     
-                    <!-- Startup Options -->
+                    
                     <div class="form-section">
                         <h3 class="section-title">Startup Options</h3>
                         <div class="form-grid">
@@ -284,7 +284,7 @@
                         </div>
                     </div>
                     
-                    <!-- Form Actions -->
+                    
                     <div class="update-button-container">
                         <a href="/dashboard" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary btn-min-lg">Create Server</button>
@@ -292,7 +292,7 @@
                 </form>
             </div>
 
-            <!-- Right: Progress -->
+            
             <aside class="card">
                 <div class="card-header">
                     <h2 class="card-title">Form Progress</h2>

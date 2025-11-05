@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy - SDSM</title>
+  <link rel="icon" href="/sdsm.png" type="image/png">
+  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
+</head>
+<body class="page-shell">
+  <div class="container" style="padding-top: var(--space-6); padding-bottom: var(--space-10);">
+    <header class="hero-card">
+      <div class="hero-main">
+        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+        <div class="hero-heading">
+          <h1 class="hero-title">Privacy</h1>
+          <p class="hero-subtitle">SDSM is self‑hosted and sends no telemetry.</p>
+        </div>
+      </div>
+      <div class="hero-actions flex-col items-end">
+        <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+      </div>
+    </header>
+
+    <main class="glass-card" style="margin-top: var(--space-6);">
+      <h1>Privacy Statement</h1>
+      <div class="highlight">
+        <strong>Effective Date: November 5, 2025</strong><br>
+        SDSM runs locally on machines you control. We do not operate a hosted service for SDSM, and we do not collect or receive your data.
+      </div>
+
+      <h2>What We Do Not Collect</h2>
+      <ul>
+        <li>No telemetry, analytics, or usage tracking.</li>
+        <li>No collection of configuration files, player data, or logs.</li>
+        <li>No outbound data transfer to our servers.</li>
+      </ul>
+
+      <h2>Local-Only Operation</h2>
+      <p>
+        All data processed by SDSM remains on your system unless you explicitly configure integrations or copy it elsewhere. Network requests initiated by SDSM (e.g., SteamCMD or Stationeers APIs) are between you and those third parties.
+      </p>
+
+      <h2>Third-Party Services</h2>
+      <p>
+        If you use third-party tools or services (e.g., Steam, RocketWerkz resources), your use is governed by their terms and privacy policies.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions? Contact: <a href="mailto:support@jvt.com">support@jvt.com</a>
+      </p>
+    </main>
+  </div>
+  {{ template "footer" . }}
+</body>
+</html>

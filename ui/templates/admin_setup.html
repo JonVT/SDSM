@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Setup - SDSM</title>
   <link rel="stylesheet" href="/static/modern.css" />
-  <link rel="stylesheet" href="/static/ui-theme.css" />
+  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
   <link rel="icon" href="/sdsm.png" type="image/png" />
   <style>
-    .container { min-height: 100vh; display:flex; align-items:center; justify-content:center; background: var(--surface-100); padding: var(--space-6); }
+    /* Use a dedicated class for vertical centering to avoid affecting header container */
+    .setup-center { min-height: 100vh; display:flex; align-items:center; justify-content:center; background: var(--surface-100); padding: var(--space-6); }
     .card { background: var(--surface-0); border: 1px solid var(--border-color); border-radius: var(--radius-2xl); padding: var(--space-6); width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); }
     .title { font-size: var(--text-2xl); font-weight: 700; margin-bottom: var(--space-2); }
     .subtitle { color: var(--text-secondary); margin-bottom: var(--space-6); }
-    .error { background: rgba(239, 68, 68, 0.12); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.25); padding: var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-4); }
+    .error { background: rgba(239, 68, 68, 0.12); color: var(--danger-500); border: 1px solid rgba(239, 68, 68, 0.25); padding: var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-4); }
     .hint { color: var(--text-secondary); font-size: var(--text-sm); margin-top: var(--space-2); }
   </style>
   <script>
@@ -47,9 +48,26 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
   </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <div style="text-align:center; margin-bottom: var(--space-4);">
+  <div class="container" style="padding-top: var(--space-6);">
+    <header class="hero-card">
+      <div class="hero-main">
+        <img src="/sdsm.png" alt="SDSM" class="hero-logo" width="72" height="72" />
+        <div class="hero-heading">
+          <h1 class="hero-title">Admin Setup</h1>
+          <p class="hero-subtitle">Create the initial administrator account.</p>
+        </div>
+      </div>
+      <div class="hero-actions row">
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
+    </header>
+  </div>
+
+  <main class="container setup-center">
+    <div class="glass-card" style="max-width: 520px; margin: 0 auto;">
+      <div style="text-align:center;" class="mb-4">
         <img src="/sdsm.png" alt="SDSM" width="64" height="64" style="opacity:.9" />
       </div>
       <h1 class="title">Create Admin Account</h1>
@@ -69,12 +87,19 @@
           <label for="confirm" class="form-label">Confirm Password</label>
           <input id="confirm" name="confirm" type="password" class="form-input" placeholder="Re-enter your password" required autocomplete="new-password" />
         </div>
-        <div class="form-group" style="margin-top: var(--space-4);">
-          <button type="submit" class="btn btn-primary" style="width:100%">Set Admin Password</button>
+        <div class="form-group mt-3">
+          <button type="submit" class="btn btn-primary w-full">Set Admin Password</button>
         </div>
       </form>
       <p class="hint">If running headless, set env SDSM_VIEWER_USERNAME/SDSM_VIEWER_PASSWORD for an optional read-only user before first login.</p>
     </div>
-  </div>
+  </main>
+  {{ template "footer" . }}
+  <script>
+    function getStoredTheme(){ return localStorage.getItem('theme') || 'dark'; }
+    function setTheme(theme){ document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); const icon=document.getElementById('theme-icon'); if(icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙'; }
+    function toggleTheme(){ const cur=document.documentElement.getAttribute('data-theme')||getStoredTheme(); setTheme(cur==='dark'?'light':'dark'); }
+    setTheme(getStoredTheme());
+  </script>
 </body>
 </html>

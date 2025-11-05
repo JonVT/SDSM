@@ -140,6 +140,42 @@
     let startStatusUpdates = function() {};
 
     let serverIsStorming = false;
+    // SCON health UI elements
+    const sconPill = document.getElementById('scon-health-pill');
+    const sconDot = document.getElementById('scon-health-dot');
+    const sconText = document.getElementById('scon-health-text');
+    let sconTimer = null;
+
+    function paintSCONHealth(ok) {
+        if (!sconPill || !sconDot || !sconText) return;
+        if (ok) {
+            sconDot.style.color = 'var(--success-500)';
+            sconText.textContent = 'SCON: Online';
+            sconPill.setAttribute('aria-label', 'SCON Online');
+        } else {
+            sconDot.style.color = 'var(--danger-500)';
+            sconText.textContent = 'SCON: Offline';
+            sconPill.setAttribute('aria-label', 'SCON Offline');
+        }
+    }
+
+    function pollSCONHealth() {
+        const serverId = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
+        if (!serverId) return;
+        fetch(`/api/servers/${serverId}/scon/health`, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error('probed')))
+            .then(data => {
+                const ok = !!(data && data.reachable);
+                paintSCONHealth(ok);
+            })
+            .catch(() => {
+                paintSCONHealth(false);
+            });
+    }
     let knownLiveSteam = new Set();
     let playerSavesToggle = null;
 
@@ -487,10 +523,19 @@
             left.appendChild(label);
             const right = document.createElement('div');
             right.style.marginLeft = '16px';
+            // Delete all player files (no exclusion)
+            const btnDelAll = document.createElement('button');
+            btnDelAll.type = 'button';
+            btnDelAll.className = 'btn btn-warning btn-icon btn-delete-all-player';
+            btnDelAll.title = 'Delete all files for this player (does not exclude)';
+            btnDelAll.setAttribute('aria-label', 'Delete all player files');
+            btnDelAll.dataset.steamId = steam;
+            btnDelAll.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
+            right.appendChild(btnDelAll);
             const btnExclude = document.createElement('button');
             btnExclude.type = 'button';
             btnExclude.className = 'btn btn-danger btn-icon btn-exclude-player';
-            btnExclude.title = 'Delete (excludes this player from future player saves)';
+            btnExclude.title = 'Delete + Exclude (remove files and exclude from future player saves)';
             btnExclude.setAttribute('aria-label', 'Delete player (exclude from player saves)');
             btnExclude.dataset.steamId = steam;
             btnExclude.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
@@ -544,6 +589,17 @@
                 btnLoad.dataset.type = 'player';
                 btnLoad.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
                 actions.appendChild(btnLoad);
+                // Per-file delete button for player save
+                const btnDel = document.createElement('button');
+                btnDel.type = 'button';
+                btnDel.className = 'btn btn-danger btn-icon btn-sm btn-delete-save';
+                btnDel.title = 'Delete this save';
+                btnDel.setAttribute('aria-label', 'Delete save');
+                btnDel.dataset.filename = it && it.filename ? it.filename : '';
+                btnDel.dataset.type = 'player';
+                btnDel.style.marginLeft = '6px';
+                btnDel.innerHTML = '<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a 2 2 0 0 1 2 2v 2"/></svg>';
+                actions.appendChild(btnDel);
                 dt.appendChild(timeSpan);
                 dt.appendChild(actions);
                 tr.appendChild(name);
@@ -638,11 +694,36 @@
     if (savesList) {
         savesList.addEventListener('click', function(e){
             const excludeBtn = e.target.closest && e.target.closest('.btn-exclude-player');
+            const delAllBtn = e.target.closest && e.target.closest('.btn-delete-all-player');
             const loadBtn = e.target.closest && e.target.closest('.btn-load-save');
             const delBtn = e.target.closest && e.target.closest('.btn-delete-save');
             const headerRow = e.target.closest && e.target.closest('tr.player-header');
             const serverId = Number(rootEl.dataset.serverId || '0');
             if (!serverId) return;
+            if (delAllBtn) {
+                e.preventDefault();
+                const steamId = (delAllBtn.dataset.steamId || '').trim();
+                if (!steamId) return;
+                e.stopPropagation();
+                delAllBtn.disabled = true;
+                fetch(`/api/servers/${serverId}/player-saves/delete-all`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ steam_id: steamId })
+                }).then((res) => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const typeH = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const message = res.headers.get('X-Toast-Message');
+                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                        }
+                    } catch(_) {}
+                    fetchPlayerSaves();
+                }).catch(() => {}).finally(() => { delAllBtn.disabled = false; });
+                return;
+            }
             if (headerRow && !excludeBtn) {
                 e.preventDefault();
                 const group = headerRow.dataset.group || '';
@@ -1538,7 +1619,7 @@
         if (!select) return;
         select.setAttribute('aria-invalid', 'true');
         // Inline highlight to avoid theme dependency
-        select.style.outline = '2px solid var(--danger, #d93025)';
+        select.style.outline = '2px solid var(--danger-500)';
         if (message) select.title = message;
     }
 
@@ -1861,6 +1942,13 @@
         // Language is no longer a startup parameter; dropdown remains for backward compatibility only if present
         populateLanguageOptions();
         updateWorldThumb();
+                // Start SCON health polling
+                try {
+                    paintSCONHealth(false);
+                    if (sconTimer) { clearInterval(sconTimer); }
+                    pollSCONHealth();
+                    sconTimer = setInterval(pollSCONHealth, 10000);
+                } catch(_) {}
         // Apply Player Saves preference from URL on first load after creation
         (function(){
             try {
@@ -1950,7 +2038,7 @@
                 const empty = document.createElement('div');
                 empty.textContent = 'No languages available';
                 empty.style.padding = '6px 8px';
-                empty.style.color = 'var(--text-muted, #999)';
+                empty.style.color = 'var(--text-tertiary)';
                 langMenu.appendChild(empty);
                 return;
             }
