@@ -34,7 +34,8 @@ var (
 	startedRe       = regexp.MustCompile(`^Deployment \(([^)]+)\) started$`)
 	completedOKRe   = regexp.MustCompile(`^Deployment \(([^)]+)\) completed successfully in ([0-9a-zA-Z\.:]+)$`)
 	completedErrRe  = regexp.MustCompile(`^Deployment \(([^)]+)\) completed with errors in ([0-9a-zA-Z\.:]+)$`)
-	steamProgressRe = regexp.MustCompile(`progress:\s*([0-9]+(?:\.[0-9]+)?)\s*\(`)
+	// Only treat Steam app download progress lines as progress when the state is 0x61 (downloading)
+	steamStateDownloadRe = regexp.MustCompile(`Update state \(0x61\)\s+downloading, progress:\s*([0-9]+(?:\.[0-9]+)?)\s*\(`)
 )
 
 // ParseSetupProgressFromUpdateLog scans the update log and returns structured progress.
@@ -97,7 +98,7 @@ func (m *Manager) ParseSetupProgressFromUpdateLog() SetupLogProgress {
 			continue
 		}
 
-		if mm := completedOKRe.FindStringSubmatch(line); len(mm) == 2 {
+		if mm := completedOKRe.FindStringSubmatch(line); len(mm) == 3 {
 			comp := DeployType(strings.ToUpper(strings.TrimSpace(mm[1])))
 			if sp, ok := stageMap[comp]; ok {
 				sp.Status = "Completed"
@@ -114,7 +115,7 @@ func (m *Manager) ParseSetupProgressFromUpdateLog() SetupLogProgress {
 			continue
 		}
 
-		if mm := completedErrRe.FindStringSubmatch(line); len(mm) == 2 {
+		if mm := completedErrRe.FindStringSubmatch(line); len(mm) == 3 {
 			comp := DeployType(strings.ToUpper(strings.TrimSpace(mm[1])))
 			if sp, ok := stageMap[comp]; ok {
 				sp.Status = "Error"
@@ -131,9 +132,9 @@ func (m *Manager) ParseSetupProgressFromUpdateLog() SetupLogProgress {
 			continue
 		}
 
-		// Capture SteamCMD progress into RELEASE/BETA when they are the active stage
+		// Capture Steam app download progress into RELEASE/BETA only for downloading state (0x61)
 		if currentComponent == DeployTypeRelease || currentComponent == DeployTypeBeta {
-			if mm := steamProgressRe.FindStringSubmatch(line); len(mm) == 2 {
+			if mm := steamStateDownloadRe.FindStringSubmatch(line); len(mm) == 2 {
 				if p := parseFloatPercent(mm[1]); p >= 0 {
 					if sp, ok := stageMap[currentComponent]; ok {
 						sp.Status = "Running"

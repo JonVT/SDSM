@@ -350,10 +350,17 @@
                 }
             }
 
+            let __prevUpdating = null;
             function handleProgressSnapshot(snapshot) {
                 if (!snapshot || !Array.isArray(snapshot.components)) return;
                 snapshot.components.forEach(updateProgressRow);
                 setButtonsDisabled(snapshot.updating);
+                // When an update run transitions from active -> idle, refresh the page
+                if (__prevUpdating === true && snapshot.updating === false) {
+                    // Small delay to let UI show Completed state
+                    setTimeout(() => { window.location.reload(); }, 600);
+                }
+                __prevUpdating = !!snapshot.updating;
                 if (!snapshot.updating && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
             }
 

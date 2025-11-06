@@ -416,6 +416,22 @@ func setupRouter() *gin.Engine {
 			}
 			managerHandlers.APIServersCreate(c)
 		})
+		// Create from Save (multipart .save upload)
+		api.POST("/servers/create-from-save", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersCreateFromSave(c)
+		})
+        // Analyze Save (multipart .save upload) - returns world and world file name
+        api.POST("/servers/analyze-save", func(c *gin.Context) {
+            if c.GetString("role") != "admin" {
+                c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+                return
+            }
+            managerHandlers.APIServersAnalyzeSave(c)
+        })
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
 		api.GET("/servers/:server_id/status", managerHandlers.APIServerStatus)
 		api.GET("/servers/:server_id/progress", managerHandlers.ServerProgressGET)
@@ -537,6 +553,8 @@ func setupRouter() *gin.Engine {
 	{
 		protected.GET("/dashboard", managerHandlers.Dashboard)
 		protected.GET("/frame", managerHandlers.Frame)
+		// Help pages
+		protected.GET("/help/tokens", managerHandlers.TokensHelpGET)
 		protected.GET("/manager", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {
 				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})

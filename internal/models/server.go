@@ -121,6 +121,7 @@ type Server struct {
 	ID             int           `json:"id"`
 	Proc           *exec.Cmd     `json:"-"`
 	Thrd           chan bool     `json:"-"`
+	stdin          io.WriteCloser `json:"-"`
 	Logger         *utils.Logger `json:"-"`
 	Paths          *utils.Paths  `json:"-"`
 	Name           string        `json:"name"`
@@ -704,6 +705,85 @@ func (s *Server) addChatMessage(name string, when time.Time, message string) {
 	}
 }
 
+// LastConnectedPlayerName returns the display name of the most recent player to connect
+// based on ConnectDatetime across all known client sessions. Returns an empty string
+// when no player history exists.
+func (s *Server) LastConnectedPlayerName() string {
+	if s == nil || len(s.Clients) == 0 {
+		return ""
+	}
+	var latest *Client
+	for _, c := range s.Clients {
+		if c == nil {
+			continue
+		}
+		if latest == nil || c.ConnectDatetime.After(latest.ConnectDatetime) {
+			latest = c
+		}
+	}
+	if latest == nil {
+		return ""
+	}
+	return strings.TrimSpace(latest.Name)
+}
+
+// expandChatTokens performs token substitution for chat/SAY messages.
+// Supported tokens (case-insensitive, bracketed):
+//   [ServerName], [WorldName], [WorldID], [StartLocation], [StartCondition],
+//   [Date], [Time], [LastPlayer]
+func (s *Server) expandChatTokens(msg string) string {
+	if s == nil || strings.TrimSpace(msg) == "" {
+		return msg
+	}
+	now := time.Now()
+	dateStr := now.Format("2006-01-02")
+	timeStr := now.Format("15:04:05")
+	lastPlayer := s.LastConnectedPlayerName()
+	tokens := map[string]string{
+		"servername":     strings.TrimSpace(s.Name),
+		"worldname":      strings.TrimSpace(s.World),
+		"worldid":        strings.TrimSpace(s.WorldID),
+		"startlocation":  strings.TrimSpace(s.StartLocation),
+		"startcondition": strings.TrimSpace(s.StartCondition),
+		"date":           dateStr,
+		"time":           timeStr,
+		"lastplayer":     lastPlayer,
+	}
+	// Fast path: check if there's a '[' present at all
+	if !strings.Contains(msg, "[") {
+		return msg
+	}
+	// Replace tokens in a single pass by scanning for bracketed words
+	var b strings.Builder
+	b.Grow(len(msg))
+	for i := 0; i < len(msg); {
+		ch := msg[i]
+		if ch != '[' {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		// Attempt to parse [Token]
+		end := strings.IndexByte(msg[i+1:], ']')
+		if end < 0 {
+			// No closing bracket; write the rest and break
+			b.WriteString(msg[i:])
+			break
+		}
+		end += i + 1
+		key := strings.TrimSpace(msg[i+1 : end])
+		lower := strings.ToLower(key)
+		if val, ok := tokens[lower]; ok {
+			b.WriteString(val)
+		} else {
+			// Not a recognized token; keep original brackets
+			b.WriteString(msg[i : end+1])
+		}
+		i = end + 1
+	}
+	return b.String()
+}
+
 func (s *Server) resetChat() {
 	if len(s.Chat) == 0 {
 		s.Chat = nil
@@ -1012,9 +1092,12 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		if !strings.Contains(data, "restart_delay_seconds") || s.RestartDelaySeconds < 0 {
 			s.RestartDelaySeconds = DefaultRestartDelaySeconds
 		}
-		// If SCONPort wasn't persisted or was zero, derive default from game port
-		if s.SCONPort == 0 && s.Port > 0 {
-			s.SCONPort = s.Port + 1
+		// Derive/repair SCON port from game port. Since SCON port isn't user-configurable yet,
+		// treat it as a derived value and fix stale values after port changes.
+		if s.Port > 0 {
+			if s.SCONPort == 0 || s.SCONPort != s.Port+1 {
+				s.SCONPort = s.Port + 1
+			}
 		}
 		// Backfill defaults for newly introduced fields if absent
 		if s.MaxAutoSaves <= 0 {
@@ -1644,6 +1727,12 @@ func (s *Server) Start() {
 	if s.Logger != nil {
 		s.Logger.Write("Starting server process")
 	}
+	// Prepare stdin pipe before starting so we can fall back to stdin commands if SCON is unavailable
+	if pipe, err := cmd.StdinPipe(); err == nil {
+		s.stdin = pipe
+	} else if s.Logger != nil {
+		s.Logger.Write(fmt.Sprintf("Warning: failed to open stdin pipe: %v", err))
+	}
 	if err := cmd.Start(); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to start server process: %v", err))
@@ -1675,6 +1764,10 @@ func (s *Server) Start() {
 		s.Running = false
 		s.Starting = false
 		s.Proc = nil
+		if s.stdin != nil {
+			_ = s.stdin.Close()
+			s.stdin = nil
+		}
 		close(stop)
 		if s.Thrd == stop {
 			s.Thrd = nil
@@ -1786,6 +1879,127 @@ func (s *Server) processLine(line string) {
 	}
 }
 
+// detectSCONPortFromLog attempts to parse the SCON HTTP port from the BepInEx LogOutput.log
+// within the server's game directory. Returns 0 if not found.
+func (s *Server) detectSCONPortFromLog() int {
+	if s == nil || s.Paths == nil {
+		return 0
+	}
+	logPath := filepath.Join(s.Paths.ServerGameDir(s.ID), "BepInEx", "LogOutput.log")
+	f, err := os.Open(logPath)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	// Read up to last 128KB for efficiency on large logs
+	const maxRead = 128 * 1024
+	info, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+	size := info.Size()
+	var start int64 = 0
+	if size > maxRead {
+		start = size - maxRead
+	}
+	buf := make([]byte, size-start)
+	if _, err := f.ReadAt(buf, start); err != nil && !errors.Is(err, io.EOF) {
+		// Best effort; if ReadAt fails, fallback to 0
+		return 0
+	}
+	text := string(buf)
+	// Check common SCON log patterns in reverse priority of specificity
+	// 1) HTTP Listener started on http://localhost:27017/
+	if i := strings.LastIndex(text, "HTTP Listener started on http://"); i >= 0 {
+		// Extract substring after this marker and parse port
+		sub := text[i:]
+		if p := extractPortFromURLLike(sub); p > 0 {
+			return p
+		}
+	}
+	// 2) SCON server started on localhost:27017
+	if i := strings.LastIndex(text, "SCON server started on "); i >= 0 {
+		sub := text[i:]
+		if p := extractPortFromHostPort(sub); p > 0 {
+			return p
+		}
+	}
+	// 3) Auto-binding SCON to dedicated server port+1: 27017
+	if i := strings.LastIndex(text, "port+1:"); i >= 0 {
+		sub := text[i:]
+		if p := extractFirstPortDigits(sub); p > 0 {
+			return p
+		}
+	}
+	return 0
+}
+
+// extractPortFromURLLike parses a URL-like segment and returns the trailing port number.
+func extractPortFromURLLike(s string) int {
+	// Find last ':' and parse consecutive digits
+	idx := strings.LastIndex(s, ":")
+	if idx < 0 || idx+1 >= len(s) {
+		return 0
+	}
+	// Read digits until non-digit
+	j := idx + 1
+	for j < len(s) && s[j] >= '0' && s[j] <= '9' {
+		j++
+	}
+	if j == idx+1 {
+		return 0
+	}
+	n, _ := strconv.Atoi(s[idx+1 : j])
+	if n >= 1 && n <= 65535 {
+		return n
+	}
+	return 0
+}
+
+// extractPortFromHostPort finds patterns like "localhost:27017" or "127.0.0.1:27017".
+func extractPortFromHostPort(s string) int { return extractPortFromURLLike(s) }
+
+// extractFirstPortDigits returns the first 2-5 digit number in the string within port range.
+func extractFirstPortDigits(s string) int {
+	// Simple scan for a 2-5 digit sequence, then validate range
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			continue
+		}
+		j := i
+		for j < len(s) && s[j] >= '0' && s[j] <= '9' && (j-i) < 5 {
+			j++
+		}
+		if j-i >= 2 {
+			if n, _ := strconv.Atoi(s[i:j]); n >= 1 && n <= 65535 {
+				return n
+			}
+		}
+		i = j
+	}
+	return 0
+}
+
+// CurrentSCONPort returns the detected SCON HTTP port, preferring BepInEx logs when available.
+// Falls back to the conventional game port + 1, or 8081 if unknown.
+func (s *Server) CurrentSCONPort() int {
+	if s == nil {
+		return 8081
+	}
+	if p := s.detectSCONPortFromLog(); p > 0 {
+		// Keep a cached copy for visibility
+		s.SCONPort = p
+		return p
+	}
+	if s.Port > 0 {
+		return s.Port + 1
+	}
+	if s.SCONPort > 0 {
+		return s.SCONPort
+	}
+	return 8081
+}
+
 // SendRaw writes a single console line to the running server's stdin.
 // It returns an error if the server is not running or stdin is unavailable.
 func (s *Server) SendRaw(line string) error {
@@ -1806,16 +2020,9 @@ func (s *Server) SendRaw(line string) error {
 		return fmt.Errorf("server is not running")
 	}
 
-	// Use SCON HTTP API instead of stdin
-	rconPort := s.SCONPort
-	if rconPort == 0 {
-		// Default SCON port follows Stationeers convention: game port + 1
-		if s.Port > 0 {
-			rconPort = s.Port + 1
-		} else {
-			rconPort = 8081 // fallback if port unknown
-		}
-	}
+	// Use SCON HTTP API when available; otherwise fall back to stdin
+	// Prefer dynamic detection from BepInEx logs; fallback to game port + 1
+	rconPort := s.CurrentSCONPort()
 
 	// Ensure single line only
 	trimmed = strings.ReplaceAll(trimmed, "\n", " ")
@@ -1840,6 +2047,12 @@ func (s *Server) SendRaw(line string) error {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("SCON HTTP POST failed: %v", err))
 		}
+		// Fallback to stdin when SCON is unavailable
+		if s.stdin != nil {
+			if _, werr := io.WriteString(s.stdin, trimmed+"\n"); werr == nil {
+				return nil
+			}
+		}
 		return fmt.Errorf("failed to send command to SCON API: %w", err)
 	}
 	defer resp.Body.Close()
@@ -1853,6 +2066,12 @@ func (s *Server) SendRaw(line string) error {
 		}
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("SCON API error %d: %s", resp.StatusCode, bodyStr))
+		}
+		// Fallback to stdin on non-200 as well
+		if s.stdin != nil {
+			if _, werr := io.WriteString(s.stdin, trimmed+"\n"); werr == nil {
+				return nil
+			}
 		}
 		return fmt.Errorf("SCON API returned status %d: %s", resp.StatusCode, bodyStr)
 	}
@@ -1875,7 +2094,8 @@ func (s *Server) SendCommand(kind, payload string) error {
 	case "chat":
 		// Stationeers console command is 'SAY' (case-sensitive in some contexts)
 		// Use uppercase and pass the message directly.
-		return s.SendRaw("SAY " + msg)
+		expanded := s.expandChatTokens(msg)
+		return s.SendRaw("SAY " + expanded)
 	default:
 		// Unknown type, treat as console
 		return s.SendRaw(msg)

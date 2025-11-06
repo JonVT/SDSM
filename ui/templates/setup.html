@@ -91,6 +91,9 @@
 
         .error-hint { margin-top: var(--space-3); font-size: 13px; color: var(--text-tertiary); }
 
+        .info-box { background: var(--surface-subtle); border-left: 4px solid var(--primary-500); padding: var(--space-4); border-radius: 8px; margin-bottom: var(--space-6); border: 1px solid var(--panel-border); color: var(--text-secondary); font-size: 14px; }
+        .info-box strong { color: var(--text-primary); }
+
         .instructions { background: var(--surface-subtle); padding: var(--space-4); border-radius: 8px; margin-bottom: var(--space-6); border: 1px solid var(--panel-border); }
 
         .instructions h3 { font-size: 14px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--space-3); }
@@ -219,6 +222,11 @@
         [data-theme="dark"] .error-hint {
             color: #fecaca;
         }
+
+        [data-theme="dark"] .info-box {
+            background: #1a202c;
+            border-color: #4a5568;
+        }
     </style>
 </head>
 <body class="page-shell">
@@ -249,6 +257,13 @@
                 <p>Some required components are missing. Let's get you set up!</p>
             </div>
 
+            <div id="updatesHint" class="info-box" style="{{if .updatesAvailable}}display:block;{{else}}display:none;{{end}}">
+                <strong>Updates available:</strong> New versions detected. You can update components now.
+                <span style="margin-left:12px;">
+                    <a href="/logs/updates" style="color: var(--primary-600); text-decoration: none;">View change log →</a>
+                </span>
+            </div>
+
             
 
             <div id="errorBox" class="error-box{{if .deployErrors}} active{{end}}">
@@ -264,22 +279,22 @@
             <div class="instructions" id="install-section">
                 <h3>Pending components:</h3>
                 <ol id="install-list">
-                    {{if has .missingComponents "SteamCMD"}}
+                    {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
                     <li data-component="STEAMCMD"><span class="step-badge">Step —</span> <strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
                     {{end}}
-                    {{if has .missingComponents "Stationeers Release"}}
+                    {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
                     <li data-component="RELEASE"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
                     {{end}}
-                    {{if has .missingComponents "Stationeers Beta"}}
+                    {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
                     <li data-component="BETA"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
                     {{end}}
-                    {{if has .missingComponents "BepInEx"}}
+                    {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
                     <li data-component="BEPINEX"><span class="step-badge">Step —</span> <strong>BepInEx</strong> - Modding framework for Stationeers</li>
                     {{end}}
-                    {{if has .missingComponents "SCON"}}
+                    {{if or .missingSCON (has .missingComponents "SCON") }}
                     <li data-component="SCON"><span class="step-badge">Step —</span> <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)</li>
                     {{end}}
-                    {{if has .missingComponents "Stationeers LaunchPad"}}
+                    {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
                     <li data-component="LAUNCHPAD"><span class="step-badge">Step —</span> <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup</li>
                     {{end}}
                 </ol>
@@ -299,9 +314,8 @@
                 <form method="POST" action="/setup/skip" id="skipForm">
                     <button type="submit" class="btn btn-secondary" id="skipBtn">Skip for Now</button>
                 </form>
-                <button type="button" class="btn btn-setup" id="setupBtn" onclick="runSetup()">
-                    🚀 Start Setup
-                </button>
+                <button type="button" class="btn btn-setup" id="setupBtn" onclick="runSetup()">🚀 Start Setup</button>
+                <button type="button" class="btn btn-setup" id="updateBtn" style="display:none;" onclick="runUpdate()">⬆️ Update Components</button>
             </div>
         </div>
     </main>
@@ -317,10 +331,12 @@
         const progressFill = document.querySelector('.progress-fill');
         const progressText = document.querySelector('.progress-text');
         const setupBtn = document.getElementById('setupBtn');
+        let updateBtn = null;
         const skipBtn = document.getElementById('skipBtn');
         const errorBox = document.getElementById('errorBox');
         const errorList = document.getElementById('errorList');
         const installSection = document.getElementById('install-section');
+        const updatesHint = document.getElementById('updatesHint');
 
         function updateErrorBox(errors) {
             if (!errorBox || !errorList) {
@@ -391,6 +407,7 @@
 
             // Hide pending list once setup begins
             if (installSection) installSection.style.display = 'none';
+            if (updatesHint) updatesHint.style.display = 'none';
 
             fetch('/setup/install', {
                 method: 'POST',
@@ -421,11 +438,64 @@
             });
         }
 
+        function runUpdate() {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+
+            updateErrorBox([]);
+            setButtonsDisabled(true);
+
+            if (progressContainer) {
+                progressContainer.classList.add('active');
+            }
+            if (progressText) {
+                progressText.textContent = '⏳ Updating components, please wait...';
+            }
+            startProgressAnimation();
+            if (updatesHint) updatesHint.style.display = 'none';
+
+            fetch('/setup/update', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            }).then(response => {
+                if (response.ok) {
+                    statusCheckInterval = setInterval(checkSetupStatus, 2000);
+                    if (!setupProgressInterval) {
+                        setupProgressInterval = setInterval(fetchSetupProgress, 2000);
+                    }
+                    fetchSetupProgress();
+                } else {
+                    stopProgressAnimation();
+                    if (progressText) {
+                        progressText.textContent = '⚠️ Failed to start update. Check the log and try again.';
+                    }
+                    setButtonsDisabled(false);
+                }
+            }).catch(error => {
+                stopProgressAnimation();
+                if (progressText) {
+                    progressText.textContent = `⚠️ Update failed to start: ${error.message}`;
+                }
+                setButtonsDisabled(false);
+            });
+        }
+
         function checkSetupStatus() {
             fetch('/setup/status')
                 .then(response => response.json())
                 .then(data => {
                     updateErrorBox(data.errors || []);
+                    // Toggle update button visibility based on backend indicator
+                    if (!updateBtn) { updateBtn = document.getElementById('updateBtn'); }
+                    if (updateBtn) {
+                        const showUpdate = !!data.updatesAvailable && (!data.inProgress);
+                        updateBtn.style.display = showUpdate ? '' : 'none';
+                    }
+                    if (updatesHint) {
+                        updatesHint.style.display = (data.updatesAvailable && !data.inProgress) ? '' : 'none';
+                    }
 
                     const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
 
@@ -605,10 +675,15 @@
                         startProgressAnimation();
                         if (!statusCheckInterval) statusCheckInterval = setInterval(checkSetupStatus, 2000);
                         if (installSection) installSection.style.display = 'none';
+                        if (updatesHint) updatesHint.style.display = 'none';
                     } else {
                         // Show section only if backend reports missing components
                         const hasMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
                         if (installSection) installSection.style.display = hasMissing ? '' : 'none';
+                        // Seed update button visibility
+                        if (!updateBtn) { updateBtn = document.getElementById('updateBtn'); }
+                        if (updateBtn) updateBtn.style.display = data.updatesAvailable ? '' : 'none';
+                        if (updatesHint) updatesHint.style.display = data.updatesAvailable ? '' : 'none';
                     }
                 }).catch(()=>{});
         })();

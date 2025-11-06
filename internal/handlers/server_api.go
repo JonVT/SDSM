@@ -2,10 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"archive/zip"
 	"net/http"
 	"os"
+	"io"
+    "mime/multipart"
 	"path/filepath"
 	"sdsm/internal/middleware"
 	"sdsm/internal/models"
@@ -598,6 +602,8 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		s.Difficulty = difficulty
 	}
 
+	// Track port change to keep SCONPort in sync (SCON uses game port + 1)
+	originalPort := s.Port
 	if portStr := body["port"]; portStr != "" {
 		if port, err := middleware.ValidatePort(portStr); err == nil {
 			if h.manager.IsPortAvailable(port, s.ID) {
@@ -613,11 +619,27 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// If the game port changed, recompute SCONPort to follow convention
+	if s.Port > 0 && s.Port != originalPort {
+		s.SCONPort = s.Port + 1
+	}
+
 	if v := body["password"]; v != "" {
 		s.Password = v
 	}
 	if v := body["auth_secret"]; v != "" {
 		s.AuthSecret = v
+	}
+
+	// Welcome Message (optional, allow clearing). Sanitize and clamp length.
+	if wm, ok := body["welcome_message"]; ok {
+		clean := middleware.SanitizeString(wm)
+		clean = strings.ReplaceAll(strings.ReplaceAll(clean, "\r", " "), "\n", " ")
+		clean = strings.TrimSpace(clean)
+		if len(clean) > 300 {
+			clean = clean[:300]
+		}
+		s.WelcomeMessage = clean
 	}
 
 	if maxClientsStr := body["max_clients"]; maxClientsStr != "" {
@@ -962,6 +984,398 @@ func ifZero[T ~int](val T, def T) T {
 	return val
 }
 
+// settingsXML holds a subset of Stationeers settings we care about for prefill.
+type settingsXML struct {
+	XMLName               xml.Name `xml:"Settings"`
+	ServerMaxPlayers      *int     `xml:"ServerMaxPlayers"`
+	AutoSave              *bool    `xml:"AutoSave"`
+	SaveInterval          *int     `xml:"SaveInterval"`
+	AutoPauseServer       *bool    `xml:"AutoPauseServer"`
+	DeleteSkeletonOnDecay *bool    `xml:"DeleteSkeletonOnDecay"`
+	UseSteamP2P           *bool    `xml:"UseSteamP2P"`
+	DisconnectTimeout     *int     `xml:"DisconnectTimeout"`
+	ServerVisible         *bool    `xml:"ServerVisible"`
+	GamePort              *int     `xml:"GamePort"`
+	ServerPassword        *string  `xml:"ServerPassword"`
+	ServerAuthSecret      *string  `xml:"ServerAuthSecret"`
+}
+
+func parseSettingsFromSaveZip(path string) (*settingsXML, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	var entry *zip.File
+	for _, f := range zr.File {
+		name := strings.ToLower(filepath.Base(f.Name))
+		if name == "settings.xml" {
+			entry = f
+			break
+		}
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("settings.xml not found in save")
+	}
+	rc, err := entry.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	var s settingsXML
+	dec := xml.NewDecoder(rc)
+	if err := dec.Decode(&s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// worldMetaXML represents key fields from world_meta.xml used for prefill.
+type worldMetaXML struct {
+	XMLName       xml.Name `xml:"WorldMetaData"`
+	WorldName     string   `xml:"WorldName"`
+	WorldFileName string   `xml:"WorldFileName"`
+	GameVersion   string   `xml:"GameVersion"`
+}
+
+func parseWorldMetaFromSaveZip(path string) (*worldMetaXML, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	var entry *zip.File
+	for _, f := range zr.File {
+		name := strings.ToLower(filepath.Base(f.Name))
+		if name == "world_meta.xml" {
+			entry = f
+			break
+		}
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("world_meta.xml not found in save")
+	}
+	rc, err := entry.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	var m worldMetaXML
+	dec := xml.NewDecoder(rc)
+	if err := dec.Decode(&m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// saveUploadToTemp copies a multipart upload to a temporary file and returns its path.
+func (h *ManagerHandlers) saveUploadToTemp(c *gin.Context, fh *multipart.FileHeader, pattern string) (string, error) {
+	if fh == nil {
+		return "", fmt.Errorf("no file header")
+	}
+	src, err := fh.Open()
+	if err != nil {
+		if h.manager != nil && h.manager.Log != nil { h.manager.Log.Write("Upload open failed: "+err.Error()) }
+		return "", err
+	}
+	defer src.Close()
+	tmpf, err := os.CreateTemp("", pattern)
+	if err != nil {
+		if h.manager != nil && h.manager.Log != nil { h.manager.Log.Write("Temp file create failed: "+err.Error()) }
+		return "", err
+	}
+	tmp := tmpf.Name()
+	_, copyErr := io.Copy(tmpf, src)
+	cerr := tmpf.Close()
+	if copyErr != nil {
+		if h.manager != nil && h.manager.Log != nil { h.manager.Log.Write("Upload copy failed: "+copyErr.Error()) }
+		os.Remove(tmp)
+		return "", copyErr
+	}
+	if cerr != nil {
+		if h.manager != nil && h.manager.Log != nil { h.manager.Log.Write("Temp file close failed: "+cerr.Error()) }
+	}
+	return tmp, nil
+}
+
+// APIServersAnalyzeSave parses an uploaded .save (multipart, field name "save_file") and
+// returns minimal metadata for UI prefill: world and world_file_name (server name).
+// Response: { world: string, world_file_name: string }
+func (h *ManagerHandlers) APIServersAnalyzeSave(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	file, err := c.FormFile("save_file")
+	if err != nil || file == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "save_file (.save) is required"})
+		return
+	}
+	base := strings.ToLower(filepath.Base(file.Filename))
+	if !strings.HasSuffix(base, ".save") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid save file; must end with .save"})
+		return
+	}
+	tmp, err := h.saveUploadToTemp(c, file, "analyze-*.save")
+	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save upload"}); return }
+	defer os.Remove(tmp)
+
+	meta, merr := parseWorldMetaFromSaveZip(tmp)
+	if merr != nil || meta == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world_meta.xml not found in save"})
+		return
+	}
+	// Best-effort parse of settings.xml for defaults
+	resp := gin.H{
+		"world":           strings.TrimSpace(meta.WorldName),
+		"world_file_name": strings.TrimSpace(meta.WorldFileName),
+	}
+	if settings, perr := parseSettingsFromSaveZip(tmp); perr == nil && settings != nil {
+		if settings.GamePort != nil && *settings.GamePort > 0 { resp["port"] = *settings.GamePort }
+		if settings.ServerMaxPlayers != nil && *settings.ServerMaxPlayers > 0 { resp["max_clients"] = *settings.ServerMaxPlayers }
+		if settings.ServerPassword != nil { resp["password"] = *settings.ServerPassword }
+		if settings.ServerAuthSecret != nil { resp["auth_secret"] = *settings.ServerAuthSecret }
+		if settings.ServerVisible != nil { resp["server_visible"] = *settings.ServerVisible }
+		if settings.AutoSave != nil { resp["auto_save"] = *settings.AutoSave }
+		if settings.SaveInterval != nil && *settings.SaveInterval > 0 { resp["save_interval"] = *settings.SaveInterval }
+		if settings.AutoPauseServer != nil { resp["auto_pause"] = *settings.AutoPauseServer }
+		if settings.DeleteSkeletonOnDecay != nil { resp["delete_skeleton_on_decay"] = *settings.DeleteSkeletonOnDecay }
+		if settings.UseSteamP2P != nil { resp["use_steam_p2p"] = *settings.UseSteamP2P }
+		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 { resp["disconnect_timeout"] = *settings.DisconnectTimeout }
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// APIServersCreateFromSave creates a new server using posted fields and an uploaded .save file.
+// Multipart form fields mirror APIServersCreate; file field name: "save_file".
+func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+
+	// Read modifiable fields from form where applicable
+	formName := middleware.SanitizeString(c.PostForm("name"))
+	difficulty := middleware.SanitizeString(c.PostForm("difficulty"))
+	// Non-modifiable (derived) fields
+	name := ""
+	world := ""
+	startLocation := ""
+	startCondition := ""
+	beta := strings.TrimSpace(c.PostForm("beta")) == "true"
+	password := c.PostForm("password")
+	authSecret := c.PostForm("auth_secret")
+	autoStart := c.PostForm("auto_start") == "on"
+	autoUpdate := c.PostForm("auto_update") == "on"
+	autoSave := c.PostForm("auto_save") == "on"
+	autoPause := c.PostForm("auto_pause") == "on"
+	playerSaves := c.PostForm("player_saves") == "on"
+	deleteSkeletonOnDecay := c.PostForm("delete_skeleton_on_decay") == "on"
+	useSteamP2P := c.PostForm("use_steam_p2p") == "on"
+	serverVisible := c.PostForm("server_visible") == "on"
+	welcomeMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_message")), "\r", " "), "\n", " "))
+	if len(welcomeMessage) > 300 { welcomeMessage = welcomeMessage[:300] }
+
+	// Numeric fields with defaults
+	port, _ := middleware.ValidatePort(c.PostForm("port")) // validate later for availability
+	maxClients, _ := strconv.Atoi(c.PostForm("max_clients"))
+	if maxClients <= 0 { maxClients = 10 }
+	saveInterval, _ := strconv.Atoi(c.PostForm("save_interval"))
+	if saveInterval <= 0 { saveInterval = 300 }
+	restartDelay := models.DefaultRestartDelaySeconds
+	if v := strings.TrimSpace(c.PostForm("restart_delay_seconds")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 3600 { restartDelay = n }
+	}
+	shutdownDelay := 2
+	if v := strings.TrimSpace(c.PostForm("shutdown_delay_seconds")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 3600 { shutdownDelay = n }
+	}
+	maxAutoSaves := ifZero(parseIntSafe(c.PostForm("max_auto_saves"), 0), 5)
+	maxQuickSaves := ifZero(parseIntSafe(c.PostForm("max_quick_saves"), 0), 5)
+	disconnectTimeout := ifZero(parseIntSafe(c.PostForm("disconnect_timeout"), 0), 10000)
+
+	// Handle file upload early so we can parse world_meta.xml first
+	file, err := c.FormFile("save_file")
+	if err != nil || file == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "save_file (.save) is required"})
+		return
+	}
+	base := strings.ToLower(filepath.Base(file.Filename))
+	if !strings.HasSuffix(base, ".save") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid save file; must end with .save"})
+		return
+	}
+	// Save to temp path first
+	tmp, err := h.saveUploadToTemp(c, file, "upload-*.save")
+	if err != nil { c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save upload"}); return }
+
+	// Primary: parse world_meta.xml from zip (REQUIRED)
+	var worldIDForDefaults string
+	meta, merr := parseWorldMetaFromSaveZip(tmp)
+	if merr != nil || meta == nil {
+		os.Remove(tmp)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world_meta.xml not found in save"})
+		return
+	}
+	if w := strings.TrimSpace(meta.WorldName); w != "" { world = w }
+	if strings.TrimSpace(formName) != "" {
+		name = formName
+	} else if wf := strings.TrimSpace(meta.WorldFileName); wf != "" {
+		name = middleware.SanitizeString(wf)
+	}
+
+	// Secondary: parse settings.xml from zip (best effort) for ancillary settings only.
+	if settings, perr := parseSettingsFromSaveZip(tmp); perr == nil && settings != nil {
+		// Do NOT override user-provided overrides: port, max players, server visible, password, auth secret
+		if settings.AutoSave != nil { autoSave = *settings.AutoSave }
+		if settings.SaveInterval != nil && *settings.SaveInterval > 0 { saveInterval = *settings.SaveInterval }
+		if settings.AutoPauseServer != nil { autoPause = *settings.AutoPauseServer }
+		if settings.DeleteSkeletonOnDecay != nil { deleteSkeletonOnDecay = *settings.DeleteSkeletonOnDecay }
+		if settings.UseSteamP2P != nil { useSteamP2P = *settings.UseSteamP2P }
+		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 { disconnectTimeout = *settings.DisconnectTimeout }
+	}
+
+	// Basic validations (after parsing save metadata)
+	if strings.TrimSpace(name) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required."})
+		return
+	}
+	if !h.manager.IsServerNameAvailable(name, -1) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Server name '%s' already exists.", name)})
+		return
+	}
+	if strings.TrimSpace(world) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "World not found in save metadata."})
+		return
+	}
+
+	// Choose sensible defaults for start parameters and difficulty, since the save drives state
+	worldIDForDefaults = h.manager.ResolveWorldID(world, beta)
+	if strings.TrimSpace(worldIDForDefaults) == "" { worldIDForDefaults = world }
+	// Default start location/condition from first available options for world
+	if locs := h.manager.GetStartLocationsForWorldVersion(worldIDForDefaults, beta); len(locs) > 0 {
+		startLocation = locs[0].ID
+	}
+	if conds := h.manager.GetStartConditionsForWorldVersion(worldIDForDefaults, beta); len(conds) > 0 {
+		startCondition = conds[0].ID
+	}
+	// Default difficulty only if not provided by user
+	if strings.TrimSpace(difficulty) == "" {
+		diffs := h.manager.GetDifficultiesForVersion(beta)
+		if len(diffs) > 0 {
+			difficulty = diffs[0]
+			for _, d := range diffs { if strings.EqualFold(d, "Normal") { difficulty = d; break } }
+		} else {
+			difficulty = "Normal"
+		}
+	}
+
+	// Validate/adjust port
+	if port == 0 {
+		if p, err := middleware.ValidatePort("26017"); err == nil { port = p }
+	}
+	if !h.manager.IsPortAvailable(port, -1) {
+		port = h.manager.GetNextAvailablePort(port)
+	}
+	// Validate remaining numeric ranges
+	if maxClients < 1 || maxClients > 100 { maxClients = 10 }
+	if saveInterval < 60 || saveInterval > 3600 { saveInterval = 300 }
+
+	worldID := h.manager.ResolveWorldID(world, beta)
+	if strings.TrimSpace(worldID) == "" { worldID = world }
+
+	cfg := &models.ServerConfig{
+		Name:                  name,
+		World:                 world,
+		WorldID:               worldID,
+		Language:              "",
+		StartLocation:         startLocation,
+		StartCondition:        startCondition,
+		Difficulty:            difficulty,
+		Port:                  port,
+		Password:              password,
+		AuthSecret:            authSecret,
+		MaxClients:            maxClients,
+		SaveInterval:          saveInterval,
+		Visible:               serverVisible,
+		Beta:                  beta,
+		AutoStart:             autoStart,
+		AutoUpdate:            autoUpdate,
+		AutoSave:              autoSave,
+		AutoPause:             autoPause,
+		PlayerSaves:           playerSaves,
+		MaxAutoSaves:          maxAutoSaves,
+		MaxQuickSaves:         maxQuickSaves,
+		DeleteSkeletonOnDecay: deleteSkeletonOnDecay,
+		UseSteamP2P:           useSteamP2P,
+		DisconnectTimeout:     disconnectTimeout,
+		RestartDelaySeconds:   restartDelay,
+		ShutdownDelaySeconds:  shutdownDelay,
+		WelcomeMessage:        welcomeMessage,
+	}
+
+	// Default language selection similar to other create paths
+	langs := h.manager.GetLanguagesForVersion(beta)
+	if len(langs) > 0 {
+		cfg.Language = langs[0]
+		for _, l := range langs { if strings.EqualFold(l, "english") { cfg.Language = l; break } }
+	}
+
+	newServer, err := h.manager.AddServer(cfg)
+	if err != nil {
+		os.Remove(tmp)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create server"})
+		return
+	}
+
+	// Ensure directory exists and move the .save into saves/<ServerName>/
+	var savesDir string
+	if newServer.Paths != nil { savesDir = newServer.Paths.ServerSavesDir(newServer.ID) } else if h.manager.Paths != nil { savesDir = h.manager.Paths.ServerSavesDir(newServer.ID) }
+	if strings.TrimSpace(savesDir) != "" {
+		targetDir := filepath.Join(savesDir, newServer.Name)
+		_ = os.MkdirAll(targetDir, 0o755)
+		safeBase := middleware.SanitizeFilename(file.Filename)
+		if !strings.HasSuffix(strings.ToLower(safeBase), ".save") { safeBase = safeBase + ".save" }
+		target := filepath.Join(targetDir, filepath.Base(safeBase))
+		// If target exists, append timestamp to avoid overwrite
+		if _, err := os.Stat(target); err == nil {
+			ts := time.Now().Format("20060102-150405")
+			nameOnly := strings.TrimSuffix(filepath.Base(safeBase), ".save")
+			target = filepath.Join(targetDir, fmt.Sprintf("%s-%s.save", nameOnly, ts))
+		}
+		if err := os.Rename(tmp, target); err != nil {
+			// Fallback to copy then remove temp
+			if in, e1 := os.Open(tmp); e1 == nil {
+				if out, e2 := os.Create(target); e2 == nil {
+					_, _ = io.Copy(out, in)
+					out.Close()
+				}
+				in.Close()
+			}
+			_ = os.Remove(tmp)
+		}
+	} else {
+		_ = os.Remove(tmp)
+	}
+
+	// Best-effort initial deploy
+	if err := newServer.Deploy(); err != nil {
+		h.manager.Log.Write(fmt.Sprintf("Initial deploy failed for %s (ID:%d): %v", newServer.Name, newServer.ID, err))
+	}
+
+	// Broadcast roster + stats
+	h.broadcastServersChanged()
+	h.broadcastStats()
+	h.broadcastServerStatus(newServer)
+
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Server Created")
+	c.Header("X-Toast-Message", newServer.Name+" created from save.")
+	c.JSON(http.StatusOK, gin.H{"server_id": newServer.ID})
+}
+
+func parseIntSafe(s string, def int) int { if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil { return v }; return def }
+
 // APIServerLogTail streams a chunk of a log starting from a byte offset. It supports:
 //   - offset >= 0: read from offset up to 'max' bytes
 //   - offset == -1: read the last 'back' bytes from end (or 0 if back not provided)
@@ -1207,15 +1621,8 @@ func (h *ManagerHandlers) APIServerSCONHealth(c *gin.Context) {
 		return
 	}
 
-	// Determine SCON port similar to SendRaw logic
-	port := s.SCONPort
-	if port == 0 {
-		if s.Port > 0 {
-			port = s.Port + 1
-		} else {
-			port = 8081
-		}
-	}
+	// Determine SCON port using dynamic detection (BepInEx LogOutput), with fallback
+	port := s.CurrentSCONPort()
 	url := fmt.Sprintf("http://localhost:%d/command", port)
 
 	// Lightweight probe: try GET (expecting 404/405/200). Any response means reachable.

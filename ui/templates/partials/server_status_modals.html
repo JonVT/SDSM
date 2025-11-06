@@ -53,3 +53,32 @@
             </div>
         </div>
         </div>
+
+<div id="tokenHelpModal" class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="tokenHelpTitle" aria-describedby="tokenHelpDesc">
+    <div class="modal-card">
+        <div class="modal-header">
+            <svg class="icon-inline icon modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <h3 id="tokenHelpTitle" class="modal-title">Chat Token Reference</h3>
+        </div>
+        <div id="tokenHelpDesc" class="modal-body">
+            <p>You can include these tokens in chat messages and the Welcome Message. They will be replaced automatically before sending to the server.</p>
+            <ul style="margin-left: 1rem;">
+                <li><code>[ServerName]</code>: The server name</li>
+                <li><code>[WorldName]</code>: The world name</li>
+                <li><code>[WorldID]</code>: The world ID</li>
+                <li><code>[StartLocation]</code>: Start location</li>
+                <li><code>[StartCondition]</code>: Start condition</li>
+                <li><code>[Date]</code>: Current date (YYYY-MM-DD)</li>
+                <li><code>[Time]</code>: Current time (HH:MM:SS)</li>
+                <li><code>[LastPlayer]</code>: Name of the last player to connect</li>
+            </ul>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="tokenHelpClose" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+</div>

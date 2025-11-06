@@ -15,10 +15,27 @@ func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 	if !h.manager.IsUpdating() {
 		h.manager.CheckMissingComponents()
 	}
+	missing := h.manager.GetMissingComponents()
+	// Build explicit flags so the template doesn't depend on a helper for membership checks
+	has := func(name string) bool {
+		for _, m := range missing {
+			if m == name {
+				return true
+			}
+		}
+		return false
+	}
 	c.HTML(http.StatusOK, "setup.html", gin.H{
-		"missingComponents": h.manager.GetMissingComponents(),
-		"paths":             h.manager.Paths,
-		"deployErrors":      h.manager.GetDeployErrors(),
+		"missingComponents":  missing,
+		"missingSteamCMD":    has("SteamCMD"),
+		"missingRelease":     has("Stationeers Release"),
+		"missingBeta":        has("Stationeers Beta"),
+		"missingBepInEx":     has("BepInEx"),
+		"missingSCON":        has("SCON"),
+		"missingLaunchPad":   has("Stationeers LaunchPad"),
+		"paths":              h.manager.Paths,
+		"deployErrors":       h.manager.GetDeployErrors(),
+		"updatesAvailable":   h.manager.UpdatesAvailable(),
 	})
 }
 
@@ -139,6 +156,7 @@ func (h *ManagerHandlers) SetupStatusGET(c *gin.Context) {
 		"updating":          updating,
 		"errors":            h.manager.GetDeployErrors(),
 		"missingComponents": h.manager.GetMissingComponents(),
+		"updatesAvailable":  h.manager.UpdatesAvailable(),
 		"lastUpdateLog":     h.manager.LastUpdateLogLine(),
 	})
 }
@@ -156,10 +174,19 @@ func (h *ManagerHandlers) SetupUpdatePOST(c *gin.Context) {
 
 	if err := h.startDeployAsync(manager.DeployTypeAll); err != nil {
 		h.manager.Log.Write(fmt.Sprintf("Unable to start setup update: %v", err))
+		// JSON clients
+		if strings.Contains(c.GetHeader("Accept"), "application/json") {
+			c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "Another deployment may already be running."})
+			return
+		}
 		c.Redirect(http.StatusFound, "/login?message=Unable to start update. Another deployment may already be running.")
 		return
 	}
-
+	// JSON clients
+	if strings.Contains(c.GetHeader("Accept"), "application/json") {
+		c.JSON(http.StatusOK, gin.H{"status": "started", "message": "Update started"})
+		return
+	}
 	c.Redirect(http.StatusFound, "/login?message=Update started. Please wait for components to download.")
 }
 

@@ -147,14 +147,12 @@
     let sconTimer = null;
 
     function paintSCONHealth(ok) {
-        if (!sconPill || !sconDot || !sconText) return;
+        if (!sconPill || !sconDot) return;
         if (ok) {
             sconDot.style.color = 'var(--success-500)';
-            sconText.textContent = 'SCON: Online';
             sconPill.setAttribute('aria-label', 'SCON Online');
         } else {
             sconDot.style.color = 'var(--danger-500)';
-            sconText.textContent = 'SCON: Offline';
             sconPill.setAttribute('aria-label', 'SCON Offline');
         }
     }
@@ -1644,7 +1642,8 @@
         const condSelect = document.getElementById('start_condition');
         const updateBtn = document.getElementById('btn-update-params');
         let invalid = false;
-        if (worldSelect && !worldSelect.value) invalid = true;
+        // If world is disabled (read-only), do not treat empty as invalid
+        if (worldSelect && !worldSelect.disabled && !worldSelect.value) invalid = true;
         if (locSelect && locSelect.getAttribute('aria-invalid') === 'true') invalid = true;
         if (condSelect && condSelect.getAttribute('aria-invalid') === 'true') invalid = true;
         if (updateBtn) {
@@ -1698,16 +1697,22 @@
         const worlds = worldsByVersion[versionKey] || [];
         const state = versionState[versionKey];
 
+        if (!worldSelect) return;
         worldSelect.innerHTML = '';
 
         if (!worlds.length) {
             worldSelect.innerHTML = '<option value="">No worlds available</option>';
-            // No fallback: force empty and error
-            if (state.world) {
-                notifyError('Configured world \'' + state.world + '\' is not available for this language/channel. Please choose a valid world.');
+            if (!worldSelect.disabled) {
+                // No fallback: force empty and error
+                if (state.world) {
+                    notifyError('Configured world ' + state.world + ' is not available for this language/channel. Please choose a valid world.');
+                }
+                worldSelect.value = '';
+                markInvalid(worldSelect, 'World not available for this language/channel');
+            } else {
+                // When disabled (read-only), don't block with errors; keep current state
+                clearInvalid(worldSelect);
             }
-            worldSelect.value = '';
-            markInvalid(worldSelect, 'World not available for this language/channel');
             updateWorldOptions();
             updateWorldThumb();
             updateParamsValidity();
@@ -1717,10 +1722,12 @@
         // If current configured world is not available, do not fallback; require user selection
         const worldIDs = new Set(worlds.map(w => w.id));
         if (state.world && !worldIDs.has(state.world)) {
-            notifyError('Configured world \'' + state.world + '\' is not available for this language/channel. Please choose a valid world.');
-            state.world = '';
-            state.startLocation = '';
-            state.startCondition = '';
+            if (!worldSelect.disabled) {
+                notifyError('Configured world ' + state.world + ' is not available for this language/channel. Please choose a valid world.');
+                state.world = '';
+                state.startLocation = '';
+                state.startCondition = '';
+            }
         }
 
         worlds.forEach(w => {
@@ -1729,14 +1736,21 @@
             option.textContent = w.name || w.id;
             worldSelect.appendChild(option);
         });
+        // If read-only and current world is not in the list, add it as a synthetic option
+        if (worldSelect.disabled && state.world && !worldIDs.has(state.world)) {
+            const opt = document.createElement('option');
+            opt.value = state.world;
+            opt.textContent = state.world;
+            worldSelect.appendChild(opt);
+        }
 
         // Select current value only if valid; otherwise leave empty and mark invalid
-        if (state.world && worldIDs.has(state.world)) {
+        if (state.world && (worldIDs.has(state.world) || worldSelect.disabled)) {
             worldSelect.value = state.world;
             clearInvalid(worldSelect);
         } else {
             worldSelect.value = '';
-            if (!worldSelect.value) {
+            if (!worldSelect.disabled && !worldSelect.value) {
                 markInvalid(worldSelect, 'World not available for this language/channel');
             }
         }
@@ -1752,7 +1766,8 @@
         const locSelect = document.getElementById('start_location');
         const condSelect = document.getElementById('start_condition');
         const versionKey = currentVersionKey();
-        const world = worldSelect.value; // world ID
+        const initWorld = (typeof initialWorldID !== 'undefined' && initialWorldID) ? String(initialWorldID) : '';
+        const world = worldSelect ? worldSelect.value : initWorld; // world ID
         const worldData = (worldDataByVersion[versionKey] || {})[world];
         const state = versionState[versionKey];
 
@@ -1814,7 +1829,8 @@
         try {
             if (!worldThumb) return;
             const worldSelect = document.getElementById('world');
-            const world = worldSelect ? (worldSelect.value || '').trim() : '';
+            const initWorld = (typeof initialWorldID !== 'undefined' && initialWorldID) ? String(initialWorldID) : '';
+            const world = worldSelect ? (worldSelect.value || '').trim() : initWorld;
             const serverId = Number(rootEl.dataset.serverId || '0');
             if (!serverId || !world) {
                 worldThumb.style.display = 'none';
@@ -1895,6 +1911,22 @@
         const currLangLabel = document.getElementById('current-language');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
+                // Token Help modal wiring (for Chat and Welcome Message)
+                (function(){
+                    const tokenModal = document.getElementById('tokenHelpModal');
+                    const tokenClose = document.getElementById('tokenHelpClose');
+                    const openButtons = [];
+                    const chatTokenBtn = document.getElementById('chat-token-help');
+                    const welcomeTokenBtn = document.getElementById('welcome-token-help');
+                    if (chatTokenBtn) openButtons.push(chatTokenBtn);
+                    if (welcomeTokenBtn) openButtons.push(welcomeTokenBtn);
+                    function openModal(){ if (tokenModal) tokenModal.classList.add('active'); }
+                    function closeModal(){ if (tokenModal) tokenModal.classList.remove('active'); }
+                    openButtons.forEach(btn => btn.addEventListener('click', (e) => { e.preventDefault(); openModal(); }));
+                    if (tokenClose) tokenClose.addEventListener('click', closeModal);
+                    if (tokenModal) tokenModal.addEventListener('click', (e) => { if (e.target === tokenModal) closeModal(); });
+                    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+                })();
         const updateParamsBtn = document.getElementById('btn-update-params');
         const modal = document.getElementById('paramChangeModal');
         const modalConfirm = document.getElementById('paramChangeConfirm');
@@ -2594,10 +2626,13 @@
         startLogListRefresh();
 
         function coreParamsChanged(){
-            const currWorld = (document.getElementById('world') && document.getElementById('world').value) || '';
+            const worldEl = document.getElementById('world');
+            const initWorldRef = (typeof initialWorldID !== 'undefined' ? initialWorldID : '');
+            const currWorld = (!worldEl || worldEl.disabled)
+                ? initWorldRef
+                : ((worldEl && worldEl.value) || '');
             const currLoc = (document.getElementById('start_location') && document.getElementById('start_location').value) || '';
             const currCond = (document.getElementById('start_condition') && document.getElementById('start_condition').value) || '';
-                const initWorldRef = (typeof initialWorldID !== 'undefined' ? initialWorldID : '');
             const initLocRef = (rootEl && rootEl.dataset && rootEl.dataset.startLocation) ? rootEl.dataset.startLocation : (typeof initialStartLocation !== 'undefined' ? initialStartLocation : '');
             const initCondRef = (rootEl && rootEl.dataset && rootEl.dataset.startCondition) ? rootEl.dataset.startCondition : (typeof initialStartCondition !== 'undefined' ? initialStartCondition : '');
             return (currWorld !== initWorldRef) || (currLoc !== initLocRef) || (currCond !== initCondRef);

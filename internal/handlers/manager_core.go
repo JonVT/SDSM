@@ -128,6 +128,10 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	// Resolve the server's configured world reference to a canonical technical ID for this channel
 	resolvedWorldID := h.manager.ResolveWorldID(s.WorldID, s.Beta)
 
+	// Compute detected SCON URL from runtime logs (fallback handled in method)
+	sconPort := s.CurrentSCONPort()
+	sconURL := fmt.Sprintf("http://localhost:%d/", sconPort)
+
 	payload := gin.H{
 		"server":    s,
 		"manager":   h.manager,
@@ -147,6 +151,8 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		"beta_languages":    h.manager.GetLanguagesForVersion(true),
 		"serverPath":        h.manager.Paths.ServerDir(s.ID),
 		"banned":            s.BannedEntries(),
+		"scon_port":         sconPort,
+		"scon_url":          sconURL,
 	}
 
 	if errMsg != "" {
@@ -193,10 +199,16 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		suggestedName = fmt.Sprintf("My Stationeers Server %d", count+1)
 	}
 
-	// Determine default difficulty from release channel if available
+	// Determine default difficulty from release channel if available; prefer "Normal"
 	defaultDifficulty := ""
 	if relDiffs := h.manager.GetDifficultiesForVersion(false); len(relDiffs) > 0 {
 		defaultDifficulty = relDiffs[0]
+		for _, d := range relDiffs {
+			if strings.EqualFold(d, "Normal") {
+				defaultDifficulty = d
+				break
+			}
+		}
 	}
 
 	formDefaults := gin.H{
@@ -215,7 +227,10 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		"auto_start":            false,
 		"auto_update":           false,
 		"auto_save":             true,
+		"player_saves":          true,
 		"auto_pause":            true,
+		"delete_skeleton_on_decay": false,
+		"use_steam_p2p":         false,
 		"server_visible":        true,
 	}
 
@@ -427,6 +442,14 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"game_data_warnings":  warnings,
 	}
 	c.HTML(http.StatusOK, "manager.html", data)
+}
+
+// TokensHelpGET renders a simple reference page for chat token usage.
+func (h *ManagerHandlers) TokensHelpGET(c *gin.Context) {
+	username, _ := c.Get("username")
+	c.HTML(http.StatusOK, "tokens.html", gin.H{
+		"username": username,
+	})
 }
 
 // ServerWorldImage streams the PNG planet image for the server's configured world.

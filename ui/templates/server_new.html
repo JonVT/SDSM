@@ -49,22 +49,55 @@
                 {{ if .error }}
                 <div class="alert alert-error" role="alert">{{ .error }}</div>
                 {{ end }}
-                <form method="POST" action="/server/new" id="serverForm">
+                <form method="POST" action="/server/new" id="serverForm" enctype="multipart/form-data">
+                    <div class="form-section">
+                        <h3 class="section-title">Create From Save (optional)</h3>
+                        <div id="saveDropzone" class="dropzone" style="border: 1px dashed var(--border-color); border-radius: var(--radius-md); padding: var(--space-4); background: var(--surface-secondary); display: flex; align-items: center; gap: var(--space-3);">
+                            <div style="flex:1">
+                                <div style="font-weight: 600; margin-bottom: 4px;">Drop a Stationeers .save file here</div>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary);">We'll read the save to set name and world, and import it.</div>
+                                <div id="saveFileName" style="margin-top: 6px; font-size: 0.9rem; color: var(--text-primary);"></div>
+                            </div>
+                            <div>
+                                <label for="save_file" class="btn btn-secondary">Choose File</label>
+                                <input type="file" id="save_file" name="save_file" accept=".save" style="display:none">
+                            </div>
+                        </div>
+                        <div id="saveAnalysis" style="display:none; margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-tertiary);">
+                            <div style="font-weight:600; margin-bottom: 6px;">Detected From Save</div>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label class="form-label">World</label>
+                                    <div id="detectedWorld" style="padding:8px 10px; background: var(--surface); border:1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">World File Name (Server Name)</label>
+                                    <div id="detectedName" style="padding:8px 10px; background: var(--surface); border:1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                                </div>
+                            </div>
+                            <!-- Hidden fields to carry through to server in case needed -->
+                            <input type="hidden" id="name" name="name" value="{{ index $form "name" }}">
+                            <input type="hidden" id="world" name="world" value="{{ index $form "world" }}">
+                        </div>
+                        
+                    </div>
                     
                     <div class="form-section">
                         <h3 class="section-title">Basic Settings</h3>
                         <div class="form-grid">
-                            <div class="form-group form-grid-full">
-                                <label class="form-label" for="name">Server Name *</label>
-                                <input type="text" id="name" name="name" class="form-control" required
+                            
+                            <!-- Name and World inputs are moved to detected section when save is selected -->
+                            <div class="form-group form-grid-full" id="basicNameGroup">
+                                <label class="form-label" for="name_text">Server Name *</label>
+                                <input type="text" id="name_text" class="form-control" required
                                        value="{{ index $form "name" }}"
                                        placeholder="Enter server name">
                                 <p class="help-text">The name that will appear in the server list</p>
                             </div>
 
-                            <div class="form-group">
-                                <label class="form-label" for="world">World *</label>
-                                <select name="world" id="world" class="form-control" required>
+                            <div class="form-group" id="basicWorldGroup">
+                                <label class="form-label" for="world_select">World *</label>
+                                <select id="world_select" class="form-control" required>
                                     <option value="">Loading...</option>
                                 </select>
                             </div>
@@ -293,7 +326,7 @@
             </div>
 
             
-            <aside class="card">
+            <aside class="card" id="progressAside">
                 <div class="card-header">
                     <h2 class="card-title">Form Progress</h2>
                 </div>
@@ -615,20 +648,31 @@
         }
 
         document.addEventListener("DOMContentLoaded", () => {
-            const worldSelect = document.getElementById("world");
+            const worldSelect = document.getElementById("world_select");
             const locSelect = document.getElementById("start_location");
             const condSelect = document.getElementById("start_condition");
             const versionSelect = document.getElementById("beta");
-            const nameInput = document.getElementById("name");
+            const nameInput = document.getElementById("name_text");
             const difficultySelect = document.getElementById("difficulty");
+            const hiddenName = document.getElementById("name");
+            const hiddenWorld = document.getElementById("world");
+            const analysisBox = document.getElementById('saveAnalysis');
+            const progressAside = document.getElementById('progressAside');
+            let nameEdited = false;
+            let nameAutofilled = false;
+            
 
             versionSelect.value = defaultVersion === "true" ? "true" : "false";
             populateWorldOptions();
             populateDifficultyOptions();
+            // Sync hidden fields for non-save mode
+            if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
+            if (hiddenWorld && worldSelect) hiddenWorld.value = worldSelect.value || '';
 
             worldSelect.addEventListener("change", () => {
                 selectedWorld = worldSelect.value;
                 updateWorldOptions();
+                if (hiddenWorld) hiddenWorld.value = worldSelect.value || '';
             });
 
             versionSelect.addEventListener("change", () => {
@@ -646,7 +690,11 @@
                 updateProgressTracker();
             });
 
-            nameInput.addEventListener("input", updateProgressTracker);
+            nameInput.addEventListener("input", () => {
+                if (hiddenName) hiddenName.value = nameInput.value || '';
+                nameEdited = true;
+                updateProgressTracker();
+            });
             difficultySelect.addEventListener("change", () => {
                 selectedDifficulty = difficultySelect.value;
                 updateProgressTracker();
@@ -664,6 +712,119 @@
             // Initial progress update
             updateProgressTracker();
 
+            // Dropzone handlers for optional .save upload
+            const dz = document.getElementById('saveDropzone');
+            const fi = document.getElementById('save_file');
+            const fn = document.getElementById('saveFileName');
+            function setFileName(file){
+                if (!fn) return;
+                if (file) { fn.textContent = 'Selected: ' + file.name; }
+                else { fn.textContent = ''; }
+            }
+            function setInputsDisabled(root, disabled) {
+                if (!root) return;
+                root.querySelectorAll('input, select, textarea, button').forEach(el => {
+                    // Don't disable the file input or submit button globally
+                    if (el.id === 'save_file') return;
+                    if (el.type === 'submit') return;
+                    el.disabled = !!disabled;
+                });
+            }
+            function hideForSaveMode(on) {
+                // Show all sections; hide only world/start location/start condition controls when in save mode
+                const worldGroup = document.getElementById('basicWorldGroup');
+                const ws = document.getElementById('world_select');
+                const sl = document.getElementById('start_location');
+                const sc = document.getElementById('start_condition');
+                // Name should be editable
+                if (nameInput) { nameInput.required = true; nameInput.disabled = false; }
+                if (on) {
+                    if (worldGroup) worldGroup.style.display = 'none';
+                    if (ws) { ws.required = false; ws.disabled = true; }
+                    if (sl) { const g = sl.closest('.form-group'); if (g) g.style.display = 'none'; sl.required = false; sl.disabled = true; }
+                    if (sc) { const g = sc.closest('.form-group'); if (g) g.style.display = 'none'; sc.required = false; sc.disabled = true; }
+                } else {
+                    if (worldGroup) worldGroup.style.display = '';
+                    if (ws) { ws.required = true; ws.disabled = false; }
+                    if (sl) { const g = sl.closest('.form-group'); if (g) g.style.display = ''; sl.required = true; sl.disabled = false; }
+                    if (sc) { const g = sc.closest('.form-group'); if (g) g.style.display = ''; sc.required = true; sc.disabled = false; }
+                }
+            }
+            function analyzeSaveAndShow() {
+                const hasSave = fi && fi.files && fi.files.length > 0;
+                if (!hasSave) {
+                    if (analysisBox) analysisBox.style.display = 'none';
+                    hideForSaveMode(false);
+                    return;
+                }
+                const fd = new FormData();
+                fd.append('save_file', fi.files[0]);
+                fetch('/api/servers/analyze-save', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: fd,
+                })
+                .then(res => res.json().catch(() => ({})).then(data => ({ ok: res.ok, data, headers: res.headers })))
+                .then(({ ok, data, headers }) => {
+                    if (!ok) { throw new Error(data && data.error || 'Analyze failed'); }
+                    const w = (data && data.world) || '';
+                    const n = (data && data.world_file_name) || '';
+                    if (document.getElementById('detectedWorld')) document.getElementById('detectedWorld').textContent = w || '(unknown)';
+                    if (document.getElementById('detectedName')) document.getElementById('detectedName').textContent = n || '(unknown)';
+                    if (hiddenWorld) hiddenWorld.value = w;
+                    // Do not set hidden name yet; keep in sync with visible input below
+                    // Prefill visible fields from analyzed settings when available
+                    const setIf = (id, val) => { const el = document.getElementById(id); if (el != null && val != null && val !== '') { el.value = String(val); } };
+                    const setBool = (id, val) => { const el = document.getElementById(id); if (el != null && typeof val === 'boolean') { el.checked = !!val; } };
+                    // Name (editable): set from World File Name only once and only if user hasn't typed
+                    if (nameInput && !nameEdited && !nameAutofilled) {
+                        nameInput.value = n || nameInput.value;
+                        nameAutofilled = true;
+                    }
+                    if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
+                    // Network
+                    setIf('port', data.port);
+                    setIf('max_clients', data.max_clients);
+                    setIf('password', data.password);
+                    setBool('server_visible', data.server_visible);
+                    setIf('auth_secret', data.auth_secret);
+                    // Advanced/Startup
+                    setBool('auto_save', data.auto_save);
+                    setIf('save_interval', data.save_interval);
+                    setBool('auto_pause', data.auto_pause);
+                    setBool('delete_skeleton_on_decay', data.delete_skeleton_on_decay);
+                    setBool('use_steam_p2p', data.use_steam_p2p);
+                    setIf('disconnect_timeout', data.disconnect_timeout);
+                    if (analysisBox) analysisBox.style.display = '';
+                    hideForSaveMode(true);
+                })
+                .catch(err => {
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            window.showToast({ type: 'error', title: 'Analyze Save Failed', message: err && err.message ? err.message : 'Unable to parse save' });
+                        }
+                    } catch(_) {}
+                    if (analysisBox) analysisBox.style.display = 'none';
+                    hideForSaveMode(false);
+                });
+            }
+            if (dz && fi) {
+                dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.style.background = 'var(--surface-tertiary)'; });
+                dz.addEventListener('dragleave', () => { dz.style.background = 'var(--surface-secondary)'; });
+                dz.addEventListener('drop', (e) => {
+                    e.preventDefault(); dz.style.background = 'var(--surface-secondary)';
+                    const files = e.dataTransfer && e.dataTransfer.files;
+                    if (files && files.length > 0) {
+                        const f = files[0];
+                        if (f && f.name && f.name.toLowerCase().endsWith('.save')) {
+                            fi.files = files; setFileName(f); analyzeSaveAndShow();
+                        }
+                    }
+                });
+                fi.addEventListener('change', () => { setFileName(fi.files && fi.files[0]); analyzeSaveAndShow(); });
+            }
+
             // Intercept form submit to call API and redirect to new server page
             const form = document.getElementById('serverForm');
             if (form) {
@@ -672,17 +833,31 @@
                     const submitBtn = form.querySelector('button[type="submit"]');
                     if (submitBtn && submitBtn.disabled) return;
                     if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute('aria-disabled', 'true'); }
-                    const fd = new FormData(form);
-                    const body = new URLSearchParams();
-                    for (const [k, v] of fd.entries()) {
-                        body.append(k, String(v));
+                    const hasSave = fi && fi.files && fi.files.length > 0;
+                    let promise;
+                    if (hasSave) {
+                        // Ensure hidden name mirrors visible input
+                        if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
+                        const fd = new FormData(form);
+                        // Send multipart to special endpoint that parses settings.xml and imports save
+                        promise = fetch('/api/servers/create-from-save', {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json' },
+                            credentials: 'same-origin',
+                            body: fd
+                        });
+                    } else {
+                        const fd = new FormData(form);
+                        const body = new URLSearchParams();
+                        for (const [k, v] of fd.entries()) { body.append(k, String(v)); }
+                        promise = fetch('/api/servers', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                            credentials: 'same-origin',
+                            body: body.toString()
+                        });
                     }
-                    fetch('/api/servers', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-                        credentials: 'same-origin',
-                        body: body.toString()
-                    })
+                    promise
                     .then((res) => {
                         try {
                             if (typeof window.showToast === 'function') {

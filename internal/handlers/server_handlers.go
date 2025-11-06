@@ -327,6 +327,8 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		origStartCond := s.StartCondition
 
 		oldName := s.Name
+		// Track original game port to keep SCONPort in sync on change
+		originalPort := s.Port
 		if name := middleware.SanitizeString(c.PostForm("name")); name != "" {
 			if !h.manager.IsServerNameAvailable(name, s.ID) {
 				if isAsync {
@@ -375,6 +377,11 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 					return
 				}
 			}
+		}
+
+		// If port changed, default SCONPort to game port + 1
+		if s.Port > 0 && s.Port != originalPort {
+			s.SCONPort = s.Port + 1
 		}
 
 		s.Password = c.PostForm("password")

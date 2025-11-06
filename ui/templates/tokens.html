@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Tokens - SDSM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
+    <link rel="icon" href="/sdsm.png" type="image/png">
+</head>
+<body class="page-shell">
+    <div class="container" style="max-width: 900px;">
+        <header class="hero-card" style="margin-bottom: var(--space-6);">
+            <div class="hero-main">
+                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="64" height="64">
+                <div class="hero-heading">
+                    <h1 class="hero-title">Chat Token Reference</h1>
+                    <p class="hero-subtitle">Use these tokens in Chat and the Welcome Message. They are replaced automatically before sending to the server.</p>
+                </div>
+            </div>
+            <div class="hero-actions">
+                {{ template "user_menu" . }}
+            </div>
+        </header>
+
+        <main class="card" style="padding: var(--space-6);">
+            <section>
+                <h2 class="section-title">Available Tokens</h2>
+                <ul class="list" style="margin-top: var(--space-3);">
+                    <li><code>[ServerName]</code>: The server name</li>
+                    <li><code>[WorldName]</code>: The world name</li>
+                    <li><code>[WorldID]</code>: The world ID</li>
+                    <li><code>[StartLocation]</code>: Start location</li>
+                    <li><code>[StartCondition]</code>: Start condition</li>
+                    <li><code>[Date]</code>: Current date (YYYY-MM-DD)</li>
+                    <li><code>[Time]</code>: Current time (HH:MM:SS)</li>
+                    <li><code>[LastPlayer]</code>: Name of the last player to connect</li>
+                </ul>
+            </section>
+
+            <section style="margin-top: var(--space-6);">
+                <h2 class="section-title">Examples</h2>
+                <div class="code-block" style="margin-top: var(--space-3);">
+                    <div class="mono" style="white-space: pre-wrap;">
+                        Example 1: Welcome Message
+                        "Welcome to [ServerName]! World: [WorldName]."
+
+                        Example 2: Chat
+                        "/say Hello [LastPlayer], you joined at [Time] on [Date]."
+                    </div>
+                </div>
+            </section>
+
+            <section style="margin-top: var(--space-6);">
+                <p class="text-muted">Tokens are case-insensitive and work anywhere messages are sent via the UI (Chat and Welcome Message).</p>
+            </section>
+        </main>
+
+        {{ template "footer" . }}
+    </div>
+</body>
+</html>

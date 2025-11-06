@@ -1,6 +1,6 @@
 <div class="card card-config">
     <div class="card-header">
-        <h2 class="card-title">Startup Parameters</h2>
+        <h2 class="card-title">Server Configuration</h2>
     </div>
     <form method="POST" id="startup-params-form">
         <input type="hidden" name="confirm_reset_saves" id="confirm-reset-saves-flag" value="0" />
@@ -22,12 +22,6 @@
             </div>
 
             <div class="form-row grid-2">
-                <div>
-                    <label for="world">World:</label>
-                    <select name="world" id="world" class="form-select-inline" aria-label="World">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
                 <div>
                     <label for="start_location">Start Location:</label>
                     <select name="start_location" id="start_location" class="form-select-inline" aria-label="Start Location">
@@ -76,6 +70,7 @@
             <div class="form-row form-row-full">
                 <label for="welcome_message">Welcome Message:</label>
                 <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" autocomplete="off">
+                <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens" style="margin-left: 8px;">Tokens</button>
                 <p class="help-text">If set, this message will be broadcast to chat when a player connects.</p>
             </div>
 

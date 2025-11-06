@@ -258,6 +258,13 @@ func NewManager() *Manager {
 	// Check for missing components before attempting deploy
 	m.CheckMissingComponents()
 
+	// If components are outdated on first start, present the setup page as an option
+	// instead of auto-deploying silently. Only auto-deploy when explicitly enabled
+	// and no prompt is required.
+	if !wasActive && m.UpdatesAvailable() {
+		m.NeedsUploadPrompt = true
+	}
+
 	if m.StartupUpdate && !wasActive && !m.NeedsUploadPrompt {
 		if err := m.Deploy(DeployTypeAll); err != nil {
 			m.safeLog(fmt.Sprintf("Initial deployment failed: %v", err))
@@ -265,6 +272,59 @@ func NewManager() *Manager {
 	}
 
 	return m
+}
+
+// UpdatesAvailable returns true if any managed component appears out-of-date
+// compared to its latest known version/build.
+func (m *Manager) UpdatesAvailable() bool {
+	// Check core game channels by build ID
+	if deployed := strings.TrimSpace(m.ReleaseDeployed()); deployed != "Missing" && deployed != "Unknown" && deployed != "Error" {
+		latest := strings.TrimSpace(m.ReleaseLatest())
+		if latest != "Unknown" && latest != "" && latest != deployed {
+			return true
+		}
+	}
+	if deployed := strings.TrimSpace(m.BetaDeployed()); deployed != "Missing" && deployed != "Unknown" && deployed != "Error" {
+		latest := strings.TrimSpace(m.BetaLatest())
+		if latest != "Unknown" && latest != "" && latest != deployed {
+			return true
+		}
+	}
+
+	// BepInEx: normalize by comparing prefix (latest is usually 3-part, deployed 4-part)
+	if dep := strings.TrimSpace(m.BepInExDeployed()); dep != "Missing" && dep != "Error" && dep != "Installed" && dep != "Unknown" && dep != "" {
+		latest := strings.TrimSpace(m.BepInExLatest())
+		if latest != "Unknown" && latest != "" {
+			if !strings.HasPrefix(dep, latest) {
+				return true
+			}
+		}
+	}
+
+	// LaunchPad: exact or prefix match, deployed may report "Installed"
+	if dep := strings.TrimSpace(m.LaunchPadDeployed()); dep != "Missing" && dep != "Error" && dep != "" && dep != "Installed" && dep != "Unknown" {
+		latest := strings.TrimSpace(m.LaunchPadLatest())
+		if latest != "Unknown" && latest != "" {
+			if !strings.EqualFold(dep, latest) && !strings.HasPrefix(strings.ToLower(dep), strings.ToLower(latest)) {
+				return true
+			}
+		}
+	}
+
+	// SCON: tags often include leading 'v' in latest; deployed may store same tag
+	if dep := strings.TrimSpace(m.SCONDeployed()); dep != "Missing" && dep != "Error" && dep != "" && dep != "Installed" && dep != "Unknown" {
+		latest := strings.TrimSpace(m.SCONLatest())
+		if latest != "Unknown" && latest != "" {
+			dl := strings.ToLower(dep)
+			ll := strings.ToLower(latest)
+			if dl != ll {
+				return true
+			}
+		}
+	}
+
+	// SteamCMD has no stable external latest; skip
+	return false
 }
 
 func (m *Manager) progressEntry(dt DeployType) *UpdateProgress {

@@ -264,6 +264,7 @@
         const pageTitles = {
             'dashboard': 'Dashboard',
             'manager': 'Manager Settings',
+            'help/tokens': 'Chat Tokens',
         };
 
         function navigateTo(target, event) {
@@ -467,6 +468,12 @@
                 </svg>
                 <span id="theme-text">Light Mode</span>
             </button>
+            <a href="#" class="nav-item" data-target="help/tokens" onclick="navigateTo('help/tokens', event)">
+                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l.8-4A8.86 8.86 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                </svg>
+                <span>Chat Tokens</span>
+            </a>
             <a href="/logout" class="nav-item" style="margin: 0;">
                 <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>

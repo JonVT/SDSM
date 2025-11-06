@@ -35,18 +35,18 @@
                         <span class="pill">Real-time</span>
                         <span id="scon-health-pill" class="pill" title="Stationeers Console HTTP health">
                             <span id="scon-health-dot" aria-hidden="true">●</span>
-                            <span id="scon-health-text" style="margin-left:4px;">SCON: Checking…</span>
+                            <span id="scon-health-text" style="margin-left:4px;">SCON: {{ .scon_port }}</span>
                         </span>
                     </div>
                 </div>
                 <div class="hero-actions flex-col items-end">
                     <div class="row">
                         <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
-                        <a href="/dashboard" class="btn btn-secondary">
+                        <a href="/dashboard" class="btn btn-primary">
                             {{ template "icon_dashboard" . }}
                             Dashboard
                         </a>
-                        <a href="/manager" class="btn btn-secondary">
+                        <a href="/manager" class="btn btn-primary">
                             {{ template "icon_manager" . }}
                             Manager
                         </a>
