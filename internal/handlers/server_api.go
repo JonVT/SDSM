@@ -1591,6 +1591,55 @@ func (h *ManagerHandlers) APIServerChat(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// APIServerConsole sends an arbitrary console command to the server via SCON/stdin.
+// JSON: { "command": "..." }
+func (h *ManagerHandlers) APIServerConsole(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// RBAC: allow admins, or assigned operators
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var req struct { Command string `json:"command"` }
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Command) == "" {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Message", "Command is required.")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "command required"})
+		return
+	}
+	if err := s.SendCommand("console", req.Command); err != nil {
+		c.Header("X-Toast-Type", "error")
+		c.Header("X-Toast-Title", "Command Failed")
+		c.Header("X-Toast-Message", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Header("X-Toast-Type", "success")
+	c.Header("X-Toast-Title", "Command Sent")
+	c.Header("X-Toast-Message", "Command dispatched to server.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
 // APIServerSCONHealth checks if the SCON HTTP endpoint is reachable for a server.
 // It performs a lightweight GET request to the /command path and treats any HTTP response
 // (2xx-5xx) as "reachable" to distinguish from connection errors. Returns JSON:
@@ -1839,7 +1888,10 @@ func (h *ManagerHandlers) APIServerLoad(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := s.SendCommand("console", "FILE load "+full); err != nil {
+	// Quote the file path to handle spaces/special characters. Prefer single quotes to avoid JSON escape noise.
+	safe := strings.ReplaceAll(full, "'", "\\'")
+	quoted := "'" + safe + "'"
+	if err := s.SendCommand("console", "FILE load "+quoted); err != nil {
 		c.Header("X-Toast-Type", "error")
 		c.Header("X-Toast-Title", "Load Failed")
 		c.Header("X-Toast-Message", err.Error())

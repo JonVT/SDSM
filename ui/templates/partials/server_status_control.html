@@ -144,6 +144,14 @@
                         <button type="button" class="btn btn-control" id="btn-cleanup-all" title="Cleans up player bodies">All</button>
                     </div>
                 </div>
+
+                <div class="control-row">
+                    <label class="more-label" title="Send a raw console command via SCON">Console:</label>
+                    <div class="button-group" style="display:flex; gap:8px; align-items:center; width:100%;">
+                        <input type="text" id="console-command" class="form-input-inline" placeholder="Enter console command" autocomplete="off" style="flex:1; min-width:0;">
+                        <button type="button" class="btn btn-control btn-primary" id="btn-console-send" title="Send command to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>Send</button>
+                    </div>
+                </div>
             </div>
         </div>
         

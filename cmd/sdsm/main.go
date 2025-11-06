@@ -444,6 +444,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
 		// legacy generic command removed; use explicit endpoints below
 		api.POST("/servers/:server_id/chat", managerHandlers.APIServerChat)
+		api.POST("/servers/:server_id/console", managerHandlers.APIServerConsole)
 		api.GET("/servers/:server_id/scon/health", managerHandlers.APIServerSCONHealth)
 		api.POST("/servers/:server_id/save", managerHandlers.APIServerSave)
 		api.POST("/servers/:server_id/save-as", managerHandlers.APIServerSaveAs)
