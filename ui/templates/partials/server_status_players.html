@@ -1,7 +1,7 @@
 {{/* Compute local variables within this partial's scope */}}
-{{ $live := .server.LiveClients }}
+{{ $live := .liveClients }}
 {{ $liveCount := len $live }}
-{{ $history := .server.Clients }}
+{{ $history := .historyClients }}
 {{ $historyCount := len $history }}
 {{ $banned := .banned }}
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+    "sort"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
@@ -124,6 +125,21 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	// Refresh runtime flags so the template does not show stale state after restarts.
 	s.IsRunning()
 
+	// Sort live and historical clients so most recent connections appear first in UI.
+	// Live: newest ConnectDatetime first. History: likewise.
+	liveSorted := append([]*models.Client(nil), s.LiveClients()...)
+	if len(liveSorted) > 1 {
+		sort.SliceStable(liveSorted, func(i, j int) bool {
+			return liveSorted[i].ConnectDatetime.After(liveSorted[j].ConnectDatetime)
+		})
+	}
+	historySorted := append([]*models.Client(nil), s.Clients...)
+	if len(historySorted) > 1 {
+		sort.SliceStable(historySorted, func(i, j int) bool {
+			return historySorted[i].ConnectDatetime.After(historySorted[j].ConnectDatetime)
+		})
+	}
+
 	// Localize to the server's configured language when building world/difficulty lists
 	worldIDs, worldDisplays, worldData := h.buildWorldSelectionDataForLanguage(s.Language)
 	worldInfo := h.manager.GetWorldInfoWithLanguage(s.World, s.Beta, s.Language)
@@ -137,6 +153,8 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	role := c.GetString("role")
 	payload := gin.H{
 		"server":    s,
+		"liveClients": liveSorted,
+		"historyClients": historySorted,
 		"manager":   h.manager,
 		"username":  username,
 		"role":      role,
