@@ -75,11 +75,11 @@
                 <input type="text" id="welcome_back_message" name="welcome_back_message" value="{{.server.WelcomeBackMessage}}" class="form-input-inline" placeholder="Optional message for returning players" title="Message sent to chat when a returning player connects (overrides the Welcome Message for returning players)." autocomplete="off">
             </div>
 
-            <div class="form-row form-row-full">
+            <div class="form-row form-row-full message-delay-row">
                 <label for="welcome_delay_seconds">Message Delay (sec):</label>
-                <div>
+                <div class="row-controls">
                     <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" value="{{.server.WelcomeDelaySeconds}}" class="form-input-inline" min="0" max="600" placeholder="1" autocomplete="off" title="Delay before sending welcome / welcome back messages.">
-                    <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages" style="margin-left: 8px;">Message Tokens</button>
+                    <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages">Message Tokens</button>
                 </div>
             </div>
 
