@@ -28,7 +28,7 @@
          - Text label: Starting > Stopped > Paused > Running (same precedence as server page)
     */}}
     <div class="status-badges">
-        <span class="status-pill storm-pill" data-storm style="display:none;" aria-label="Clear" title="Clear"></span>
+        <span class="status-pill storm-pill hidden" data-storm aria-label="Clear" title="Clear"></span>
         <span class="status-pill {{ if and $srv.IsRunning $srv.Starting }}is-starting{{ else if and $srv.IsRunning (not $srv.Paused) }}is-running{{ else if and $srv.IsRunning $srv.Paused }}is-paused{{ else }}is-stopped{{ end }}" data-status aria-label="Status: {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}" title="{{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}">
           <span class="status-dot-indicator {{ if and $srv.IsRunning $srv.Starting }}starting{{ else if not $srv.IsRunning }}stopped{{ else if $srv.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
           <span class="sr-only">Status:</span>

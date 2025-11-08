@@ -26,16 +26,16 @@ func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 		return false
 	}
 	c.HTML(http.StatusOK, "setup.html", gin.H{
-		"missingComponents":  missing,
-		"missingSteamCMD":    has("SteamCMD"),
-		"missingRelease":     has("Stationeers Release"),
-		"missingBeta":        has("Stationeers Beta"),
-		"missingBepInEx":     has("BepInEx"),
-		"missingSCON":        has("SCON"),
-		"missingLaunchPad":   has("Stationeers LaunchPad"),
-		"paths":              h.manager.Paths,
-		"deployErrors":       h.manager.GetDeployErrors(),
-		"updatesAvailable":   h.manager.UpdatesAvailable(),
+		"missingComponents": missing,
+		"missingSteamCMD":   has("SteamCMD"),
+		"missingRelease":    has("Stationeers Release"),
+		"missingBeta":       has("Stationeers Beta"),
+		"missingBepInEx":    has("BepInEx"),
+		"missingSCON":       has("SCON"),
+		"missingLaunchPad":  has("Stationeers LaunchPad"),
+		"paths":             h.manager.Paths,
+		"deployErrors":      h.manager.GetDeployErrors(),
+		"updatesAvailable":  h.manager.UpdatesAvailable(),
 	})
 }
 

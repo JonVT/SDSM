@@ -88,9 +88,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		s.PlayerSaves = enabled
 		h.manager.Save()
 		if isAsync {
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Preference Saved")
-			c.Header("X-Toast-Message", fmt.Sprintf("Player Saves %s", map[bool]string{true: "enabled", false: "disabled"}[enabled]))
+			ToastSuccess(c, "Preference Saved", fmt.Sprintf("Player Saves %s", map[bool]string{true: "enabled", false: "disabled"}[enabled]))
 			c.JSON(http.StatusOK, gin.H{"status": "ok", "player_saves": enabled})
 			return
 		}
@@ -100,9 +98,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if steamID != "" {
 			_ = s.RemoveBlacklistID(steamID)
 			if isAsync {
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Player Unbanned")
-				c.Header("X-Toast-Message", fmt.Sprintf("%s removed from blacklist", steamID))
+				ToastSuccess(c, "Player Unbanned", fmt.Sprintf("%s removed from blacklist", steamID))
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 				return
 			}
@@ -146,9 +142,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		}
 		if steamID == "" {
 			if isAsync {
-				c.Header("X-Toast-Type", "error")
-				c.Header("X-Toast-Title", "Ban Failed")
-				c.Header("X-Toast-Message", "Unable to determine Steam ID for ban.")
+				ToastError(c, "Ban Failed", "Unable to determine Steam ID for ban.")
 				c.JSON(http.StatusBadRequest, gin.H{"error": "steam id not found"})
 				return
 			}
@@ -159,9 +153,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 				if err := s.SendCommand("console", "BAN "+steamID); err == nil {
 					commandSent = true
 					if isAsync {
-						c.Header("X-Toast-Type", "success")
-						c.Header("X-Toast-Title", "Player Banned")
-						c.Header("X-Toast-Message", fmt.Sprintf("BAN command sent for %s", steamID))
+						ToastSuccess(c, "Player Banned", fmt.Sprintf("BAN command sent for %s", steamID))
 						c.JSON(http.StatusOK, gin.H{"status": "ok"})
 						return
 					}
@@ -171,9 +163,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			if !commandSent {
 				_ = s.AddBlacklistID(steamID)
 				if isAsync {
-					c.Header("X-Toast-Type", "success")
-					c.Header("X-Toast-Title", "Player Banned")
-					c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
+					ToastSuccess(c, "Player Banned", fmt.Sprintf("%s added to blacklist", steamID))
 					c.JSON(http.StatusOK, gin.H{"status": "ok"})
 					return
 				}
@@ -185,16 +175,12 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if steamID != "" {
 			if err := s.AddBlacklistID(steamID); err != nil {
 				if isAsync {
-					c.Header("X-Toast-Type", "error")
-					c.Header("X-Toast-Title", "Add Failed")
-					c.Header("X-Toast-Message", "Could not add to blacklist: "+err.Error())
+					ToastError(c, "Add Failed", "Could not add to blacklist: "+err.Error())
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 			} else if isAsync {
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Added to Blacklist")
-				c.Header("X-Toast-Message", fmt.Sprintf("%s added to blacklist", steamID))
+				ToastSuccess(c, "Added to Blacklist", fmt.Sprintf("%s added to blacklist", steamID))
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 				return
 			}
@@ -203,27 +189,21 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	case c.PostForm("start") != "":
 		s.Start()
 		if isAsync {
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Server Started")
-			c.Header("X-Toast-Message", s.Name+" is starting...")
+			ToastSuccess(c, "Server Started", s.Name+" is starting...")
 			c.JSON(http.StatusOK, gin.H{"status": "started"})
 			return
 		}
 	case c.PostForm("restart") != "":
 		go s.Restart()
 		if isAsync {
-			c.Header("X-Toast-Type", "info")
-			c.Header("X-Toast-Title", "Server Restarting")
-			c.Header("X-Toast-Message", s.Name+" is restarting...")
+			ToastInfo(c, "Server Restarting", s.Name+" is restarting...")
 			c.JSON(http.StatusOK, gin.H{"status": "restarting"})
 			return
 		}
 	case c.PostForm("stop") != "":
 		s.Stop()
 		if isAsync {
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Server Stopped")
-			c.Header("X-Toast-Message", s.Name+" has been stopped.")
+			ToastSuccess(c, "Server Stopped", s.Name+" has been stopped.")
 			c.JSON(http.StatusOK, gin.H{"status": "stopped"})
 			return
 		}
@@ -235,9 +215,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		if err := s.Deploy(); err != nil {
 			errMsg := fmt.Sprintf("Deploy failed: %v", err)
 			if isAsync {
-				c.Header("X-Toast-Type", "error")
-				c.Header("X-Toast-Title", "Deploy Failed")
-				c.Header("X-Toast-Message", errMsg)
+				ToastError(c, "Deploy Failed", errMsg)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 			} else {
 				h.renderServerPage(c, http.StatusInternalServerError, s, username, errMsg)
@@ -245,17 +223,13 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			return
 		}
 		if isAsync {
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Deploy Started")
-			c.Header("X-Toast-Message", s.Name+" deployment started.")
+			ToastSuccess(c, "Deploy Started", s.Name+" deployment started.")
 			c.JSON(http.StatusOK, gin.H{"status": "deploying"})
 			return
 		}
 	case c.PostForm("update_server") != "":
 		if role != "admin" {
-			c.Header("X-Toast-Type", "error")
-			c.Header("X-Toast-Title", "Permission Denied")
-			c.Header("X-Toast-Message", "Admin privileges required to update server files.")
+			ToastError(c, "Permission Denied", "Admin privileges required to update server files.")
 			if isAsync {
 				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 				return
@@ -268,16 +242,12 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		}
 		if isAsync {
 			if h.manager.IsServerUpdateRunning(s.ID) {
-				c.Header("X-Toast-Type", "info")
-				c.Header("X-Toast-Title", "Update Running")
-				c.Header("X-Toast-Message", s.Name+" update already running.")
+				ToastInfo(c, "Update Running", s.Name+" update already running.")
 				c.JSON(http.StatusOK, gin.H{"status": "running"})
 				return
 			}
 			h.startServerUpdateAsync(s)
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Update Started")
-			c.Header("X-Toast-Message", s.Name+" update started.")
+			ToastSuccess(c, "Update Started", s.Name+" update started.")
 			c.JSON(http.StatusOK, gin.H{"status": "started"})
 			return
 		}
@@ -311,9 +281,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 	case c.PostForm("update") != "":
 		if role != "admin" {
 			if isAsync {
-				c.Header("X-Toast-Type", "error")
-				c.Header("X-Toast-Title", "Permission Denied")
-				c.Header("X-Toast-Message", "Admin privileges required to change startup parameters.")
+				ToastError(c, "Permission Denied", "Admin privileges required to change startup parameters.")
 				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 				return
 			}
@@ -330,11 +298,9 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		// Track original game port to keep SCONPort in sync on change
 		originalPort := s.Port
 		if name := middleware.SanitizeString(c.PostForm("name")); name != "" {
-			if !h.manager.IsServerNameAvailable(name, s.ID) {
+			if err := ValidateServerNameAvailable(h.manager, name, s.ID); err != nil {
 				if isAsync {
-					c.Header("X-Toast-Type", "error")
-					c.Header("X-Toast-Title", "Update Failed")
-					c.Header("X-Toast-Message", "Server name already exists. Please choose a unique name.")
+					ToastError(c, "Update Failed", "Server name already exists. Please choose a unique name.")
 					c.JSON(http.StatusBadRequest, gin.H{"error": "name not available"})
 					return
 				}
@@ -361,21 +327,17 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		}
 
 		if portStr := c.PostForm("port"); portStr != "" {
-			if port, err := middleware.ValidatePort(portStr); err == nil {
-				if h.manager.IsPortAvailable(port, s.ID) {
-					s.Port = port
-				} else {
-					suggestedPort := h.manager.GetNextAvailablePort(port)
-					if isAsync {
-						c.Header("X-Toast-Type", "error")
-						c.Header("X-Toast-Title", "Update Failed")
-						c.Header("X-Toast-Message", fmt.Sprintf("Port %d is not available. Try %d.", port, suggestedPort))
-						c.JSON(http.StatusBadRequest, gin.H{"error": "port not available", "suggested": suggestedPort})
-						return
-					}
-					h.renderServerPage(c, http.StatusBadRequest, s, username, fmt.Sprintf("Port %d is not available. Try port %d.", port, suggestedPort))
+			// Keep original behavior: invalid port string is ignored; conflicts return error
+			if port, suggested, err := ValidatePortAvailable(h.manager, portStr, s.ID); err == nil {
+				s.Port = port
+			} else if suggested > 0 {
+				if isAsync {
+					ToastError(c, "Update Failed", fmt.Sprintf("Port %d is not available. Try %d.", port, suggested))
+					c.JSON(http.StatusBadRequest, gin.H{"error": "port not available", "suggested": suggested})
 					return
 				}
+				h.renderServerPage(c, http.StatusBadRequest, s, username, fmt.Sprintf("Port %d is not available. Try port %d.", port, suggested))
+				return
 			}
 		}
 
@@ -412,13 +374,9 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		}
 
 		// Welcome Message (optional, single-line)
-		if wm := middleware.SanitizeString(c.PostForm("welcome_message")); wm != "" || c.PostForm("welcome_message") == "" {
+		if wm := c.PostForm("welcome_message"); wm != "" || c.PostForm("welcome_message") == "" {
 			// Always set (allow clearing)
-			clean := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(wm, "\r", " "), "\n", " "))
-			if len(clean) > 300 {
-				clean = clean[:300]
-			}
-			s.WelcomeMessage = clean
+			s.WelcomeMessage = SanitizeWelcome(wm, 300)
 		}
 
 		// Extended settings
@@ -448,31 +406,18 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		s.AutoPause = c.PostForm("auto_pause") == "on"
 		s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
 
-		// Determine if core start parameters changed
-		coreChanged := (strings.TrimSpace(origWorld) != strings.TrimSpace(s.World)) ||
-			(strings.TrimSpace(origStartLoc) != strings.TrimSpace(s.StartLocation)) ||
-			(strings.TrimSpace(origStartCond) != strings.TrimSpace(s.StartCondition))
-		if coreChanged {
-			// Stub: mark pending purge but do not delete saves yet
-			s.PendingSavePurge = true
-			if s.Logger != nil {
-				s.Logger.Write("Core start parameters changed; pending save purge flagged (stub, no deletion yet)")
-			}
-		}
-
-		if s.Beta != originalBeta {
-			h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) game version changed; redeploying...", s.Name, s.ID))
-			if err := s.Deploy(); err != nil {
-				if isAsync {
-					c.Header("X-Toast-Type", "error")
-					c.Header("X-Toast-Title", "Redeploy Failed")
-					c.Header("X-Toast-Message", err.Error())
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-					return
-				}
-				h.renderServerPage(c, http.StatusInternalServerError, s, username, fmt.Sprintf("Redeploy failed: %v", err))
+		// Apply core change effects and possible redeploy
+		if coreChanged, redeployed, err := h.ApplyCoreChangeEffects(s, origWorld, origStartLoc, origStartCond, originalBeta); err != nil {
+			if isAsync {
+				ToastError(c, "Redeploy Failed", err.Error())
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+			h.renderServerPage(c, http.StatusInternalServerError, s, username, fmt.Sprintf("Redeploy failed: %v", err))
+			return
+		} else {
+			_ = coreChanged
+			_ = redeployed
 		}
 
 		// If the server name changed, rename the saves/<ServerName> directory accordingly.
@@ -519,9 +464,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		h.manager.Log.Write(fmt.Sprintf("Server %s (ID: %d) configuration updated.", s.Name, s.ID))
 		h.manager.Save()
 		if isAsync {
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Settings Updated")
-			c.Header("X-Toast-Message", "Startup parameters saved.")
+			ToastSuccess(c, "Settings Updated", "Startup parameters saved.")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			return
 		}
@@ -530,9 +473,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 		lang := middleware.SanitizeString(c.PostForm("language"))
 		if lang == "" {
 			if acceptsJSON {
-				c.Header("X-Toast-Type", "error")
-				c.Header("X-Toast-Title", "Language Not Set")
-				c.Header("X-Toast-Message", "No language provided.")
+				ToastError(c, "Language Not Set", "No language provided.")
 				c.JSON(http.StatusBadRequest, gin.H{"error": "missing language"})
 				return
 			}
@@ -547,9 +488,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			}
 			if !ok && len(allowed) > 0 {
 				if acceptsJSON {
-					c.Header("X-Toast-Type", "error")
-					c.Header("X-Toast-Title", "Invalid Language")
-					c.Header("X-Toast-Message", "Selected language is not available for this version.")
+					ToastError(c, "Invalid Language", "Selected language is not available for this version.")
 					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid language"})
 					return
 				}
@@ -557,9 +496,7 @@ func (h *ManagerHandlers) ServerPOST(c *gin.Context) {
 			s.Language = lang
 			h.manager.Save()
 			if acceptsJSON {
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Language Updated")
-				c.Header("X-Toast-Message", fmt.Sprintf("Language set to %s", lang))
+				ToastSuccess(c, "Language Updated", fmt.Sprintf("Language set to %s", lang))
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 				return
 			}
@@ -628,10 +565,14 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		welcomeMessage = welcomeMessage[:300]
 	}
 	welcomeBackMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_back_message")), "\r", " "), "\n", " "))
-	if len(welcomeBackMessage) > 300 { welcomeBackMessage = welcomeBackMessage[:300] }
+	if len(welcomeBackMessage) > 300 {
+		welcomeBackMessage = welcomeBackMessage[:300]
+	}
 	welcomeDelay := 1
 	if v := strings.TrimSpace(c.PostForm("welcome_delay_seconds")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 600 { welcomeDelay = n }
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 600 {
+			welcomeDelay = n
+		}
 	}
 
 	formState := gin.H{
@@ -667,148 +608,52 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	// We'll read the posted value below and also stash it here for error redisplay
 	// so the checkbox state persists when validation fails.
 
-	if name == "" {
+	// Unified validation for creation
+	v, verr := ValidateNewServerConfig(h.manager, NewServerInput{
+		Name:             name,
+		World:            world,
+		StartLocation:    startLocation,
+		StartCondition:   startCondition,
+		Difficulty:       difficulty,
+		PortRaw:          c.PostForm("port"),
+		MaxClientsRaw:    c.PostForm("max_clients"),
+		SaveIntervalRaw:  c.PostForm("save_interval"),
+		RestartDelayRaw:  c.PostForm("restart_delay_seconds"),
+		ShutdownDelayRaw: c.PostForm("shutdown_delay_seconds"),
+		BetaRaw:          betaRaw,
+	})
+	if verr != nil {
 		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Server name is required.",
+			"error": verr.Error(),
 			"form":  formState,
 		})
 		return
 	}
-
-	if world == "" {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "World selection is required.",
-			"form":  formState,
-		})
-		return
-	}
-
-	if startLocation == "" {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Start location is required.",
-			"form":  formState,
-		})
-		return
-	}
-
-	if startCondition == "" {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Start condition is required.",
-			"form":  formState,
-		})
-		return
-	}
-
-	if difficulty == "" {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Difficulty selection is required.",
-			"form":  formState,
-		})
-		return
-	}
-
-	if betaRaw == "" {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Game version selection is required.",
-			"form":  formState,
-		})
-		return
-	}
-
-	if !h.manager.IsServerNameAvailable(name, -1) {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": fmt.Sprintf("Server name '%s' already exists. Please choose a unique name.", name),
-			"form":  formState,
-		})
-		return
-	}
-
-	port, err := middleware.ValidatePort(c.PostForm("port"))
-	if err != nil {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": fmt.Sprintf("Invalid port number: %s", c.PostForm("port")),
-			"form":  formState,
-		})
-		return
-	}
-	formState["port"] = fmt.Sprintf("%d", port)
-
-	if !h.manager.IsPortAvailable(port, -1) {
-		suggestedPort := h.manager.GetNextAvailablePort(port)
-		formState["port"] = fmt.Sprintf("%d", suggestedPort)
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": fmt.Sprintf("Port %d is not available. Ports must be unique and at least 3 apart. Try port %d.", port, suggestedPort),
-			"form":  formState,
-		})
-		return
-	}
-
-	maxClients, err := strconv.Atoi(c.PostForm("max_clients"))
-	if err != nil || maxClients < 1 || maxClients > 100 {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Invalid max players (1-100)",
-			"form":  formState,
-		})
-		return
-	}
-	formState["max_clients"] = fmt.Sprintf("%d", maxClients)
-
-	saveInterval, err := strconv.Atoi(c.PostForm("save_interval"))
-	if err != nil || saveInterval < 60 || saveInterval > 3600 {
-		h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-			"error": "Invalid save interval (60-3600)",
-			"form":  formState,
-		})
-		return
-	}
-	formState["save_interval"] = fmt.Sprintf("%d", saveInterval)
-
-	restartDelay := models.DefaultRestartDelaySeconds
-	if restartDelayStr := c.PostForm("restart_delay_seconds"); restartDelayStr != "" {
-		if val, convErr := strconv.Atoi(restartDelayStr); convErr == nil && val >= 0 && val <= 3600 {
-			restartDelay = val
-		} else {
-			h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-				"error": "Invalid restart delay (0-3600)",
-				"form":  formState,
-			})
-			return
-		}
-	}
-	// Shutdown delay (seconds) before issuing QUIT on Stop
-	shutdownDelay := 2
-	if shutdownDelayStr := c.PostForm("shutdown_delay_seconds"); shutdownDelayStr != "" {
-		if val, convErr := strconv.Atoi(shutdownDelayStr); convErr == nil && val >= 0 && val <= 3600 {
-			shutdownDelay = val
-		} else {
-			h.renderNewServerForm(c, http.StatusBadRequest, username, gin.H{
-				"error": "Invalid shutdown delay (0-3600)",
-				"form":  formState,
-			})
-			return
-		}
-	}
-	formState["restart_delay_seconds"] = fmt.Sprintf("%d", restartDelay)
-	worldID := h.manager.ResolveWorldID(world, beta)
+	// Normalize formState with validated values for redisplay consistency
+	formState["port"] = fmt.Sprintf("%d", v.Port)
+	formState["max_clients"] = fmt.Sprintf("%d", v.MaxClients)
+	formState["save_interval"] = fmt.Sprintf("%d", v.SaveInterval)
+	formState["restart_delay_seconds"] = fmt.Sprintf("%d", v.RestartDelay)
+	worldID := h.manager.ResolveWorldID(v.World, v.Beta)
 	if worldID == "" {
-		worldID = world
+		worldID = v.World
 	}
 
 	cfg := &models.ServerConfig{
-		Name:                  name,
-		World:                 world,
+		Name:                  v.Name,
+		World:                 v.World,
 		WorldID:               worldID,
 		Language:              "",
-		StartLocation:         startLocation,
-		StartCondition:        startCondition,
-		Difficulty:            difficulty,
-		Port:                  port,
+		StartLocation:         v.StartLocation,
+		StartCondition:        v.StartCondition,
+		Difficulty:            v.Difficulty,
+		Port:                  v.Port,
 		Password:              password,
 		AuthSecret:            authSecret,
-		MaxClients:            maxClients,
-		SaveInterval:          saveInterval,
+		MaxClients:            v.MaxClients,
+		SaveInterval:          v.SaveInterval,
 		Visible:               serverVisible,
-		Beta:                  beta,
+		Beta:                  v.Beta,
 		AutoStart:             autoStart,
 		AutoUpdate:            autoUpdate,
 		AutoSave:              autoSave,
@@ -819,8 +664,8 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		DeleteSkeletonOnDecay: deleteSkeletonOnDecay,
 		UseSteamP2P:           useSteamP2P,
 		DisconnectTimeout:     disconnectTimeout,
-		RestartDelaySeconds:   restartDelay,
-		ShutdownDelaySeconds:  shutdownDelay,
+		RestartDelaySeconds:   v.RestartDelay,
+		ShutdownDelaySeconds:  v.ShutdownDelay,
 		WelcomeMessage:        welcomeMessage,
 		WelcomeBackMessage:    welcomeBackMessage,
 		WelcomeDelaySeconds:   welcomeDelay,

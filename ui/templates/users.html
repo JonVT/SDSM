@@ -37,9 +37,9 @@
     <div class="alert alert-danger" role="alert">{{ .error }}</div>
     {{ end }}
 
-    <section class="card" style="padding: 16px; margin-bottom: 16px;">
-      <h2 class="h4" style="margin-bottom: 12px;">Create User</h2>
-      <form method="POST" action="/users" class="grid" style="grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items:end;">
+    <section class="card p-4 mb-4">
+      <h2 class="h4 mb-3">Create User</h2>
+      <form method="POST" action="/users" class="users-create-grid">
         <input type="hidden" name="create" value="1" />
         <div>
           <label class="form-label">Username</label>
@@ -62,8 +62,8 @@
       </form>
     </section>
 
-    <section class="card" style="padding: 16px;">
-      <h2 class="h4" style="margin-bottom: 12px;">Users</h2>
+    <section class="card p-4">
+      <h2 class="h4 mb-3">Users</h2>
       <div class="table-responsive">
         <table class="table">
           <thead>
@@ -71,7 +71,7 @@
               <th>Username</th>
               <th>Role</th>
               <th>Created</th>
-              <th style="width: 380px;">Actions</th>
+              <th class="w-160">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -81,20 +81,20 @@
               <td>{{ .Role }}</td>
               <td>{{ .CreatedAt }}</td>
               <td>
-                <form method="POST" action="/users" class="inline-flex" style="gap: 8px; align-items: center;">
+                <form method="POST" action="/users" class="inline-flex gap-2 items-center">
                   <input type="hidden" name="set_role_user" value="{{ .Username }}" />
-                  <select name="set_role_value" class="form-input" style="width: 160px;">
+                  <select name="set_role_value" class="form-input w-160">
                     <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
                     <option value="operator" {{ if eq .Role "operator" }}selected{{ end }}>Operator</option>
                   </select>
                   <button type="submit" class="btn btn-secondary">Update Role</button>
                 </form>
-                <form method="POST" action="/users" class="inline-flex" style="gap: 8px; align-items: center; margin-left: 8px;">
+                <form method="POST" action="/users" class="inline-flex gap-2 items-center ml-2">
                   <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
-                  <input name="reset_password_value" type="password" class="form-input" placeholder="new password" style="width: 160px;" />
+                  <input name="reset_password_value" type="password" class="form-input w-160" placeholder="new password" />
                   <button type="submit" class="btn btn-secondary">Set Password</button>
                 </form>
-                <form method="POST" action="/users" style="display:inline; margin-left: 8px;" onsubmit="return confirm('Delete user {{ .Username }}?');">
+                <form method="POST" action="/users" class="inline ml-2" onsubmit="return confirm('Delete user {{ .Username }}?');">
                   <button name="delete" value="{{ .Username }}" type="submit" class="btn btn-danger">Delete</button>
                 </form>
               </td>

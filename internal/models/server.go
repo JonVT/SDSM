@@ -16,10 +16,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"sdsm/internal/utils"
@@ -122,30 +122,30 @@ type ServerConfig struct {
 // Server represents a managed dedicated server instance, including
 // runtime state, settings, logs, and client/chat history.
 type Server struct {
-	ID             int           `json:"id"`
-	Proc           *exec.Cmd     `json:"-"`
-	Thrd           chan bool     `json:"-"`
+	ID             int            `json:"id"`
+	Proc           *exec.Cmd      `json:"-"`
+	Thrd           chan bool      `json:"-"`
 	stdin          io.WriteCloser `json:"-"` // deprecated: stdin fallback removed; retained for struct compatibility
-	Logger         *utils.Logger `json:"-"`
-	Paths          *utils.Paths  `json:"-"`
-	Name           string        `json:"name"`
-	World          string        `json:"world"`
-	WorldID        string        `json:"world_id"`
-	Language       string        `json:"language"`
-	StartLocation  string        `json:"start_location"`
-	StartCondition string        `json:"start_condition"`
-	Difficulty     string        `json:"difficulty"`
-	Port           int           `json:"port"`
-	SaveInterval   int           `json:"save_interval"`
-	AuthSecret     string        `json:"auth_secret"`
-	Password       string        `json:"password"`
-	MaxClients     int           `json:"max_clients"`
-	Visible        bool          `json:"visible"`
-	Beta           bool          `json:"beta"`
-	AutoStart      bool          `json:"auto_start"`
-	AutoUpdate     bool          `json:"auto_update"`
-	AutoSave       bool          `json:"auto_save"`
-	AutoPause      bool          `json:"auto_pause"`
+	Logger         *utils.Logger  `json:"-"`
+	Paths          *utils.Paths   `json:"-"`
+	Name           string         `json:"name"`
+	World          string         `json:"world"`
+	WorldID        string         `json:"world_id"`
+	Language       string         `json:"language"`
+	StartLocation  string         `json:"start_location"`
+	StartCondition string         `json:"start_condition"`
+	Difficulty     string         `json:"difficulty"`
+	Port           int            `json:"port"`
+	SaveInterval   int            `json:"save_interval"`
+	AuthSecret     string         `json:"auth_secret"`
+	Password       string         `json:"password"`
+	MaxClients     int            `json:"max_clients"`
+	Visible        bool           `json:"visible"`
+	Beta           bool           `json:"beta"`
+	AutoStart      bool           `json:"auto_start"`
+	AutoUpdate     bool           `json:"auto_update"`
+	AutoSave       bool           `json:"auto_save"`
+	AutoPause      bool           `json:"auto_pause"`
 	// Additional server settings persisted in sdsm.config
 	MaxAutoSaves          int  `json:"max_auto_saves"`
 	MaxQuickSaves         int  `json:"max_quick_saves"`
@@ -162,21 +162,21 @@ type Server struct {
 	RestartDelaySeconds  int      `json:"restart_delay_seconds"`
 	SCONPort             int      `json:"scon_port"` // Port for SCON plugin HTTP API
 	// WelcomeMessage is sent as a chat/SAY message each time a player connects (if non-empty)
-	WelcomeMessage     string `json:"welcome_message"`
-	WelcomeBackMessage string `json:"welcome_back_message"`
-	WelcomeDelaySeconds int   `json:"welcome_delay_seconds"`
-	ServerStarted  *time.Time `json:"server_started,omitempty"`
-	ServerSaved    *time.Time `json:"server_saved,omitempty"`
-	Clients        []*Client  `json:"-"`
-	Chat           []*Chat    `json:"-"`
-	Storming       bool       `json:"-"`
-	Paused         bool       `json:"-"`
-	Starting       bool       `json:"-"`
-	Stopping       bool       `json:"-"` // set true during shutdown delay window
-	StoppingEnds   time.Time  `json:"-"` // timestamp when shutdown expected to occur
-	StoppingCancel chan struct{} `json:"-"` // cancellation channel for delayed shutdown
-	Running        bool       `json:"-"`
-	LastLogLine    string     `json:"-"`
+	WelcomeMessage      string        `json:"welcome_message"`
+	WelcomeBackMessage  string        `json:"welcome_back_message"`
+	WelcomeDelaySeconds int           `json:"welcome_delay_seconds"`
+	ServerStarted       *time.Time    `json:"server_started,omitempty"`
+	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
+	Clients             []*Client     `json:"-"`
+	Chat                []*Chat       `json:"-"`
+	Storming            bool          `json:"-"`
+	Paused              bool          `json:"-"`
+	Starting            bool          `json:"-"`
+	Stopping            bool          `json:"-"` // set true during shutdown delay window
+	StoppingEnds        time.Time     `json:"-"` // timestamp when shutdown expected to occur
+	StoppingCancel      chan struct{} `json:"-"` // cancellation channel for delayed shutdown
+	Running             bool          `json:"-"`
+	LastLogLine         string        `json:"-"`
 	// LastError is a human-readable description of the last fatal/startup error detected from logs.
 	LastError string `json:"last_error,omitempty"`
 	// LastErrorAt records when LastError was updated.
@@ -207,7 +207,9 @@ func (s *Server) beginClientsScan() {
 	if s.clientsScanSeen == nil {
 		s.clientsScanSeen = make(map[string]struct{})
 	} else {
-		for k := range s.clientsScanSeen { delete(s.clientsScanSeen, k) }
+		for k := range s.clientsScanSeen {
+			delete(s.clientsScanSeen, k)
+		}
 	}
 	s.clientsScanStart = time.Now()
 }
@@ -215,28 +217,40 @@ func (s *Server) beginClientsScan() {
 // noteClientsScan records a seen client (steamID or name) as part of the active scan and
 // ensures the client is present and marked online.
 func (s *Server) noteClientsScan(steamID, name string, when time.Time) {
-	if !s.clientsScanActive { return }
+	if !s.clientsScanActive {
+		return
+	}
 	id := strings.TrimSpace(steamID)
 	nm := strings.TrimSpace(name)
 	key := id
-	if key == "" { key = strings.ToLower(nm) }
-	if key == "" { return }
+	if key == "" {
+		key = strings.ToLower(nm)
+	}
+	if key == "" {
+		return
+	}
 	s.clientsScanSeen[key] = struct{}{}
 	// Ensure client exists and is online
 	// Try by SteamID first
 	for _, existing := range s.Clients {
-		if existing == nil { continue }
+		if existing == nil {
+			continue
+		}
 		if id != "" && strings.EqualFold(existing.SteamID, id) {
 			// clear disconnect if previously set
 			existing.DisconnectDatetime = nil
-			if existing.Name == "" && nm != "" { existing.Name = nm }
+			if existing.Name == "" && nm != "" {
+				existing.Name = nm
+			}
 			return
 		}
 	}
 	// Fallback by name (if no SteamID)
 	if id == "" && nm != "" {
 		for _, existing := range s.Clients {
-			if existing == nil { continue }
+			if existing == nil {
+				continue
+			}
 			if strings.EqualFold(existing.Name, nm) {
 				existing.DisconnectDatetime = nil
 				return
@@ -244,8 +258,10 @@ func (s *Server) noteClientsScan(steamID, name string, when time.Time) {
 		}
 	}
 	// Not found; add a new online client entry
-	if when.IsZero() { when = time.Now() }
-	c := &Client{ SteamID: id, Name: nm, ConnectDatetime: when }
+	if when.IsZero() {
+		when = time.Now()
+	}
+	c := &Client{SteamID: id, Name: nm, ConnectDatetime: when}
 	if s.recordClientSession(c) {
 		s.appendPlayerLog(c)
 	}
@@ -254,14 +270,22 @@ func (s *Server) noteClientsScan(steamID, name string, when time.Time) {
 // endClientsScan finalizes a CLIENTS scan by marking any currently live clients not seen
 // in the scan as disconnected now.
 func (s *Server) endClientsScan() {
-	if !s.clientsScanActive { return }
+	if !s.clientsScanActive {
+		return
+	}
 	now := time.Now()
 	seen := s.clientsScanSeen
 	for _, existing := range s.LiveClients() {
-		if existing == nil { continue }
+		if existing == nil {
+			continue
+		}
 		k := strings.TrimSpace(existing.SteamID)
-		if k == "" { k = strings.ToLower(strings.TrimSpace(existing.Name)) }
-		if k == "" { continue }
+		if k == "" {
+			k = strings.ToLower(strings.TrimSpace(existing.Name))
+		}
+		if k == "" {
+			continue
+		}
 		if _, ok := seen[k]; !ok {
 			existing.DisconnectDatetime = &now
 		}
@@ -812,8 +836,9 @@ func (s *Server) LastConnectedPlayerName() string {
 
 // expandChatTokens performs token substitution for chat/SAY messages.
 // Supported tokens (case-insensitive, bracketed):
-//   [ServerName], [WorldName], [WorldID], [StartLocation], [StartCondition],
-//   [Date], [Time], [LastPlayer]
+//
+//	[ServerName], [WorldName], [WorldID], [StartLocation], [StartCondition],
+//	[Date], [Time], [LastPlayer]
 func (s *Server) expandChatTokens(msg string) string {
 	if s == nil || strings.TrimSpace(msg) == "" {
 		return msg
@@ -1563,12 +1588,16 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 	if delay <= 0 {
 		// Immediate path
 		s.performFinalShutdown()
-		if broadcast != nil { broadcast(s) }
+		if broadcast != nil {
+			broadcast(s)
+		}
 		return
 	}
 	if s.Stopping {
 		// Already scheduled; nothing to do
-		if broadcast != nil { broadcast(s) }
+		if broadcast != nil {
+			broadcast(s)
+		}
 		return
 	}
 	s.Stopping = true
@@ -1576,7 +1605,9 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 	// Create a fresh cancellation channel
 	s.StoppingCancel = make(chan struct{})
 	s.sendInitialShutdownNotice(delay)
-	if broadcast != nil { broadcast(s) }
+	if broadcast != nil {
+		broadcast(s)
+	}
 	go func(cancel <-chan struct{}, srv *Server, d time.Duration, bc func(*Server)) {
 		// Countdown logic with 1s ticks to allow responsive cancellation
 		ticker := time.NewTicker(1 * time.Second)
@@ -1589,7 +1620,9 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 			}
 			if remaining <= 10*time.Second && !tenSecondNoticeSent {
 				// Send 10s notice once
-				if remaining > 0 { srv.sendTenSecondNotice() }
+				if remaining > 0 {
+					srv.sendTenSecondNotice()
+				}
 				tenSecondNoticeSent = true
 			}
 			select {
@@ -1601,7 +1634,9 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 				srv.sendCancellationNotice()
 				srv.Stopping = false
 				srv.StoppingEnds = time.Time{}
-				if bc != nil { bc(srv) }
+				if bc != nil {
+					bc(srv)
+				}
 				return
 			case <-ticker.C:
 				// continue loop
@@ -1610,7 +1645,9 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 		// Final notice + QUIT
 		srv.sendFinalNotice()
 		srv.performFinalShutdown()
-		if bc != nil { bc(srv) }
+		if bc != nil {
+			bc(srv)
+		}
 	}(s.StoppingCancel, s, delay, broadcast)
 }
 
@@ -1639,8 +1676,10 @@ func (s *Server) sendInitialShutdownNotice(delay time.Duration) {
 }
 
 func (s *Server) sendTenSecondNotice() { s.sendChat("Server is shutting down in 10 seconds") }
-func (s *Server) sendFinalNotice() { s.sendChat("Server shutting down now") }
-func (s *Server) sendCancellationNotice() { s.sendChat("Shutdown canceled; server will remain running") }
+func (s *Server) sendFinalNotice()     { s.sendChat("Server shutting down now") }
+func (s *Server) sendCancellationNotice() {
+	s.sendChat("Shutdown canceled; server will remain running")
+}
 
 func (s *Server) sendChat(msg string) {
 	if s == nil || !s.Running || s.Proc == nil {
@@ -1699,31 +1738,41 @@ func (s *Server) performFinalShutdown() {
 func (s *Server) formatTimeframe(d time.Duration) string {
 	secs := int(d.Seconds())
 	if secs < 60 {
-		if secs == 1 { return "1 second" }
+		if secs == 1 {
+			return "1 second"
+		}
 		return fmt.Sprintf("%d seconds", secs)
 	}
 	m := secs / 60
 	sRem := secs % 60
 	if sRem == 0 {
-		if m == 1 { return "1 minute" }
+		if m == 1 {
+			return "1 minute"
+		}
 		return fmt.Sprintf("%d minutes", m)
 	}
 	if m == 1 {
-		if sRem == 1 { return "1 minute 1 second" }
+		if sRem == 1 {
+			return "1 minute 1 second"
+		}
 		return fmt.Sprintf("1 minute %d seconds", sRem)
 	}
-	if sRem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+	if sRem == 1 {
+		return fmt.Sprintf("%d minutes 1 second", m)
+	}
 	return fmt.Sprintf("%d minutes %d seconds", m, sRem)
 }
 
 // RenderChatMessage expands supported tokens in outbound SAY/chat messages.
 // Supported tokens:
-//  {player}      - connecting player's name (when provided in ctx)
-//  {lastplayer}  - most recent connected player's name (history fallback)
-//  {server}      - server name
-//  {world}       - current world id/name
-//  {time}        - current local time (HH:MM)
-//  {date}        - current local date (YYYY-MM-DD)
+//
+//	{player}      - connecting player's name (when provided in ctx)
+//	{lastplayer}  - most recent connected player's name (history fallback)
+//	{server}      - server name
+//	{world}       - current world id/name
+//	{time}        - current local time (HH:MM)
+//	{date}        - current local date (YYYY-MM-DD)
+//
 // The ctx map may include { "player": "Name" } during connect events.
 func (s *Server) RenderChatMessage(msg string, ctx map[string]string) string {
 	if s == nil {
@@ -1750,7 +1799,9 @@ func (s *Server) RenderChatMessage(msg string, ctx map[string]string) string {
 	// Server/world tokens
 	replace("server", s.Name)
 	w := s.WorldID
-	if strings.TrimSpace(w) == "" { w = s.World }
+	if strings.TrimSpace(w) == "" {
+		w = s.World
+	}
 	replace("world", w)
 	// Time/date tokens
 	now := time.Now()
@@ -1759,10 +1810,17 @@ func (s *Server) RenderChatMessage(msg string, ctx map[string]string) string {
 	// Additional tokens
 	replace("player_count", fmt.Sprintf("%d", len(s.LiveClients())))
 	replace("max_players", fmt.Sprintf("%d", s.MaxClients))
-	if s.Port > 0 { replace("port", fmt.Sprintf("%d", s.Port)) }
+	if s.Port > 0 {
+		replace("port", fmt.Sprintf("%d", s.Port))
+	}
 	replace("difficulty", s.Difficulty)
 	replace("language", s.Language)
-	replace("beta", func() string { if s.Beta { return "beta" }; return "release" }())
+	replace("beta", func() string {
+		if s.Beta {
+			return "beta"
+		}
+		return "release"
+	}())
 	return out
 }
 
@@ -1991,12 +2049,14 @@ func (s *Server) Start() {
 	// stdin fallback removed: Stationeers does not accept stdin commands reliably
 	// If manager is configured for detached servers, start process in its own group (Unix)
 	if runtime.GOOS != "windows" {
-		if m := s.Paths; m != nil { /* placeholder if future path checks needed */ }
+		if m := s.Paths; m != nil { /* placeholder if future path checks needed */
+		}
 		// Setpgid will prevent receiving parent termination signals
 		if cmd.SysProcAttr == nil {
 			cmd.SysProcAttr = &syscall.SysProcAttr{}
 		}
-		if s != nil && s.Paths != nil { /* no-op references to avoid unused warnings */ }
+		if s != nil && s.Paths != nil { /* no-op references to avoid unused warnings */
+		}
 		// We will decide detached behavior based on environment variable until wired to Manager at start
 		if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
 			cmd.SysProcAttr.Setpgid = true

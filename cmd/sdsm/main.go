@@ -409,9 +409,7 @@ func setupRouter() *gin.Engine {
 		// Simple refresh endpoint used by UI header buttons to trigger htmx 'refresh' events.
 		api.GET("/refresh", func(c *gin.Context) {
 			// Return minimal JSON; htmx button uses hx-swap="none" so body is ignored.
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Refreshed")
-			c.Header("X-Toast-Message", "Data refreshed")
+			handlers.ToastSuccess(c, "Refreshed", "Data refreshed")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 		api.GET("/stats", managerHandlers.APIStats)
@@ -432,14 +430,14 @@ func setupRouter() *gin.Engine {
 			}
 			managerHandlers.APIServersCreateFromSave(c)
 		})
-        // Analyze Save (multipart .save upload) - returns world and world file name
-        api.POST("/servers/analyze-save", func(c *gin.Context) {
-            if c.GetString("role") != "admin" {
-                c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
-                return
-            }
-            managerHandlers.APIServersAnalyzeSave(c)
-        })
+		// Analyze Save (multipart .save upload) - returns world and world file name
+		api.POST("/servers/analyze-save", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersAnalyzeSave(c)
+		})
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
 		api.GET("/servers/:server_id/status", managerHandlers.APIServerStatus)
 		api.GET("/servers/:server_id/progress", managerHandlers.ServerProgressGET)
@@ -615,9 +613,7 @@ func setupRouter() *gin.Engine {
 			}
 			stop := strings.TrimSpace(c.PostForm("stop_servers")) == "1"
 			go app.manager.ExitDetached(stop)
-			c.Header("X-Toast-Type", "warning")
-			c.Header("X-Toast-Title", "Shutdown Initiated")
-			c.Header("X-Toast-Message", "SDSM is shutting down...")
+			handlers.ToastWarn(c, "Shutdown Initiated", "SDSM is shutting down...")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 		protected.GET("/update/progress", managerHandlers.UpdateProgressGET)

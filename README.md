@@ -50,6 +50,35 @@ What happens automatically
 
 SDSM is a Go (Gin) web application that wraps everything you need to operate Stationeers servers on Linux. It supervises deployments, keeps SteamCMD/BepInEx/LaunchPad files current, exposes a clean dashboard for day-to-day operations, and parses log output to surface real-time player, chat, and save activity.
 
+## What’s New (Nov 2025)
+
+Backend consistency and UI cleanup refinements landed recently. Highlights:
+
+- Centralized toast notifications
+	- Added helpers in `internal/handlers/toast.go`: `SetToast`, `ToastSuccess`, `ToastInfo`, `ToastWarn`, `ToastError`.
+	- All handlers now set `X-Toast-*` headers via helpers for both HTML (HTMX) and JSON flows.
+- Unified validation and creation
+	- New helpers in `internal/handlers/validation.go`: `ValidateServerNameAvailable`, `ValidatePortAvailable`, `SanitizeWelcome`.
+	- `ValidateNewServerConfig` unifies server creation checks across web and API paths.
+	- `DefaultDifficulty` selects sensible difficulty when not provided.
+- Streamlined realtime updates
+	- `BroadcastStatusAndStats` consolidates paired status+stats websocket broadcasts for fewer code paths and consistent UI updates.
+- Safe core changes and redeploys
+	- `ApplyCoreChangeEffects` detects changes to world/start parameters/beta and triggers appropriate save purge flags and beta redeploys.
+- UI utilities and template cleanup
+	- Removed inline styles from templates in `ui/templates/`; shared, utility-first CSS lives in `ui/static/ui-theme.css` (and `modern.css`).
+	- The only intentional dynamic inline style left is progress bar width in long-running tasks.
+- Language handling
+	- Language selection is handled via a dedicated endpoint and is no longer treated as a startup parameter change.
+
+New/updated files of note
+
+- `internal/handlers/toast.go` – toast helpers (headers)
+- `internal/handlers/validation.go` – validation and creation pipeline
+- `internal/handlers/broadcast.go` – paired status+stats broadcast helper
+- `internal/handlers/update_helpers.go` – core change + redeploy logic
+- Multiple handler refactors to use these helpers (API and HTML flows)
+
 ## Feature Highlights
 
 - **Unified dashboard** – Track multiple servers, player counts, deployment progress, and recent log activity.
@@ -238,6 +267,29 @@ go build -o dist/sdsm ./cmd/sdsm
 SDSM_CONFIG=/path/to/sdsm.config ./dist/sdsm
 ```
 
+### Developer Notes: Helper APIs (new)
+
+Cross-cutting concerns are now centralized. Prefer these helpers in handlers:
+
+- Toasts (headers for UI notifications)
+	- `ToastSuccess(c, title, msg)`, `ToastInfo`, `ToastWarn`, `ToastError`
+	- Under the hood sets `X-Toast-Type`, `X-Toast-Title`, `X-Toast-Message` for HTML/JSON consumers.
+- Validation and creation
+	- `ValidateServerNameAvailable(mgr, name, excludeID)`
+	- `ValidatePortAvailable(mgr, portRaw, excludeID) (port, suggested, error)`
+	- `SanitizeWelcome(str, maxLen) string`
+	- `ValidateNewServerConfig(mgr, NewServerInput) (*ValidatedServerCreation, error)` to normalize and validate inputs across web and API flows.
+	- `DefaultDifficulty(mgr, beta) string` for sensible defaults when unset.
+- Realtime updates
+	- `BroadcastStatusAndStats(s *models.Server)` replaces ad-hoc paired broadcasts.
+- Core start parameter changes and redeploys
+	- `ApplyCoreChangeEffects(s, origWorld, origStartLoc, origStartCond, originalBeta)` encapsulates pending save purge flagging and beta redeploy behavior.
+
+UI notes
+
+- Utility-first CSS lives in `ui/static/ui-theme.css` (plus `modern.css`).
+- Templates in `ui/templates/` avoid inline styles; HTMX-triggered updates consume toast headers for user feedback.
+
 Formatting, tests, lint
 - `gofmt -w ./internal ./cmd`
 - `go test ./...`
@@ -249,6 +301,10 @@ Formatting, tests, lint
 cmd/                   # Entrypoint (sdsm)
 internal/
 	handlers/           # HTTP handlers, HTML rendering, async workflows
+		toast.go           # Toast header helpers (new)
+		validation.go      # Validation + server creation pipeline (new)
+		broadcast.go       # Combined status+stats broadcast (new)
+		update_helpers.go  # Core change effects + beta redeploy (new)
 	manager/            # Orchestrator, deploy pipeline, config, paths, logging
 	middleware/         # Auth, security headers, CORS, rate limiting, websockets
 	models/             # Server lifecycle, SCON commands, logs, players/chat
@@ -277,7 +333,7 @@ LICENSE               # MIT License
 
 The CSS lint checks for obviously unused selectors by scanning HTML templates and JavaScript for class usage (including dynamic `classList.*` and `className` patterns). It’s heuristic by design; review findings before removal.
 
-For UI work, edit the HTML in `ui/templates/` and the styles in `ui/static/`; the JavaScript inside `ui/templates/server_status.html` powers live player/chat/log updates. A shared footer and `/terms` page are included; the footer links to Terms and the GitHub repo.
+For UI work, edit the HTML in `ui/templates/` and the styles in `ui/static/`. Utility CSS lives in `ui/static/ui-theme.css`; avoid inline styles in templates. The JavaScript inside server status templates powers live player/chat/log updates. A shared footer and `/terms` page are included; the footer links to Terms and the GitHub repo.
 
 ### SCON Integration
 

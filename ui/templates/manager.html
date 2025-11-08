@@ -728,7 +728,7 @@
                     const setExpanded = (expanded) => {
                         toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
                         content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
-                        content.style.display = expanded ? '' : 'none';
+                        content.classList.toggle('hidden', !expanded);
                         chevron.innerHTML = expanded
                             ? '<polyline points="18 15 12 9 6 15"></polyline>' // up
                             : '<polyline points="6 9 12 15 18 9"></polyline>'; // down
@@ -784,8 +784,8 @@
                     if (!isPanel) {
                         panelRow = document.createElement('tr');
                         panelRow.className = 'um-assign-panel';
-                        const td = document.createElement('td'); td.colSpan = 4; td.style.background='var(--bg-tertiary)'; td.style.borderTop='1px solid var(--border-color)'; td.style.padding='12px 16px';
-                        td.innerHTML = '<div><strong>Server Access</strong><div class="form-group" style="margin-top:8px;"><label><input type="checkbox" id="assign_all_'+username+'"> All servers</label></div><div id="assign_list_'+username+'" class="assign-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;"></div><div style="margin-top:12px;"><button class="btn btn-primary" id="assign_save_'+username+'">Save</button> <button class="btn btn-secondary" id="assign_close_'+username+'">Close</button></div></div>';
+                        const td = document.createElement('td'); td.colSpan = 4; td.className = 'assign-panel-cell';
+                        td.innerHTML = '<div><strong>Server Access</strong><div class="form-group mt-2"><label class="inline-flex items-center gap-2"><input type="checkbox" id="assign_all_'+username+'"> All servers</label></div><div id="assign_list_'+username+'" class="assign-list mt-2"></div><div class="mt-2"><button class="btn btn-primary" id="assign_save_'+username+'">Save</button> <button class="btn btn-secondary" id="assign_close_'+username+'">Close</button></div></div>';
                         panelRow.appendChild(td);
                         row.insertAdjacentElement('afterend', panelRow);
                     }
@@ -802,7 +802,7 @@
 
                         list.innerHTML = '';
                         serversCache.forEach(s => {
-                            const lbl = document.createElement('label'); lbl.style.display='inline-flex'; lbl.style.alignItems='center'; lbl.style.gap='6px'; lbl.style.padding='4px 8px'; lbl.style.border='1px solid var(--border-color)'; lbl.style.borderRadius='8px';
+                            const lbl = document.createElement('label'); lbl.className = 'assign-chip';
                             const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.className='assign-cb';
                             const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
                             lbl.appendChild(cb); lbl.appendChild(span);
@@ -860,7 +860,7 @@
                     ensureServersCache().then(() => {
                         accessList.innerHTML = '';
                         serversCache.forEach(s => {
-                            const lbl = document.createElement('label'); lbl.style.display='inline-flex'; lbl.style.alignItems='center'; lbl.style.gap='6px'; lbl.style.padding='4px 8px'; lbl.style.border='1px solid var(--border-color)'; lbl.style.borderRadius='8px';
+                            const lbl = document.createElement('label'); lbl.className='assign-chip';
                             const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.checked = newAssignServers.has(Number(s.id)); cb.disabled = newAssignAll; cb.className='um-new-assign-cb';
                             cb.addEventListener('change', ()=>{ const id = Number(cb.value); if (cb.checked) newAssignServers.add(id); else newAssignServers.delete(id); });
                             const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
@@ -874,7 +874,7 @@
                                 accessList.querySelectorAll('.um-new-assign-cb').forEach(el => { el.disabled = newAssignAll; });
                             };
                         }
-                        accessDrop.style.display = 'block';
+                        accessDrop.classList.remove('hidden');
                         positionDropdown(accessBtn, accessDrop);
                         function onDocClick(evt){
                             if (!accessDrop.contains(evt.target) && evt.target !== accessBtn && !accessBtn.contains(evt.target)) {
@@ -891,9 +891,9 @@
                     });
                 }
 
-                function closeAccessDropdown(){ if (accessDrop) accessDrop.style.display = 'none'; }
+                function closeAccessDropdown(){ if (accessDrop) accessDrop.classList.add('hidden'); }
 
-                if (accessBtn) accessBtn.addEventListener('click', () => { if (accessDrop.style.display === 'block') closeAccessDropdown(); else openAccessDropdown(); });
+                if (accessBtn) accessBtn.addEventListener('click', () => { if (!accessDrop.classList.contains('hidden')) closeAccessDropdown(); else openAccessDropdown(); });
                 if (accessClose) accessClose.addEventListener('click', closeAccessDropdown);
                 if (accessSave) accessSave.addEventListener('click', () => { closeAccessDropdown(); });
 
@@ -921,7 +921,7 @@
                         const tr = document.createElement('tr');
                         const tdU = document.createElement('td'); tdU.textContent = u.username; tr.appendChild(tdU);
                         const tdR = document.createElement('td');
-                        const sel = document.createElement('select'); sel.className='form-input'; sel.style.width='140px';
+                        const sel = document.createElement('select'); sel.className='form-input-inline w-140';
                         ['admin','operator'].forEach(r => {
                             const opt = document.createElement('option'); opt.value=r; opt.textContent=r.charAt(0).toUpperCase()+r.slice(1);
                             if(String(u.role).toLowerCase()===r) opt.selected=true; sel.appendChild(opt);
@@ -939,13 +939,13 @@
                         });
                         tdA.appendChild(btnPw);
                         // Delete button
-                        const btnDel = document.createElement('button'); btnDel.className='btn btn-danger'; btnDel.style.marginLeft='8px'; btnDel.textContent='Delete';
+                        const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2'; btnDel.textContent='Delete';
                         btnDel.addEventListener('click', () => { if(confirm('Delete user '+u.username+'?')) deleteUser(u.username); });
                         tdA.appendChild(btnDel);
                         // Assignments button (operators only)
                         const isOperator = String(u.role).toLowerCase() === 'operator';
                         if (isOperator) {
-                            const btnAssign = document.createElement('button'); btnAssign.className='btn btn-secondary'; btnAssign.style.marginLeft='8px'; btnAssign.textContent='Assign Servers'; btnAssign.title='Manage server access for this operator';
+                            const btnAssign = document.createElement('button'); btnAssign.className='btn btn-secondary ml-2'; btnAssign.textContent='Assign Servers'; btnAssign.title='Manage server access for this operator';
                             btnAssign.addEventListener('click', () => openAssignPanel(u.username));
                             tdA.appendChild(btnAssign);
                         }
@@ -1018,7 +1018,7 @@
                 if (newRole && accessBtn) {
                     const updateAccessVisibility = () => {
                         const isOp = newRole.value === 'operator';
-                        accessBtn.style.display = isOp ? '' : 'none';
+                        accessBtn.classList.toggle('hidden', !isOp);
                         if (!isOp) closeAccessDropdown();
                     };
                     newRole.addEventListener('change', updateAccessVisibility);
@@ -1097,7 +1097,7 @@
             </a>
             {{ template "user_menu" . }}
             </div>
-            <span style="font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 4px;">{{buildTime}}</span>
+            <span class="build-meta">{{buildTime}}</span>
         </div>
     </header>
     </div>
@@ -1115,7 +1115,7 @@
             </div>
             <div class="alert-content">
                 <div class="alert-title">Game data missing</div>
-                <ul class="alert-message" style="margin:0; padding-left: 1.2rem;">
+                <ul class="alert-message m-0 pl-5">
                     {{ range .game_data_warnings }}
                     <li>{{ . }}</li>
                     {{ end }}
@@ -1151,9 +1151,9 @@
                         </div>
                         <div class="form-group">
                             <label for="detached_servers">Detached Servers (keep running if SDSM exits)</label>
-                            <div class="field-inline" style="align-items: flex-start; gap: var(--space-2);">
+                            <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="detached_servers" name="detached_servers" {{if .detached}}checked{{end}}>
-                                <span style="color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.3; flex: 1;">
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
                                     When enabled, servers are started in a separate process group and will continue running if SDSM is stopped. Environment variable <code>SDSM_DETACHED_SERVERS</code> may override this at runtime.
                                 </span>
                             </div>
@@ -1331,37 +1331,37 @@
             </div>
             
             <div class="glass-card" id="userMgmtCard">
-                <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; gap: var(--space-2);">
-                    <h3 class="card-title" style="margin:0;">User Management</h3>
+                <div class="card-header">
+                    <h3 class="card-title m-0">User Management</h3>
                     <button type="button" id="userMgmtToggle" class="btn btn-secondary btn-min-sm" aria-expanded="false" aria-controls="userMgmtContent" title="Expand">
                         <svg id="userMgmtChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        <span id="userMgmtToggleLabel" style="margin-left:6px;">More</span>
+                        <span id="userMgmtToggleLabel" class="ml-6">More</span>
                     </button>
                 </div>
-                <div id="userMgmtContent" class="card-body" aria-hidden="true" style="display:none;">
-                    <div class="form-grid-compact" style="margin-bottom: var(--space-3);">
+                <div id="userMgmtContent" class="card-body hidden" aria-hidden="true">
+                    <div class="form-grid-compact mb-3">
                         <div class="form-group">
                             <label>Add User</label>
-                            <div class="inline-controls" style="flex-wrap: nowrap;">
+                            <div class="inline-controls">
                                 <input id="um_new_username" type="text" class="form-input-inline" placeholder="username" minlength="3" required />
                                 <input id="um_new_password" type="password" class="form-input-inline" placeholder="password (min 8)" minlength="8" required />
-                                <select id="um_new_role" class="form-input-inline" style="width: 120px; min-width: 120px;">
+                                <select id="um_new_role" class="form-input-inline w-120 min-w-120">
                                     <option value="admin">Admin</option>
                                     <option value="operator" selected>Operator</option>
                                 </select>
-                                <button type="button" id="um_access_btn" class="btn btn-secondary" title="Choose servers for this operator" style="min-width: 120px; white-space: nowrap;">Servers ▾</button>
+                                <button type="button" id="um_access_btn" class="btn btn-secondary min-w-120 nowrap" title="Choose servers for this operator">Servers ▾</button>
                                 <button type="button" id="um_add_btn" class="btn btn-primary">Add</button>
                             </div>
-                            <div id="um_access_dropdown" class="glass-card" style="display:none; position: fixed; z-index: 5000; width: 340px; padding: 12px; border: 1px solid var(--border-color);">
-                                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+                            <div id="um_access_dropdown" class="glass-card dropdown-panel hidden w-340">
+                                <div class="row justify-between mb-2">
                                     <strong>Server Access</strong>
                                     <button type="button" id="um_access_close" class="btn btn-min-sm btn-secondary">Close</button>
                                 </div>
-                                <div class="form-group" style="margin-bottom:8px;">
-                                    <label style="display:inline-flex; align-items:center; gap:8px;"><input type="checkbox" id="um_access_all"> All servers</label>
+                                <div class="form-group mb-2">
+                                    <label class="inline-flex items-center gap-2"><input type="checkbox" id="um_access_all"> All servers</label>
                                 </div>
-                                <div id="um_access_list" style="display:flex; flex-wrap:wrap; gap:8px; max-height: 240px; overflow:auto; padding: 4px; border: 1px dashed var(--border-color); border-radius: 8px;"></div>
-                                <div style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+                                <div id="um_access_list" class="assign-list"></div>
+                                <div class="row justify-end mt-2 gap-2">
                                     <button type="button" id="um_access_save" class="btn btn-primary">Save</button>
                                 </div>
                             </div>
@@ -1371,9 +1371,9 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th class="um-sort" data-key="username" style="cursor:pointer;">Username</th>
-                                    <th class="um-sort" data-key="role" style="cursor:pointer;">Role</th>
-                                    <th class="um-sort" data-key="created_at" style="cursor:pointer;">Created</th>
+                                    <th class="um-sort cursor-pointer" data-key="username">Username</th>
+                                    <th class="um-sort cursor-pointer" data-key="role">Role</th>
+                                    <th class="um-sort cursor-pointer" data-key="created_at">Created</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -1387,7 +1387,7 @@
             <div class="glass-card">
                 <p>There are <strong id="server-count-running">{{.server_count_active}}</strong> servers currently running.</p>
                 <div class="button-group centered gap-3 mt-4">
-                    <form id="footerActionsForm" action="/update" method="POST" style="display: contents;">
+                    <form id="footerActionsForm" action="/update" method="POST" class="display-contents">
                         <button id="shutdownBtn" type="submit" name="shutdown" value="1" class="btn btn-danger" {{if .updating}}disabled{{end}}>
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>

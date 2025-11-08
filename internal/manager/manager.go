@@ -1276,9 +1276,15 @@ func (m *Manager) GetLanguagesForVersion(beta bool) []string {
 	sort.Strings(out)
 	m.languagesCacheMu.Lock()
 	if m.languagesCache == nil {
-		m.languagesCache = make(map[bool]struct { list []string; cachedAt time.Time })
+		m.languagesCache = make(map[bool]struct {
+			list     []string
+			cachedAt time.Time
+		})
 	}
-	m.languagesCache[beta] = struct { list []string; cachedAt time.Time }{list: out, cachedAt: time.Now()}
+	m.languagesCache[beta] = struct {
+		list     []string
+		cachedAt time.Time
+	}{list: out, cachedAt: time.Now()}
 	m.languagesCacheMu.Unlock()
 	copyList := make([]string, len(out))
 	copy(copyList, out)

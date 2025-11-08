@@ -30,10 +30,10 @@ type SetupLogProgress struct {
 }
 
 var (
-	tsPrefix        = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):\s+`)
-	startedRe       = regexp.MustCompile(`^Deployment \(([^)]+)\) started$`)
-	completedOKRe   = regexp.MustCompile(`^Deployment \(([^)]+)\) completed successfully in ([0-9a-zA-Z\.:]+)$`)
-	completedErrRe  = regexp.MustCompile(`^Deployment \(([^)]+)\) completed with errors in ([0-9a-zA-Z\.:]+)$`)
+	tsPrefix       = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):\s+`)
+	startedRe      = regexp.MustCompile(`^Deployment \(([^)]+)\) started$`)
+	completedOKRe  = regexp.MustCompile(`^Deployment \(([^)]+)\) completed successfully in ([0-9a-zA-Z\.:]+)$`)
+	completedErrRe = regexp.MustCompile(`^Deployment \(([^)]+)\) completed with errors in ([0-9a-zA-Z\.:]+)$`)
 	// Only treat Steam app download progress lines as progress when the state is 0x61 (downloading)
 	steamStateDownloadRe = regexp.MustCompile(`Update state \(0x61\)\s+downloading, progress:\s*([0-9]+(?:\.[0-9]+)?)\s*\(`)
 )

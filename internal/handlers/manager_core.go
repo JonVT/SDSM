@@ -201,39 +201,30 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		suggestedName = fmt.Sprintf("My Stationeers Server %d", count+1)
 	}
 
-	// Determine default difficulty from release channel if available; prefer "Normal"
-	defaultDifficulty := ""
-	if relDiffs := h.manager.GetDifficultiesForVersion(false); len(relDiffs) > 0 {
-		defaultDifficulty = relDiffs[0]
-		for _, d := range relDiffs {
-			if strings.EqualFold(d, "Normal") {
-				defaultDifficulty = d
-				break
-			}
-		}
-	}
+	// Determine default difficulty from release channel using helper (prefers "Normal")
+	defaultDifficulty := DefaultDifficulty(h.manager, false)
 
 	formDefaults := gin.H{
-		"name":                  suggestedName,
-		"world":                 defaultWorld,
-		"start_location":        defaultStartLocation,
-		"start_condition":       defaultStartCondition,
-		"difficulty":            defaultDifficulty,
-		"port":                  fmt.Sprintf("%d", h.manager.GetNextAvailablePort(defaultServerPort)),
-		"max_clients":           "10",
-		"password":              "",
-		"auth_secret":           "",
-		"save_interval":         "300",
-		"restart_delay_seconds": fmt.Sprintf("%d", models.DefaultRestartDelaySeconds),
-		"beta":                  defaultBetaValue,
-		"auto_start":            false,
-		"auto_update":           false,
-		"auto_save":             true,
-		"player_saves":          true,
-		"auto_pause":            true,
+		"name":                     suggestedName,
+		"world":                    defaultWorld,
+		"start_location":           defaultStartLocation,
+		"start_condition":          defaultStartCondition,
+		"difficulty":               defaultDifficulty,
+		"port":                     fmt.Sprintf("%d", h.manager.GetNextAvailablePort(defaultServerPort)),
+		"max_clients":              "10",
+		"password":                 "",
+		"auth_secret":              "",
+		"save_interval":            "300",
+		"restart_delay_seconds":    fmt.Sprintf("%d", models.DefaultRestartDelaySeconds),
+		"beta":                     defaultBetaValue,
+		"auto_start":               false,
+		"auto_update":              false,
+		"auto_save":                true,
+		"player_saves":             true,
+		"auto_pause":               true,
 		"delete_skeleton_on_decay": false,
-		"use_steam_p2p":         false,
-		"server_visible":        true,
+		"use_steam_p2p":            false,
+		"server_visible":           true,
 	}
 
 	if overrides != nil {
@@ -416,21 +407,21 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 
 	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
 	data := gin.H{
-		"username":           username,
-		"steam_id":           h.manager.SteamID,
-		"root_path":          h.manager.Paths.RootPath,
-		"port":               h.manager.Port,
-		"language":           h.manager.Language,
-		"languages":          relLangs,
-		"release_languages":  relLangs,
-		"beta_languages":     betaLangs,
-		"auto_update":        h.manager.UpdateTime.Format("15:04:05"),
-		"start_update":       h.manager.StartupUpdate,
-		"server_count":       h.manager.ServerCount(),
+		"username":            username,
+		"steam_id":            h.manager.SteamID,
+		"root_path":           h.manager.Paths.RootPath,
+		"port":                h.manager.Port,
+		"language":            h.manager.Language,
+		"languages":           relLangs,
+		"release_languages":   relLangs,
+		"beta_languages":      betaLangs,
+		"auto_update":         h.manager.UpdateTime.Format("15:04:05"),
+		"start_update":        h.manager.StartupUpdate,
+		"server_count":        h.manager.ServerCount(),
 		"server_count_active": h.manager.ServerCountActive(),
-		"updating":           h.manager.IsUpdating(),
-		"detached":           h.manager.DetachedServers,
-		"game_data_warnings": warnings,
+		"updating":            h.manager.IsUpdating(),
+		"detached":            h.manager.DetachedServers,
+		"game_data_warnings":  warnings,
 	}
 	c.HTML(http.StatusOK, "manager.html", data)
 }
@@ -484,21 +475,33 @@ func (h *ManagerHandlers) CommandsHelpGET(c *gin.Context) {
 	for _, raw := range lines {
 		line := strings.TrimRight(raw, "\r")
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" { continue }
+		if trimmed == "" {
+			continue
+		}
 		// Continuation lines: original line had leading space OR no tabs and we have a current block
 		if (line != trimmed && current != nil) || (!strings.Contains(line, "\t") && current != nil) {
-			if current.Description != "" { current.Description += "\n" + trimmed } else { current.Description = trimmed }
+			if current.Description != "" {
+				current.Description += "\n" + trimmed
+			} else {
+				current.Description = trimmed
+			}
 			continue
 		}
 		parts := strings.Split(line, "\t")
-		if len(parts) == 0 { continue }
+		if len(parts) == 0 {
+			continue
+		}
 		// Special case: some commands (e.g. FILE | -FILE) have multi-line usage and description
 		// and forceallowsave line contains ':' which should split name and description.
 		name := strings.TrimSpace(parts[0])
 		usageRaw := ""
 		desc := ""
-		if len(parts) > 1 { usageRaw = strings.TrimSpace(parts[1]) }
-		if len(parts) > 2 { desc = strings.TrimSpace(parts[len(parts)-1]) }
+		if len(parts) > 1 {
+			usageRaw = strings.TrimSpace(parts[1])
+		}
+		if len(parts) > 2 {
+			desc = strings.TrimSpace(parts[len(parts)-1])
+		}
 		// If only name present but contains a colon, split at first ':' into name (left) and desc (right)
 		if usageRaw == "" && desc == "" {
 			if idx := strings.Index(name, ":"); idx > 0 {
@@ -511,7 +514,9 @@ func (h *ManagerHandlers) CommandsHelpGET(c *gin.Context) {
 		if usageRaw != "" {
 			for _, u := range strings.Split(usageRaw, ",") {
 				ut := strings.TrimSpace(u)
-				if ut != "" { usages = append(usages, ut) }
+				if ut != "" {
+					usages = append(usages, ut)
+				}
 			}
 		}
 		usageStr := strings.Join(usages, " ")

@@ -94,17 +94,13 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 	if isAsync {
 		if deployType != "" {
 			if deployErr != nil {
-				c.Header("X-Toast-Type", "error")
-				c.Header("X-Toast-Title", "Update Failed")
-				c.Header("X-Toast-Message", deployErr.Error())
+				ToastError(c, "Update Failed", deployErr.Error())
 				c.JSON(http.StatusConflict, gin.H{
 					"error": deployErr.Error(),
 				})
 				return
 			}
-			c.Header("X-Toast-Type", "success")
-			c.Header("X-Toast-Title", "Update Started")
-			c.Header("X-Toast-Message", string(deployType)+" update started.")
+			ToastSuccess(c, "Update Started", string(deployType)+" update started.")
 			c.JSON(http.StatusAccepted, gin.H{
 				"status":      "started",
 				"deploy_type": deployType,
@@ -116,30 +112,20 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			// Specific toasts for non-deploy actions
 			switch actionName {
 			case "update_config":
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Configuration Saved")
-				c.Header("X-Toast-Message", "Settings updated.")
+				ToastSuccess(c, "Configuration Saved", "Settings updated.")
 			case "shutdown":
-				c.Header("X-Toast-Type", "warning")
-				c.Header("X-Toast-Title", "Shutdown Initiated")
-				c.Header("X-Toast-Message", "SDSM is shutting down...")
+				ToastWarn(c, "Shutdown Initiated", "SDSM is shutting down...")
 			case "restart":
-				c.Header("X-Toast-Type", "info")
-				c.Header("X-Toast-Title", "Restarting")
-				c.Header("X-Toast-Message", "SDSM is restarting...")
+				ToastInfo(c, "Restarting", "SDSM is restarting...")
 			default:
-				c.Header("X-Toast-Type", "success")
-				c.Header("X-Toast-Title", "Action Queued")
-				c.Header("X-Toast-Message", "Your request has been processed.")
+				ToastSuccess(c, "Action Queued", "Your request has been processed.")
 			}
 
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			return
 		}
 
-		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Invalid Request")
-		c.Header("X-Toast-Message", "No action specified.")
+		ToastError(c, "Invalid Request", "No action specified.")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "no action specified"})
 		return
 	}

@@ -15,7 +15,7 @@
                 {{end}}
             {{end}}
         </div>
-        <div class="empty-state" id="chat-empty" {{if gt (len .server.Chat) 0}}style="display:none;"{{end}}>No chat messages</div>
+        <div class="empty-state {{if gt (len .server.Chat) 0}}hidden{{end}}" id="chat-empty">No chat messages</div>
         <form method="POST" class="chat-input-form" id="chat-send-form">
             <label for="chat-input" class="sr-only">Chat message</label>
             <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
@@ -26,7 +26,7 @@
                 </svg>
                 Send
             </button>
-            <button type="button" class="btn btn-secondary btn-min-sm" id="chat-token-help" title="Show available chat tokens" style="margin-left: 6px;">Tokens</button>
+            <button type="button" class="btn btn-secondary btn-min-sm ml-6" id="chat-token-help" title="Show available chat tokens">Tokens</button>
         </form>
     </div>
 </div>

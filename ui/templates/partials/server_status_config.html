@@ -130,8 +130,8 @@
             </div>
 
             
-            <div class="form-row form-row-full" style="display:block;">
-                <div class="checkbox-inline" style="display:flex; flex-wrap: wrap; gap: var(--space-3);">
+            <div class="form-row form-row-full checkbox-row">
+                <div class="checkbox-inline checkbox-group">
                     <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
                     <label class="radio-label"><input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}> Auto Start</label>
                     <label class="radio-label"><input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}> Auto Save</label>

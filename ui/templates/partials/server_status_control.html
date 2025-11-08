@@ -2,7 +2,7 @@
     <div class="card-header">
         <h2 class="card-title">Server Control</h2>
         <div class="status-badges">
-            <span class="status-pill storm-pill" id="storm-status-pill" style="display:none;">Clear</span>
+            <span class="status-pill storm-pill hidden" id="storm-status-pill">Clear</span>
             <span class="status-pill {{ if and .server.Running .server.Starting }}is-starting{{ else if and .server.Running (not .server.Paused) }}is-running{{ else if and .server.Running .server.Paused }}is-paused{{ else }}is-stopped{{ end }}" id="status-pill-container">
                 <span id="status-dot-indicator" class="status-dot-indicator {{ if and .server.Running .server.Starting }}starting{{ else if not .server.Running }}stopped{{ else if .server.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
                 <span id="status-dot-text">{{ if and .server.Running .server.Starting }}Starting{{ else if not .server.Running }}Stopped{{ else if .server.Paused }}Paused{{ else }}Running{{ end }}</span>
@@ -14,13 +14,13 @@
             <div class="control-row">
                 <label>Server:</label>
                 <div class="button-group">
-                    <button type="submit" name="start" value="true" class="btn btn-control btn-success" id="btn-start" title="Start the server" {{if and .server.Running (not .server.Stopping)}}style="display:none;" disabled aria-disabled="true"{{end}}>
+                    <button type="submit" name="start" value="true" class="btn btn-control btn-success {{if and .server.Running (not .server.Stopping)}}hidden{{end}}" id="btn-start" title="Start the server" {{if and .server.Running (not .server.Stopping)}}disabled aria-disabled="true"{{end}}>
                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <polygon points="5 3 19 12 5 21 5 3"/>
                         </svg>
                         {{if and .server.Running .server.Stopping}}Keep Running{{else}}Start{{end}}
                     </button>
-                    <button type="submit" name="stop" value="true" class="btn btn-control btn-danger" id="btn-stop" title="Stop the server" {{if not .server.Running}}style="display:none;" disabled aria-disabled="true"{{end}}>
+                    <button type="submit" name="stop" value="true" class="btn btn-control btn-danger {{if not .server.Running}}hidden{{end}}" id="btn-stop" title="Stop the server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <rect x="6" y="6" width="12" height="12" rx="2"/>
                         </svg>
@@ -47,7 +47,7 @@
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
                         </button>
-                        <div id="save-menu" class="lang-dropdown" role="menu" aria-label="Save options" style="min-width: 180px;">
+                        <div id="save-menu" class="lang-dropdown" role="menu" aria-label="Save options">
                             <button type="button" class="dropdown-item" id="save-as-action">Save As…</button>
                         </div>
                     </div>
@@ -81,7 +81,7 @@
                     <svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
-                    <span style="margin-left:6px;">More</span>
+                    <span class="ml-6">More</span>
                 </button>
                 <div class="control-actions ml-auto">
                     <div class="button-group">
@@ -146,8 +146,8 @@
 
                 <div class="control-row">
                     <label class="more-label" title="Send a raw console command via SCON">Console:</label>
-                    <div class="button-group" style="display:flex; gap:8px; align-items:center; width:100%;">
-                        <input type="text" id="console-command" class="form-input-inline" placeholder="Enter console command" autocomplete="off" style="flex:1; min-width:0;">
+                    <div class="button-group console-command-group">
+                        <input type="text" id="console-command" class="form-input-inline flex-grow-input" placeholder="Enter console command" autocomplete="off">
                         <button type="button" class="btn btn-control btn-primary" id="btn-console-send" title="Send command to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>Send</button>
                         <a href="/help/commands" class="btn btn-control" target="_blank" rel="noopener" title="Open console commands reference in a new tab">Commands</a>
                     </div>

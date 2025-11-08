@@ -38,7 +38,7 @@
                     </a>
                     {{ template "user_menu" . }}
                 </div>
-                <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
+                <span class="build-meta">{{buildTime}}</span>
             </div>
         </header>
 
@@ -52,27 +52,27 @@
                 <form method="POST" action="/server/new" id="serverForm" enctype="multipart/form-data">
                     <div class="form-section">
                         <h3 class="section-title">Create From Save (optional)</h3>
-                        <div id="saveDropzone" class="dropzone" style="border: 1px dashed var(--border-color); border-radius: var(--radius-md); padding: var(--space-4); background: var(--surface-secondary); display: flex; align-items: center; gap: var(--space-3);">
-                            <div style="flex:1">
-                                <div style="font-weight: 600; margin-bottom: 4px;">Drop a Stationeers .save file here</div>
-                                <div style="font-size: 0.9rem; color: var(--text-secondary);">We'll read the save to set name and world, and import it.</div>
-                                <div id="saveFileName" style="margin-top: 6px; font-size: 0.9rem; color: var(--text-primary);"></div>
+                        <div id="saveDropzone" class="dropzone border border-dashed rounded-md p-4 bg-surface-secondary flex items-center gap-3">
+                            <div class="flex-1">
+                                <div class="fw-600 mb-1">Drop a Stationeers .save file here</div>
+                                <div class="text-secondary text-0_9">We'll read the save to set name and world, and import it.</div>
+                                <div id="saveFileName" class="mt-2 text-0_9 text-primary"></div>
                             </div>
                             <div>
                                 <label for="save_file" class="btn btn-secondary">Choose File</label>
-                                <input type="file" id="save_file" name="save_file" accept=".save" style="display:none">
+                                <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
                             </div>
                         </div>
-                        <div id="saveAnalysis" style="display:none; margin-top: var(--space-3); padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-tertiary);">
-                            <div style="font-weight:600; margin-bottom: 6px;">Detected From Save</div>
+                        <div id="saveAnalysis" class="hidden mt-3 p-3 rounded-md bg-surface-tertiary">
+                            <div class="fw-600 mb-2">Detected From Save</div>
                             <div class="form-grid">
                                 <div class="form-group">
                                     <label class="form-label">World</label>
-                                    <div id="detectedWorld" style="padding:8px 10px; background: var(--surface); border:1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                                    <div id="detectedWorld" class="p-3 border rounded-md bg-surface-subtle"></div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">World File Name (Server Name)</label>
-                                    <div id="detectedName" style="padding:8px 10px; background: var(--surface); border:1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                                    <div id="detectedName" class="p-3 border rounded-md bg-surface-subtle"></div>
                                 </div>
                             </div>
                             <!-- Hidden fields to carry through to server in case needed -->
@@ -179,7 +179,7 @@
                                 </svg>
                             </button>
                         </h3>
-                        <div class="help-box" id="advanced-help" style="display: none;">
+                        <div class="help-box hidden" id="advanced-help">
                             <div class="help-content">
                                 <h4>Advanced Settings Guide</h4>
                                 <ul>
@@ -342,7 +342,7 @@
                 <div class="card-header">
                     <h2 class="card-title">Form Progress</h2>
                 </div>
-                <div class="status-info" style="margin-top:0;">
+                <div class="status-info mt-0">
                     <div class="status-row">
                         <span class="status-label">Completion</span>
                         <span><span id="completedCount">0</span> of <span id="totalCount">5</span> required</span>
@@ -350,11 +350,11 @@
                 </div>
                 <div class="update-progress active" id="form-progress">
                     <div class="update-progress-bar">
-                        <div class="update-progress-fill" id="progressFill" style="width:0%"></div>
+                        <div class="update-progress-fill w-0" id="progressFill"></div>
                     </div>
                     <div class="update-progress-text">Idle</div>
                 </div>
-                <ul style="margin-top: var(--space-3); padding-left: var(--space-5); color: var(--text-secondary);">
+                <ul class="mt-3 pl-5 text-secondary">
                     <li class="progress-item" data-field="name">Server Name</li>
                     <li class="progress-item" data-field="world">World</li>
                     <li class="progress-item" data-field="start_location">Start Location</li>

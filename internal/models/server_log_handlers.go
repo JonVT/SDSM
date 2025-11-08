@@ -20,10 +20,10 @@ var (
 	adminCommandRegex     = regexp.MustCompile(`(?i)client\s+'(.+?)\s+\(([^)]+)\)'\s+ran\s+command`)
 	chatMessageRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:\s+([^:]+?):\s*(.+)$`)
 	// CLIENTS response parsing
-	clientsHeaderRegex    = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+CLIENTS\b`)
-	clientsCountRegex     = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Clients:\s*(\d+)`)
-	clientEntryRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+(\S+)\s*\|\s*(.+?)\s+\t?connectTime:.*?ClientId:\s*(\d+)`)
-	hostClientRegex       = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Host\s+Client:`)
+	clientsHeaderRegex = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+CLIENTS\b`)
+	clientsCountRegex  = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Clients:\s*(\d+)`)
+	clientEntryRegex   = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+(\S+)\s*\|\s*(.+?)\s+\t?connectTime:.*?ClientId:\s*(\d+)`)
+	hostClientRegex    = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Host\s+Client:`)
 	// Example line:
 	//   file: [No such world name: Europa. Valid worlds: Europa3, Lunar, Mars2, ...]
 	// Be lenient about casing and trailing bracket.
@@ -37,19 +37,23 @@ var (
 		{
 			match: func(line string) []string { return clientsHeaderRegex.FindStringSubmatch(line) },
 			handle: func(s *Server, line string, _ []string) {
-				if s != nil { s.beginClientsScan() }
+				if s != nil {
+					s.beginClientsScan()
+				}
 			},
 		},
 		// Clients count line (optional, mostly informational)
 		{
-			match: func(line string) []string { return clientsCountRegex.FindStringSubmatch(line) },
+			match:  func(line string) []string { return clientsCountRegex.FindStringSubmatch(line) },
 			handle: func(_ *Server, _ string, _ []string) { /* no-op */ },
 		},
 		// Individual client entry lines
 		{
 			match: func(line string) []string { return clientEntryRegex.FindStringSubmatch(line) },
 			handle: func(s *Server, line string, m []string) {
-				if s == nil || len(m) < 4 { return }
+				if s == nil || len(m) < 4 {
+					return
+				}
 				t := s.parseTime(line)
 				first := strings.TrimSpace(m[1]) // sometimes an internal id
 				name := strings.TrimSpace(m[2])
@@ -69,7 +73,11 @@ var (
 		// End of CLIENTS scan when Host Client line appears
 		{
 			match: func(line string) []string { return hostClientRegex.FindStringSubmatch(line) },
-			handle: func(s *Server, _ string, _ []string) { if s != nil { s.endClientsScan() } },
+			handle: func(s *Server, _ string, _ []string) {
+				if s != nil {
+					s.endClientsScan()
+				}
+			},
 		},
 		{
 			match: func(line string) []string {
@@ -112,7 +120,9 @@ var (
 				// Ignore duplicate "is ready" events for a player already marked online.
 				// This prevents re-appending sessions or re-triggering welcome/save logic on spurious repeats.
 				for _, live := range s.LiveClients() {
-					if live == nil { continue }
+					if live == nil {
+						continue
+					}
 					// Match by SteamID when available; fallback to case-insensitive name match.
 					if steamID != "" && strings.EqualFold(live.SteamID, steamID) {
 						return
@@ -163,7 +173,9 @@ var (
 					isReturning := false
 					if steam != "" {
 						for _, existing := range s.Clients {
-							if existing == nil { continue }
+							if existing == nil {
+								continue
+							}
 							if strings.EqualFold(existing.SteamID, steam) && existing.ConnectDatetime.Before(t) {
 								isReturning = true
 								break
@@ -180,7 +192,9 @@ var (
 					if msg != "" {
 						ctx := map[string]string{"player": name}
 						delay := s.WelcomeDelaySeconds
-						if delay < 0 { delay = 0 }
+						if delay < 0 {
+							delay = 0
+						}
 						go func(srv *Server, text string, c map[string]string, d int) {
 							time.Sleep(time.Duration(d) * time.Second)
 							_ = srv.SendCommand("chat", srv.RenderChatMessage(text, c))

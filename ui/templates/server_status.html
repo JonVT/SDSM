@@ -31,11 +31,11 @@
                 <div class="hero-meta">
                     <div class="hero-meta-title">Controls &amp; Status</div>
                     <p class="hero-meta-text">Use the sections below configure and control your server.</p>
-                    <div class="row" style="gap:8px; align-items:center;">
+                    <div class="row">
                         <span class="pill">Real-time</span>
                         <span id="scon-health-pill" class="pill" title="Stationeers Console HTTP health">
                             <span id="scon-health-dot" aria-hidden="true">●</span>
-                            <span id="scon-health-text" style="margin-left:4px;">SCON: {{ .scon_port }}</span>
+                            <span id="scon-health-text" class="ml-6">SCON: {{ .scon_port }}</span>
                         </span>
                     </div>
                 </div>
@@ -52,7 +52,7 @@
                         </a>
                         {{ template "user_menu" . }}
                     </div>
-                    <span style="font-size: 0.7rem; color: var(--text-tertiary); margin-top: 4px;">{{buildTime}}</span>
+                    <span class="build-meta">{{buildTime}}</span>
                 </div>
             </header>
 
@@ -76,7 +76,7 @@
                 </div>
             </div>
             {{ else }}
-            <div id="server-error-banner" class="alert alert-danger" role="alert" style="display:none;" aria-live="polite">
+            <div id="server-error-banner" class="alert alert-danger hidden" role="alert" aria-live="polite">
                 <div class="alert-icon" aria-hidden="true">
                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"></circle>
@@ -93,7 +93,7 @@
             {{ end }}
             <div class="glass-card">
                 <div class="server-title-bar row justify-between">
-                    <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}" style="margin:0;">
+                    <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}">
                         {{ if .server.Beta }}
                         <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
                             <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
@@ -112,7 +112,7 @@
                     <div class="lang-control relative">
                         <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
                             <span aria-hidden="true">🌐</span>
-                            <span id="current-language" style="margin-left:6px;">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
+                            <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
                         </button>
                         <div id="language-menu" class="lang-dropdown" role="menu" aria-label="Languages"></div>
                     </div>

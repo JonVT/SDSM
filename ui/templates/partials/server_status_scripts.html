@@ -201,57 +201,7 @@
         return `${m}:${pad2(rem)}`;
     }
 
-    function setStopButtonLabel(label) {
-        if (!stopButton) return;
-        // Preserve existing icon if present
-        const icon = stopButton.querySelector('svg');
-        const iconHTML = icon ? icon.outerHTML : '';
-        stopButton.innerHTML = iconHTML + ' ' + label;
-    }
-
-    function startStopCountdown() {
-        if (!stopButton) return;
-        if (!stopOriginalHTML) {
-            stopOriginalHTML = stopButton.innerHTML;
-        }
-        const delaySec = Number(rootEl.dataset.shutdownDelay || '0') || 0;
-        stoppingCountdownActive = true;
-        setButtonDisabled(stopButton, true);
-        if (delaySec <= 0) {
-            setStopButtonLabel('Stopping');
-            return;
-        }
-        stopCountdownEnd = Date.now() + delaySec * 1000;
-        // Initial paint
-        const initialRemaining = Math.ceil((stopCountdownEnd - Date.now()) / 1000);
-        setStopButtonLabel(`Stopping (${formatCountdown(initialRemaining)})`);
-        if (stopCountdownTimer) {
-            clearInterval(stopCountdownTimer);
-            stopCountdownTimer = null;
-        }
-        stopCountdownTimer = setInterval(() => {
-            const remaining = Math.ceil((stopCountdownEnd - Date.now()) / 1000);
-            if (remaining > 0) {
-                setStopButtonLabel(`Stopping (${formatCountdown(remaining)})`);
-            } else {
-                // Countdown reached zero; keep "Stopping" and wait for status poll to flip to stopped
-                setStopButtonLabel('Stopping');
-                clearInterval(stopCountdownTimer);
-                stopCountdownTimer = null;
-            }
-        }, 250);
-    }
-
-    function clearStopCountdown() {
-        if (stopCountdownTimer) {
-            clearInterval(stopCountdownTimer);
-            stopCountdownTimer = null;
-        }
-        if (stopOriginalHTML && stopButton) {
-            stopButton.innerHTML = stopOriginalHTML;
-        }
-        stoppingCountdownActive = false;
-    }
+    /* Duplicate stop countdown helpers removed; canonical versions retained later in file */
 
     function formatDateTimeDisplay(value, fallback) {
         if (!value) {
@@ -1989,7 +1939,7 @@
                 function renderMoreToggle(expanded) {
                     if (!moreToggle) return;
                     moreToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                    moreToggle.innerHTML = (expanded ? chevronUp : chevronDown) + '<span style="margin-left:6px;">' + (expanded ? 'Less' : 'More') + '</span>';
+                    moreToggle.innerHTML = (expanded ? chevronUp : chevronDown) + '<span class="ml-6">' + (expanded ? 'Less' : 'More') + '</span>';
                     // Match User Management toggle semantics: title reflects Collapse/Expand
                     moreToggle.title = expanded ? 'Collapse' : 'Expand';
                 }

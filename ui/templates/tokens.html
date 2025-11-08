@@ -11,8 +11,8 @@
     <link rel="icon" href="/sdsm.png" type="image/png">
 </head>
 <body class="page-shell">
-    <div class="container" style="max-width: 900px;">
-        <header class="hero-card" style="margin-bottom: var(--space-6);">
+    <div class="container max-w-900">
+        <header class="hero-card mb-6">
             <div class="hero-main">
                 <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="64" height="64">
                 <div class="hero-heading">
@@ -25,10 +25,10 @@
             </div>
         </header>
 
-        <main class="card" style="padding: var(--space-6);">
+        <main class="card card-pad-6">
             <section>
                 <h2 class="section-title">Available Tokens</h2>
-                <ul class="list" style="margin-top: var(--space-3);">
+            <ul class="list token-list">
                     <li><code>[ServerName]</code>: The server name</li>
                     <li><code>[WorldName]</code>: The world name</li>
                     <li><code>[WorldID]</code>: The world ID</li>
@@ -40,10 +40,10 @@
                 </ul>
             </section>
 
-            <section style="margin-top: var(--space-6);">
+            <section class="mt-6">
                 <h2 class="section-title">Examples</h2>
-                <div class="code-block" style="margin-top: var(--space-3);">
-                    <div class="mono" style="white-space: pre-wrap;">
+                <div class="code-block">
+                    <div class="mono white-pre-wrap">
                         Example 1: Welcome Message
                         "Welcome to [ServerName]! World: [WorldName]."
 
@@ -53,7 +53,7 @@
                 </div>
             </section>
 
-            <section style="margin-top: var(--space-6);">
+            <section class="mt-6">
                 <p class="text-muted">Tokens are case-insensitive and work anywhere messages are sent via the UI (Chat and Welcome Message).</p>
             </section>
         </main>
