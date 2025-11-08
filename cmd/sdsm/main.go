@@ -406,6 +406,14 @@ func setupRouter() *gin.Engine {
 		c.Next()
 	})
 	{
+		// Simple refresh endpoint used by UI header buttons to trigger htmx 'refresh' events.
+		api.GET("/refresh", func(c *gin.Context) {
+			// Return minimal JSON; htmx button uses hx-swap="none" so body is ignored.
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Refreshed")
+			c.Header("X-Toast-Message", "Data refreshed")
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
 		api.GET("/stats", managerHandlers.APIStats)
 		api.GET("/servers", managerHandlers.APIServers)
 		api.POST("/servers", func(c *gin.Context) {
@@ -449,7 +457,6 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/save", managerHandlers.APIServerSave)
 		api.POST("/servers/:server_id/save-as", managerHandlers.APIServerSaveAs)
 		api.POST("/servers/:server_id/load", managerHandlers.APIServerLoad)
-		api.POST("/servers/:server_id/pause", managerHandlers.APIServerPause)
 		api.POST("/servers/:server_id/storm", managerHandlers.APIServerStorm)
 		api.POST("/servers/:server_id/cleanup", managerHandlers.APIServerCleanup)
 		api.POST("/servers/:server_id/kick", managerHandlers.APIServerKick)
@@ -469,8 +476,18 @@ func setupRouter() *gin.Engine {
 			}
 			managerHandlers.APIServerDelete(c)
 		})
+		// Stop all servers (admin)
+		api.POST("/servers/stop-all", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersStopAll(c)
+		})
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)
+		// Async manager versions (latest/deployed) for faster initial manager page load
+		api.GET("/manager/versions", managerHandlers.ManagerVersionsGET)
 
 		// Admin-only user management API
 		api.GET("/users", func(c *gin.Context) {
@@ -556,6 +573,7 @@ func setupRouter() *gin.Engine {
 		protected.GET("/frame", managerHandlers.Frame)
 		// Help pages
 		protected.GET("/help/tokens", managerHandlers.TokensHelpGET)
+		protected.GET("/help/commands", managerHandlers.CommandsHelpGET)
 		protected.GET("/manager", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {
 				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
@@ -589,6 +607,19 @@ func setupRouter() *gin.Engine {
 			userHandlers.UsersPOST(c)
 		})
 		protected.POST("/update", managerHandlers.UpdatePOST)
+		// Graceful shutdown with optional server stop based on detached mode
+		protected.POST("/shutdown", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			stop := strings.TrimSpace(c.PostForm("stop_servers")) == "1"
+			go app.manager.ExitDetached(stop)
+			c.Header("X-Toast-Type", "warning")
+			c.Header("X-Toast-Title", "Shutdown Initiated")
+			c.Header("X-Toast-Message", "SDSM is shutting down...")
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
 		protected.GET("/update/progress", managerHandlers.UpdateProgressGET)
 		protected.GET("/updating", managerHandlers.UpdateStream)
 		protected.GET("/logs/updates", managerHandlers.UpdateLogGET)
@@ -609,6 +640,7 @@ func setupRouter() *gin.Engine {
 			managerHandlers.NewServerPOST(c)
 		})
 		protected.GET("/server/:server_id/status.json", managerHandlers.APIServerStatus)
+		protected.GET("/server/:server_id/clients", managerHandlers.ServerClientsGET)
 		protected.GET("/server/:server_id/log", managerHandlers.APIServerLog)
 		protected.GET("/server/:server_id", managerHandlers.ServerGET)
 		protected.POST("/server/:server_id", managerHandlers.ServerPOST)

@@ -4,6 +4,8 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -412,36 +414,43 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		warnings = append(warnings, "No difficulties found for Beta channel.")
 	}
 
+	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
 	data := gin.H{
-		"username":  username,
-		"steam_id":  h.manager.SteamID,
-		"root_path": h.manager.Paths.RootPath,
-		"port":      h.manager.Port,
-		"language":  h.manager.Language,
-		// Provide both release and beta languages for live switching in the UI
-		"languages":           relLangs,
-		"release_languages":   relLangs,
-		"beta_languages":      betaLangs,
-		"auto_update":         h.manager.UpdateTime.Format("15:04:05"),
-		"start_update":        h.manager.StartupUpdate,
-		"release_latest":      h.manager.ReleaseLatest(),
-		"beta_latest":         h.manager.BetaLatest(),
-		"steamcmd_latest":     h.manager.SteamCmdLatest(),
-		"bepinex_latest":      h.manager.BepInExLatest(),
-		"launchpad_latest":    h.manager.LaunchPadLatest(),
-		"scon_latest":         h.manager.SCONLatest(),
-		"release_deployed":    h.manager.ReleaseDeployed(),
-		"beta_deployed":       h.manager.BetaDeployed(),
-		"steamcmd_deployed":   h.manager.SteamCmdDeployed(),
-		"bepinex_deployed":    h.manager.BepInExDeployed(),
-		"launchpad_deployed":  h.manager.LaunchPadDeployed(),
-		"scon_deployed":       h.manager.SCONDeployed(),
-		"server_count":        h.manager.ServerCount(),
+		"username":           username,
+		"steam_id":           h.manager.SteamID,
+		"root_path":          h.manager.Paths.RootPath,
+		"port":               h.manager.Port,
+		"language":           h.manager.Language,
+		"languages":          relLangs,
+		"release_languages":  relLangs,
+		"beta_languages":     betaLangs,
+		"auto_update":        h.manager.UpdateTime.Format("15:04:05"),
+		"start_update":       h.manager.StartupUpdate,
+		"server_count":       h.manager.ServerCount(),
 		"server_count_active": h.manager.ServerCountActive(),
-		"updating":            h.manager.IsUpdating(),
-		"game_data_warnings":  warnings,
+		"updating":           h.manager.IsUpdating(),
+		"detached":           h.manager.DetachedServers,
+		"game_data_warnings": warnings,
 	}
 	c.HTML(http.StatusOK, "manager.html", data)
+}
+
+// ManagerVersionsGET returns latest/deployed component version info as JSON for async loading.
+func (h *ManagerHandlers) ManagerVersionsGET(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"release_latest":     h.manager.ReleaseLatest(),
+		"beta_latest":        h.manager.BetaLatest(),
+		"steamcmd_latest":    h.manager.SteamCmdLatest(),
+		"bepinex_latest":     h.manager.BepInExLatest(),
+		"launchpad_latest":   h.manager.LaunchPadLatest(),
+		"scon_latest":        h.manager.SCONLatest(),
+		"release_deployed":   h.manager.ReleaseDeployed(),
+		"beta_deployed":      h.manager.BetaDeployed(),
+		"steamcmd_deployed":  h.manager.SteamCmdDeployed(),
+		"bepinex_deployed":   h.manager.BepInExDeployed(),
+		"launchpad_deployed": h.manager.LaunchPadDeployed(),
+		"scon_deployed":      h.manager.SCONDeployed(),
+	})
 }
 
 // TokensHelpGET renders a simple reference page for chat token usage.
@@ -450,6 +459,81 @@ func (h *ManagerHandlers) TokensHelpGET(c *gin.Context) {
 	c.HTML(http.StatusOK, "tokens.html", gin.H{
 		"username": username,
 	})
+}
+
+// CommandsHelpGET renders a reference page for console commands parsed from docs/Commands.txt.
+func (h *ManagerHandlers) CommandsHelpGET(c *gin.Context) {
+	username, _ := c.Get("username")
+	data, err := os.ReadFile(filepath.Join("docs", "Commands.txt"))
+	if err != nil {
+		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Unable to read Commands.txt"})
+		return
+	}
+	type cmdInfo struct {
+		Name        string
+		Usages      []string
+		UsageStr    string
+		Description string
+		Anchor      string
+	}
+	var commands []cmdInfo
+	var letters []string
+	seenLetters := map[string]bool{}
+	var current *cmdInfo
+	lines := strings.Split(string(data), "\n")
+	for _, raw := range lines {
+		line := strings.TrimRight(raw, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" { continue }
+		// Continuation lines: original line had leading space OR no tabs and we have a current block
+		if (line != trimmed && current != nil) || (!strings.Contains(line, "\t") && current != nil) {
+			if current.Description != "" { current.Description += "\n" + trimmed } else { current.Description = trimmed }
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) == 0 { continue }
+		// Special case: some commands (e.g. FILE | -FILE) have multi-line usage and description
+		// and forceallowsave line contains ':' which should split name and description.
+		name := strings.TrimSpace(parts[0])
+		usageRaw := ""
+		desc := ""
+		if len(parts) > 1 { usageRaw = strings.TrimSpace(parts[1]) }
+		if len(parts) > 2 { desc = strings.TrimSpace(parts[len(parts)-1]) }
+		// If only name present but contains a colon, split at first ':' into name (left) and desc (right)
+		if usageRaw == "" && desc == "" {
+			if idx := strings.Index(name, ":"); idx > 0 {
+				desc = strings.TrimSpace(name[idx+1:])
+				name = strings.TrimSpace(name[:idx])
+			}
+		}
+		usageRaw = strings.TrimSuffix(strings.TrimPrefix(usageRaw, "["), "]")
+		var usages []string
+		if usageRaw != "" {
+			for _, u := range strings.Split(usageRaw, ",") {
+				ut := strings.TrimSpace(u)
+				if ut != "" { usages = append(usages, ut) }
+			}
+		}
+		usageStr := strings.Join(usages, " ")
+		// Determine anchor for first occurrence of starting letter
+		letter := ""
+		if name != "" {
+			r := []rune(strings.ToUpper(string(name[0])))
+			if len(r) > 0 {
+				letter = string(r[0])
+			}
+		}
+		anchor := ""
+		if letter != "" && !seenLetters[letter] {
+			anchor = "cmd-" + letter
+			seenLetters[letter] = true
+			letters = append(letters, letter)
+		}
+		info := cmdInfo{Name: name, Usages: usages, UsageStr: usageStr, Description: desc, Anchor: anchor}
+		commands = append(commands, info)
+		current = &commands[len(commands)-1]
+	}
+	c.HTML(http.StatusOK, "commands.html", gin.H{"username": username, "commands": commands, "letters": letters})
 }
 
 // ServerWorldImage streams the PNG planet image for the server's configured world.

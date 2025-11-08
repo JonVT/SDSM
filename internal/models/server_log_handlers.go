@@ -19,6 +19,11 @@ var (
 	worldLoadedRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+loaded\s+(\S+)\s+things in`)
 	adminCommandRegex     = regexp.MustCompile(`(?i)client\s+'(.+?)\s+\(([^)]+)\)'\s+ran\s+command`)
 	chatMessageRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:\s+([^:]+?):\s*(.+)$`)
+	// CLIENTS response parsing
+	clientsHeaderRegex    = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+CLIENTS\b`)
+	clientsCountRegex     = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Clients:\s*(\d+)`)
+	clientEntryRegex      = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+(\S+)\s*\|\s*(.+?)\s+\t?connectTime:.*?ClientId:\s*(\d+)`)
+	hostClientRegex       = regexp.MustCompile(`^\d{2}:\d{2}:\d{2}:?\s+Host\s+Client:`)
 	// Example line:
 	//   file: [No such world name: Europa. Valid worlds: Europa3, Lunar, Mars2, ...]
 	// Be lenient about casing and trailing bracket.
@@ -28,6 +33,44 @@ var (
 	// Be lenient about quotes, trailing bracket, and any trailing characters on the line.
 
 	logLineHandlers = []logLineHandler{
+		// Begin CLIENTS scan block
+		{
+			match: func(line string) []string { return clientsHeaderRegex.FindStringSubmatch(line) },
+			handle: func(s *Server, line string, _ []string) {
+				if s != nil { s.beginClientsScan() }
+			},
+		},
+		// Clients count line (optional, mostly informational)
+		{
+			match: func(line string) []string { return clientsCountRegex.FindStringSubmatch(line) },
+			handle: func(_ *Server, _ string, _ []string) { /* no-op */ },
+		},
+		// Individual client entry lines
+		{
+			match: func(line string) []string { return clientEntryRegex.FindStringSubmatch(line) },
+			handle: func(s *Server, line string, m []string) {
+				if s == nil || len(m) < 4 { return }
+				t := s.parseTime(line)
+				first := strings.TrimSpace(m[1]) // sometimes an internal id
+				name := strings.TrimSpace(m[2])
+				clientID := strings.TrimSpace(m[3]) // appears to be steam id when non-zero
+				steam := clientID
+				if steam == "0" || steam == "" {
+					// fallback to first field if it looks like a steam64
+					if len(first) >= 16 {
+						steam = first
+					} else {
+						steam = ""
+					}
+				}
+				s.noteClientsScan(steam, name, t)
+			},
+		},
+		// End of CLIENTS scan when Host Client line appears
+		{
+			match: func(line string) []string { return hostClientRegex.FindStringSubmatch(line) },
+			handle: func(s *Server, _ string, _ []string) { if s != nil { s.endClientsScan() } },
+		},
 		{
 			match: func(line string) []string {
 				if strings.Contains(line, "World Saved") || strings.Contains(line, "Saving - file created") {
@@ -66,6 +109,18 @@ var (
 				t := s.parseTime(line)
 				name := strings.TrimSpace(matches[1])
 				steamID := strings.TrimSpace(matches[2])
+				// Ignore duplicate "is ready" events for a player already marked online.
+				// This prevents re-appending sessions or re-triggering welcome/save logic on spurious repeats.
+				for _, live := range s.LiveClients() {
+					if live == nil { continue }
+					// Match by SteamID when available; fallback to case-insensitive name match.
+					if steamID != "" && strings.EqualFold(live.SteamID, steamID) {
+						return
+					}
+					if steamID == "" && name != "" && strings.EqualFold(live.Name, name) {
+						return
+					}
+				}
 				client := &Client{
 					SteamID:         steamID,
 					Name:            name,
@@ -101,15 +156,35 @@ var (
 					}
 				}
 
-				// Welcome message: if configured, emit a chat on player connect.
-				// Send shortly after the client is marked ready to avoid races with resume.
-				if s != nil {
-					msg := strings.TrimSpace(s.WelcomeMessage)
-					if msg != "" && s.IsRunning() {
-						go func(srv *Server, text string) {
-							time.Sleep(1 * time.Second)
-							_ = srv.SendCommand("chat", text)
-						}(s, msg)
+				// Welcome / Welcome Back messages:
+				// Determine if this is a first-time player (no prior session with same SteamID in history).
+				if s != nil && s.IsRunning() {
+					steam := strings.TrimSpace(steamID)
+					isReturning := false
+					if steam != "" {
+						for _, existing := range s.Clients {
+							if existing == nil { continue }
+							if strings.EqualFold(existing.SteamID, steam) && existing.ConnectDatetime.Before(t) {
+								isReturning = true
+								break
+							}
+						}
+					}
+					// Choose appropriate message
+					msg := ""
+					if isReturning {
+						msg = strings.TrimSpace(s.WelcomeBackMessage)
+					} else {
+						msg = strings.TrimSpace(s.WelcomeMessage)
+					}
+					if msg != "" {
+						ctx := map[string]string{"player": name}
+						delay := s.WelcomeDelaySeconds
+						if delay < 0 { delay = 0 }
+						go func(srv *Server, text string, c map[string]string, d int) {
+							time.Sleep(time.Duration(d) * time.Second)
+							_ = srv.SendCommand("chat", srv.RenderChatMessage(text, c))
+						}(s, msg, ctx, delay)
 					}
 				}
 			},

@@ -270,9 +270,17 @@
             function setButtonsDisabled(disabled) {
                 const btns = document.querySelectorAll('.update-trigger');
                 btns.forEach((btn) => {
-                    btn.disabled = disabled;
-                    if (!disabled) showButtonSpinner(btn, false);
+                    // Only toggle disabled if not currently running a spinner operation
+                    if (!disabled) {
+                        btn.disabled = false;
+                        showButtonSpinner(btn, false);
+                    } else {
+                        btn.disabled = true;
+                    }
                 });
+                // Also toggle config button
+                const cfgBtn = document.getElementById('updateConfigBtn');
+                if (cfgBtn) cfgBtn.disabled = disabled;
             }
 
             function selectProgressRow(key) {
@@ -375,6 +383,61 @@
                 if (!pollTimer) pollTimer = setInterval(fetchProgress, 2000);
             }
 
+            // Async populate of versions table to speed initial paint
+            let __versionsLoaded = false;
+            function populateVersions(data){
+                const map = [
+                    ['ver-steamcmd-deployed','steamcmd_deployed'],
+                    ['ver-steamcmd-latest','steamcmd_latest'],
+                    ['ver-release-deployed','release_deployed'],
+                    ['ver-release-latest','release_latest'],
+                    ['ver-beta-deployed','beta_deployed'],
+                    ['ver-beta-latest','beta_latest'],
+                    ['ver-bepinex-deployed','bepinex_deployed'],
+                    ['ver-bepinex-latest','bepinex_latest'],
+                    ['ver-launchpad-deployed','launchpad_deployed'],
+                    ['ver-launchpad-latest','launchpad_latest'],
+                    ['ver-scon-deployed','scon_deployed'],
+                    ['ver-scon-latest','scon_latest']
+                ];
+                map.forEach(([id,key])=>{ const el=document.getElementById(id); if(el && key in data){ el.textContent = data[key] || ''; } });
+                // Update button colors based on equality
+                function setBtnColor(name, deployedKey, latestKey){
+                    const btn = document.querySelector('button[data-component="'+name+'"]');
+                    if (!btn) return;
+                    btn.classList.remove('btn-success','btn-danger');
+                    if ((data[deployedKey]||'') === (data[latestKey]||'')) btn.classList.add('btn-success'); else btn.classList.add('btn-danger');
+                }
+                setBtnColor('steamcmd','steamcmd_deployed','steamcmd_latest');
+                setBtnColor('release','release_deployed','release_latest');
+                setBtnColor('beta','beta_deployed','beta_latest');
+                setBtnColor('bepinex','bepinex_deployed','bepinex_latest');
+                setBtnColor('launchpad','launchpad_deployed','launchpad_latest');
+                setBtnColor('scon','scon_deployed','scon_latest');
+                __versionsLoaded = true;
+                try { window.__versionsPrimaryLoaded = true; } catch(_) {}
+                try { console.debug('[SDSM] Versions loaded (primary).'); } catch(_) {}
+            }
+            function fetchVersions(retryCount){
+                const tries = typeof retryCount === 'number' ? retryCount : 0;
+                fetch('/api/manager/versions', { headers:{'Accept':'application/json'}, credentials:'same-origin', cache:'no-store' })
+                  .then(r=> r.ok ? r.json() : Promise.reject(new Error('bad status '+r.status)))
+                  .then(populateVersions)
+                  .catch((err)=>{
+                      try { console.error('[SDSM] Versions fetch failed (primary)', err); } catch(_) {}
+                      if (window && typeof window.showToast === 'function' && tries >= 2) {
+                          window.showToast({ type: 'error', title: 'Version Load Failed', message: 'Could not fetch component versions.' });
+                      }
+                      if (tries < 3) {
+                          setTimeout(()=>fetchVersions(tries+1), 500 * (tries+1));
+                      } else {
+                          // Final fallback: mark cells as unavailable
+                          const ids = ['ver-steamcmd-deployed','ver-steamcmd-latest','ver-release-deployed','ver-release-latest','ver-beta-deployed','ver-beta-latest','ver-bepinex-deployed','ver-bepinex-latest','ver-launchpad-deployed','ver-launchpad-latest','ver-scon-deployed','ver-scon-latest'];
+                          ids.forEach(id=>{ const el=document.getElementById(id); if(el && (el.textContent==='Loading…' || el.textContent==='Loading...')){ el.textContent='Unavailable'; }});
+                      }
+                  });
+            }
+
             // Manager-level Language removed; languages are configured per server.
 
             document.addEventListener('DOMContentLoaded', () => {
@@ -383,6 +446,15 @@
                 const configBtn = document.getElementById('updateConfigBtn');
                 const shutdownBtn = document.getElementById('shutdownBtn');
                 const restartBtn = document.getElementById('restartBtn');
+                // If an update was already in progress when the page rendered (template .updating == true),
+                // begin polling progress immediately so the UI will auto-refresh when it completes.
+                const initialUpdating = {{if .updating}}true{{else}}false{{end}};
+                if (initialUpdating) {
+                    try { __prevUpdating = true; } catch(_) {}
+                    fetchProgress();
+                    ensurePolling();
+                }
+                const stopAllBtn = document.getElementById('stopAllBtn');
                 
 
 
@@ -467,8 +539,11 @@
                         .then((data) => {
                             if (data && (data.status === 'ok' || data.status === 'updated')) {
                                 showMessage('Configuration updated.', false);
+                                // Refresh versions table if placeholders present or after config change
+                                try { if (typeof fetchVersions === 'function') fetchVersions(); } catch(_) {}
                             } else {
                                 showMessage('Configuration updated.', false);
+                                try { if (typeof fetchVersions === 'function') fetchVersions(); } catch(_) {}
                             }
                         })
                         .catch((err) => {
@@ -530,10 +605,38 @@
             if (shutdownBtn) {
                 shutdownBtn.addEventListener('click', (e) => {
                     e.preventDefault();
+                    // If detached servers is enabled and any server is running, prompt the user
+                    const detachedEnabled = document.body.getAttribute('data-detached') === 'true';
+                    const runningCountEl = document.getElementById('server-count-running');
+                    const runningCount = runningCountEl ? parseInt(runningCountEl.textContent || '0', 10) : 0;
+                    if (detachedEnabled && runningCount > 0) {
+                        const alsoStop = confirm('Servers are running and detached mode is enabled. Stop all servers as well?');
+                        const params = new URLSearchParams();
+                        params.append('shutdown', '1');
+                        params.append('stop_servers', alsoStop ? '1' : '0');
+                        disableFooterButtons(true);
+                        showButtonSpinner(shutdownBtn, true);
+                        showMessage('Shutting down SDSM…', false);
+                        fetch('/shutdown', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: params.toString()
+                        }).then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((d)=>Promise.reject(d)); } return res.json().catch(()=>({})); })
+                        .then(()=>{ showMessage('Shutdown initiated. The UI may go offline shortly.', false); setTimeout(()=>disableFooterButtons(false), 3000); })
+                        .catch((err)=>{ const e = err && err.error ? err.error : 'Unable to shutdown SDSM. Please try again.'; showMessage(e, true); if (window.showToast) window.showToast({type:'error', title:'Request Failed', message:e}); disableFooterButtons(false); });
+                        return;
+                    }
                     postFooterAction(
                         'shutdown',
                         shutdownBtn,
-                        'Are you sure you want to shutdown SDSM? All servers will be stopped.',
+                        (detachedEnabled
+                            ? 'Are you sure you want to shutdown SDSM? Detached mode is enabled; no servers will be stopped.'
+                            : 'Are you sure you want to shutdown SDSM? All servers will be stopped.'),
                         'Shutting down SDSM…',
                         'Shutdown initiated. The UI may go offline shortly.',
                         'Unable to shutdown SDSM. Please try again.'
@@ -552,6 +655,63 @@
                         'Restart initiated. The UI will reconnect when available.',
                         'Unable to restart SDSM. Please try again.'
                     );
+                });
+            }
+
+            // Stop All Servers (bulk stop) with dynamic enable/disable
+            if (stopAllBtn) {
+                function updateStopAllDisabled() {
+                    const runningCountEl = document.getElementById('server-count-running');
+                    const currentRunning = runningCountEl ? parseInt(runningCountEl.textContent || '0', 10) : 0;
+                    // Disabled if none running or an update is in progress
+                    const anyUpdateDisabled = !!document.querySelector('.update-trigger[disabled]');
+                    stopAllBtn.disabled = currentRunning === 0 || anyUpdateDisabled;
+                }
+                function pollActiveServers(){
+                    fetch('/api/stats', { headers:{'Accept':'application/json'}, credentials:'same-origin', cache:'no-store' })
+                      .then(r => r.ok ? r.json() : null)
+                      .then(data => { if (data && typeof data.activeServers === 'number') {
+                          const el = document.getElementById('server-count-running');
+                          if (el) el.textContent = String(data.activeServers);
+                          updateStopAllDisabled();
+                      }}).catch(()=>{});
+                }
+                // Initial state
+                updateStopAllDisabled();
+                // Poll every 15s
+                setInterval(pollActiveServers, 15000);
+                stopAllBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (stopAllBtn.disabled) return;
+                    const runningCountEl = document.getElementById('server-count-running');
+                    const currentRunning = runningCountEl ? parseInt(runningCountEl.textContent || '0', 10) : 0;
+                    if (currentRunning === 0) {
+                        if (window.showToast) window.showToast({ type: 'info', title: 'No Servers', message: 'There are no running servers to stop.' });
+                        return;
+                    }
+                    if (!confirm('Stop ALL running servers? Active processes will be terminated.')) return;
+                    stopAllBtn.disabled = true;
+                    showButtonSpinner(stopAllBtn, true);
+                    fetch('/api/servers/stop-all', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin'
+                    })
+                    .then(res => { showToastFromHeaders(res); if (!res.ok) { return res.json().then(d => Promise.reject(d)); } return res.json(); })
+                    .then(data => {
+                        const stopped = data && typeof data.stopped === 'number' ? data.stopped : currentRunning;
+                        if (runningCountEl) runningCountEl.textContent = '0';
+                        if (window.showToast && stopped >= 0) window.showToast({ type: 'success', title: 'Stopped', message: 'Stopped ' + stopped + ' servers.' });
+                        updateStopAllDisabled();
+                    })
+                    .catch(err => {
+                        const msg = err && err.error ? err.error : 'Failed to stop servers.';
+                        if (window.showToast) window.showToast({ type: 'error', title: 'Stop Failed', message: msg });
+                    })
+                    .finally(() => {
+                        updateStopAllDisabled();
+                        showButtonSpinner(stopAllBtn, false);
+                    });
                 });
             }
 
@@ -886,7 +1046,7 @@
     </script>
 </head>
 
-<body class="page-shell">
+<body class="page-shell" data-detached="{{if .detached}}true{{else}}false{{end}}">
     <div id="connectionBanner" class="connection-banner" role="status" aria-live="polite">
         <span id="connectionBannerText">Connection lost. Attempting to reconnect...</span>
         <button type="button" id="connectionBannerAction">Reload</button>
@@ -989,6 +1149,15 @@
                             <label for="start_update">Update at Start</label>
                             <input type="checkbox" id="start_update" name="start_update" {{if .start_update}}checked{{end}}>
                         </div>
+                        <div class="form-group">
+                            <label for="detached_servers">Detached Servers (keep running if SDSM exits)</label>
+                            <div class="field-inline" style="align-items: flex-start; gap: var(--space-2);">
+                                <input type="checkbox" id="detached_servers" name="detached_servers" {{if .detached}}checked{{end}}>
+                                <span style="color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.3; flex: 1;">
+                                    When enabled, servers are started in a separate process group and will continue running if SDSM is stopped. Environment variable <code>SDSM_DETACHED_SERVERS</code> may override this at runtime.
+                                </span>
+                            </div>
+                        </div>
                         <div class="form-group form-row-full">
                             <button id="updateConfigBtn" type="submit" name="update_config" class="btn btn-primary" {{if .updating}}disabled{{end}}>
                                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1006,8 +1175,10 @@
                 </div>
 
                 <div class="glass-card">
-                    {{if not .updating}}
-                    <div id="versions">
+                    {{/* Always render versions section; rely on dynamic polling instead of full hide to keep buttons re-enabled post-load. */}}
+                    {{/* If updating, we'll disable buttons but keep table visible for user feedback. */}}
+                    <div id="versions" data-initial-updating="{{if .updating}}true{{else}}false{{end}}">
+                        {{/* Legacy conditional wrapper removed (was: if not .updating) */}}
                         <h3>Software Versions</h3>
                         <form action="/update" method="POST" id="updateForm">
                             <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
@@ -1031,10 +1202,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .steamcmd_deployed }}</td>
-                                            <td>{{ .steamcmd_latest }}</td>
+                                            <td id="ver-steamcmd-deployed">Loading…</td>
+                                            <td id="ver-steamcmd-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn {{if eq .steamcmd_deployed .steamcmd_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1051,10 +1222,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .release_deployed }}</td>
-                                            <td>{{ .release_latest }}</td>
+                                            <td id="ver-release-deployed">Loading…</td>
+                                            <td id="ver-release-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn {{if eq .release_deployed .release_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1071,10 +1242,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .beta_deployed }}</td>
-                                            <td>{{ .beta_latest }}</td>
+                                            <td id="ver-beta-deployed">Loading…</td>
+                                            <td id="ver-beta-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn {{if eq .beta_deployed .beta_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1091,10 +1262,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .bepinex_deployed }}</td>
-                                            <td>{{ .bepinex_latest }}</td>
+                                            <td id="ver-bepinex-deployed">Loading…</td>
+                                            <td id="ver-bepinex-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn {{if eq .bepinex_deployed .bepinex_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1111,10 +1282,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .launchpad_deployed }}</td>
-                                            <td>{{ .launchpad_latest }}</td>
+                                            <td id="ver-launchpad-deployed">Loading…</td>
+                                            <td id="ver-launchpad-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn {{if eq .launchpad_deployed .launchpad_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1131,10 +1302,10 @@
                                                     <div class="progress-text"></div>
                                                 </div>
                                             </td>
-                                            <td>{{ .scon_deployed }}</td>
-                                            <td>{{ .scon_latest }}</td>
+                                            <td id="ver-scon-deployed">Loading…</td>
+                                            <td id="ver-scon-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn {{if eq .scon_deployed .scon_latest}}btn-success{{else}}btn-danger{{end}} update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1156,23 +1327,6 @@
                             </div>
                         </form>
                     </div>
-                    {{else}}
-                    <div>
-                        <h3>Updating...</h3>
-                        <div id="updating">Nothing to see here...</div>
-                        <script>
-                            const eventSource = new EventSource('/updating');
-                            const messagesDiv = document.getElementById('updating');
-
-                            eventSource.onmessage = function (event) {
-                                const newMessage = document.createElement('div');
-                                newMessage.textContent = event.data;
-                                messagesDiv.appendChild(newMessage);
-                                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                            };
-                        </script>
-                    </div>
-                    {{end}}
                 </div>
             </div>
             
@@ -1231,7 +1385,7 @@
 
             
             <div class="glass-card">
-                <p>There are <strong>{{.server_count_active}}</strong> servers currently running.</p>
+                <p>There are <strong id="server-count-running">{{.server_count_active}}</strong> servers currently running.</p>
                 <div class="button-group centered gap-3 mt-4">
                     <form id="footerActionsForm" action="/update" method="POST" style="display: contents;">
                         <button id="shutdownBtn" type="submit" name="shutdown" value="1" class="btn btn-danger" {{if .updating}}disabled{{end}}>
@@ -1248,6 +1402,14 @@
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                             </svg>
                             Restart SDSM
+                        </button>
+                        <button id="stopAllBtn" type="button" class="btn btn-warning" {{if or .updating (eq .server_count_active 0)}}disabled{{end}} title="Stop all running servers">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="9" y1="9" x2="15" y2="9"></line>
+                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                            </svg>
+                            Stop All Servers
                         </button>
                     </form>
                     <a class="btn btn-secondary" href="/logs/sdsm" target="_blank" rel="noopener">
@@ -1294,7 +1456,13 @@
             }
 
             function scheduleNext(delay) {
-                if (healthTimer) {
+                if (stopAllBtn) {
+                    // Initialize disabled state based on current running count
+                    try {
+                        const rcEl = document.getElementById('server-count-running');
+                        const rc = rcEl ? parseInt(rcEl.textContent || '0', 10) : 0;
+                        if (rc === 0) stopAllBtn.disabled = true;
+                    } catch(_) {}
                     clearTimeout(healthTimer);
                 }
                 healthTimer = setTimeout(runHealthCheck, delay);
@@ -1316,6 +1484,8 @@
                         }
                         if (connectionLost) {
                             connectionLost = false;
+                            // With zero running, keep button disabled post-success
+                            stopAllBtn.disabled = true;
                             setBanner(true, 'Connection restored. Reloading...');
                             setTimeout(() => {
                                 setBanner(false);
@@ -1323,7 +1493,10 @@
                             }, 1200);
                             return;
                         }
-                        setBanner(false);
+                            // If still servers running, re-enable; otherwise remains disabled
+                            const rcEl2 = document.getElementById('server-count-running');
+                            const rc2 = rcEl2 ? parseInt(rcEl2.textContent || '0', 10) : 0;
+                            stopAllBtn.disabled = (rc2 === 0);
                     })
                     .catch(() => {
                         clearTimeout(timeoutId);
@@ -1343,6 +1516,8 @@
                     reloadButton.addEventListener('click', () => window.location.reload());
                 }
                 runHealthCheck();
+                // Kick off async versions fetch shortly after paint. Guard against missing function.
+                setTimeout(() => { try { if (typeof fetchVersions === 'function') fetchVersions(0); } catch(_) {} }, 50);
             });
         })();
     </script>
@@ -1376,3 +1551,82 @@
 </body>
 
 </html>
+<!-- Fallback loader: populate versions even if main script fails; logs errors and respects primary flag -->
+<script>
+(function(){
+    function setText(id, val){ var el = document.getElementById(id); if(el){ el.textContent = val || ''; } }
+    function setBtn(name, equal){
+        var btn = document.querySelector('button[data-component="'+name+'"]');
+        if (!btn) return;
+        btn.classList.remove('btn-success','btn-danger');
+        btn.classList.add(equal ? 'btn-success' : 'btn-danger');
+    }
+    function apply(data){
+        if (window.__versionsPrimaryLoaded) { return; }
+        setText('ver-steamcmd-deployed', data.steamcmd_deployed);
+        setText('ver-steamcmd-latest', data.steamcmd_latest);
+        setText('ver-release-deployed', data.release_deployed);
+        setText('ver-release-latest', data.release_latest);
+        setText('ver-beta-deployed', data.beta_deployed);
+        setText('ver-beta-latest', data.beta_latest);
+        setText('ver-bepinex-deployed', data.bepinex_deployed);
+        setText('ver-bepinex-latest', data.bepinex_latest);
+        setText('ver-launchpad-deployed', data.launchpad_deployed);
+        setText('ver-launchpad-latest', data.launchpad_latest);
+        setText('ver-scon-deployed', data.scon_deployed);
+        setText('ver-scon-latest', data.scon_latest);
+        setBtn('steamcmd', (data.steamcmd_deployed||'')===(data.steamcmd_latest||''));
+        setBtn('release', (data.release_deployed||'')===(data.release_latest||''));
+        setBtn('beta', (data.beta_deployed||'')===(data.beta_latest||''));
+        setBtn('bepinex', (data.bepinex_deployed||'')===(data.bepinex_latest||''));
+        setBtn('launchpad', (data.launchpad_deployed||'')===(data.launchpad_latest||''));
+        setBtn('scon', (data.scon_deployed||'')===(data.scon_latest||''));
+        try { console.warn('[SDSM] Versions loaded via fallback.'); window.__versionsFallbackUsed = true; } catch(_) {}
+    }
+    function markUnavailable(){
+        if (window.__versionsPrimaryLoaded) { return; }
+        var ids=['ver-steamcmd-deployed','ver-steamcmd-latest','ver-release-deployed','ver-release-latest','ver-beta-deployed','ver-beta-latest','ver-bepinex-deployed','ver-bepinex-latest','ver-launchpad-deployed','ver-launchpad-latest','ver-scon-deployed','ver-scon-latest'];
+        for (var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if (el && (el.textContent==='Loading…' || el.textContent==='Loading...')) el.textContent='Unavailable'; }
+        try {
+            console.error('[SDSM] Fallback failed to load versions after retries.');
+            if (window && typeof window.showToast === 'function') {
+                window.showToast({ type: 'error', title: 'Version Load Failed', message: 'Fallback could not load component versions.' });
+            }
+        } catch(_) {}
+    }
+    function load(retry){
+        if (window.__versionsPrimaryLoaded) { return; }
+        var tries = typeof retry==='number' ? retry : 0;
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET','/api/manager/versions', true);
+            xhr.setRequestHeader('Accept','application/json');
+            xhr.onreadystatechange = function(){
+                if (xhr.readyState !== 4) return;
+                if (window.__versionsPrimaryLoaded) { return; }
+                if (xhr.status>=200 && xhr.status<300){
+                    try { var data = JSON.parse(xhr.responseText||'{}'); apply(data); }
+                    catch(e){ console.error('[SDSM] Fallback parse error', e); markUnavailable(); }
+                } else {
+                    if (tries < 3) {
+                        try { console.warn('[SDSM] Fallback versions fetch retry', tries+1); } catch(_) {}
+                        setTimeout(function(){ load(tries+1); }, 500*(tries+1));
+                    } else {
+                        markUnavailable();
+                    }
+                }
+            };
+            xhr.onerror = function(){
+                if (tries < 3) { setTimeout(function(){ load(tries+1); }, 500*(tries+1)); }
+                else { markUnavailable(); }
+            };
+            xhr.send();
+        } catch(e){ if (tries < 3) { setTimeout(function(){ load(tries+1); }, 500*(tries+1)); } else { markUnavailable(); } }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ load(0); }, 200); });
+    } else {
+        setTimeout(function(){ load(0); }, 200);
+    }
+})();
+</script>

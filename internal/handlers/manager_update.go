@@ -33,6 +33,7 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		rootPath := middleware.SanitizePath(c.PostForm("root_path"))
 		portStr := c.PostForm("port")
 		language := middleware.SanitizeString(c.PostForm("language"))
+		detachedServers := c.PostForm("detached_servers") == "on"
 
 		port, err := middleware.ValidatePort(portStr)
 		if err != nil {
@@ -46,6 +47,8 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		startupUpdate := c.PostForm("start_update") == "on"
 
 		h.manager.UpdateConfig(steamID, rootPath, port, t, startupUpdate)
+		h.manager.DetachedServers = detachedServers
+		h.manager.Save()
 		if language != "" {
 			h.manager.Language = language
 			h.manager.Save()

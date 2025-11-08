@@ -14,11 +14,11 @@
             <div class="control-row">
                 <label>Server:</label>
                 <div class="button-group">
-                    <button type="submit" name="start" value="true" class="btn btn-control btn-success" id="btn-start" title="Start the server" {{if .server.Running}}style="display:none;" disabled aria-disabled="true"{{end}}>
+                    <button type="submit" name="start" value="true" class="btn btn-control btn-success" id="btn-start" title="Start the server" {{if and .server.Running (not .server.Stopping)}}style="display:none;" disabled aria-disabled="true"{{end}}>
                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                             <polygon points="5 3 19 12 5 21 5 3"/>
                         </svg>
-                        Start
+                        {{if and .server.Running .server.Stopping}}Keep Running{{else}}Start{{end}}
                     </button>
                     <button type="submit" name="stop" value="true" class="btn btn-control btn-danger" id="btn-stop" title="Stop the server" {{if not .server.Running}}style="display:none;" disabled aria-disabled="true"{{end}}>
                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -33,7 +33,6 @@
                         </svg>
                         Restart
                     </button>
-                    <button type="button" class="btn btn-control" id="btn-pause" title="Pause or resume the world" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>{{if .server.Paused}}Resume{{else}}Pause{{end}}</button>
                     <div class="split-button" id="save-split">
                         <button type="button" class="btn btn-control btn-primary" id="btn-save-main" title="Save world to disk" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -150,6 +149,7 @@
                     <div class="button-group" style="display:flex; gap:8px; align-items:center; width:100%;">
                         <input type="text" id="console-command" class="form-input-inline" placeholder="Enter console command" autocomplete="off" style="flex:1; min-width:0;">
                         <button type="button" class="btn btn-control btn-primary" id="btn-console-send" title="Send command to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>Send</button>
+                        <a href="/help/commands" class="btn btn-control" target="_blank" rel="noopener" title="Open console commands reference in a new tab">Commands</a>
                     </div>
                 </div>
             </div>

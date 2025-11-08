@@ -89,7 +89,7 @@
                             <!-- Name and World inputs are moved to detected section when save is selected -->
                             <div class="form-group form-grid-full" id="basicNameGroup">
                                 <label class="form-label" for="name_text">Server Name *</label>
-                                <input type="text" id="name_text" class="form-control" required
+                                    <input type="text" id="name_text" name="name" class="form-control" required
                                        value="{{ index $form "name" }}"
                                        placeholder="Enter server name">
                                 <p class="help-text">The name that will appear in the server list</p>
@@ -97,7 +97,7 @@
 
                             <div class="form-group" id="basicWorldGroup">
                                 <label class="form-label" for="world_select">World *</label>
-                                <select id="world_select" class="form-control" required>
+                                <select id="world_select" name="world" class="form-control" required>
                                     <option value="">Loading...</option>
                                 </select>
                             </div>
@@ -241,6 +241,18 @@
                                        value="{{ index $form "welcome_message" }}"
                                        placeholder="Optional message sent to chat when a player connects">
                                 <p class="help-text">If set, this message will be broadcast to chat on player connect.</p>
+                            </div>
+                            <div class="form-group form-grid-full">
+                                <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
+                                <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control"
+                                       value="{{ index $form "welcome_back_message" }}"
+                                       placeholder="Optional message sent to chat when a returning player connects">
+                                <p class="help-text">If set, this message will be sent instead for players that have connected before.</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
+                                <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index $form "welcome_delay_seconds") 1 }}" placeholder="1">
+                                <p class="help-text">Seconds to wait after player connects before sending welcome / welcome back.</p>
                             </div>
 
                             <div class="form-group">
@@ -505,7 +517,8 @@
         }
 
         function populateWorldOptions() {
-            const worldSelect = document.getElementById("world");
+            // Use the visible select element, not hidden input
+            const worldSelect = document.getElementById("world_select");
             const versionKey = currentVersionKey();
             const worlds = worldLists[versionKey] || [];
             const previousSelection = worldSelect.value;
@@ -541,7 +554,7 @@
         }
 
         function updateWorldOptions() {
-            const worldSelect = document.getElementById("world");
+            const worldSelect = document.getElementById("world_select");
             const locSelect = document.getElementById("start_location");
             const condSelect = document.getElementById("start_condition");
             const versionKey = currentVersionKey();
@@ -600,7 +613,7 @@
         function updateProgressTracker() {
             const requiredFields = [
                 { id: 'name', field: 'name' },
-                { id: 'world', field: 'world' },
+                { id: 'world_select', field: 'world' },
                 { id: 'start_location', field: 'start_location' },
                 { id: 'start_condition', field: 'start_condition' }
             ];

@@ -19,7 +19,6 @@
         <form method="POST" class="chat-input-form" id="chat-send-form">
             <label for="chat-input" class="sr-only">Chat message</label>
             <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
-            <button type="button" class="btn btn-secondary btn-min-sm" id="chat-token-help" title="Show available chat tokens" style="margin-left: 6px;">Tokens</button>
             <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button" title="Send chat message to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -27,6 +26,7 @@
                 </svg>
                 Send
             </button>
+            <button type="button" class="btn btn-secondary btn-min-sm" id="chat-token-help" title="Show available chat tokens" style="margin-left: 6px;">Tokens</button>
         </form>
     </div>
 </div>

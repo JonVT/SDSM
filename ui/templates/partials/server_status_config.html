@@ -28,21 +28,19 @@
                         <option value="">Loading...</option>
                     </select>
                 </div>
-            </div>
-
-            <div class="form-row grid-2">
                 <div>
                     <label for="start_condition">Start Condition:</label>
                     <select name="start_condition" id="start_condition" class="form-select-inline" aria-label="Start Condition">
                         <option value="">Loading...</option>
                     </select>
                 </div>
-                <div>
-                    <label for="difficulty">Difficulty:</label>
-                    <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
+            </div>
+
+            <div class="form-row form-row-full">
+                <label for="difficulty">Difficulty:</label>
+                <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
+                    <option value="">Loading...</option>
+                </select>
             </div>
 
             <div class="form-row grid-2 grid-items-end">
@@ -59,19 +57,30 @@
             <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="restart_delay_seconds">Restart Delay (sec):</label>
-                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off">
+                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off" title="Delay before restarting after a restart is triggered.">
                 </div>
                 <div>
                     <label for="shutdown_delay_seconds">Shutdown Delay (sec):</label>
-                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off">
+                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off" title="Delay before shutdown completes after stop is requested.">
                 </div>
             </div>
 
             <div class="form-row form-row-full">
                 <label for="welcome_message">Welcome Message:</label>
-                <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" autocomplete="off">
-                <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens" style="margin-left: 8px;">Tokens</button>
-                <p class="help-text">If set, this message will be broadcast to chat when a player connects.</p>
+                <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" title="Message sent to chat when any player connects." autocomplete="off">
+            </div>
+
+            <div class="form-row form-row-full">
+                <label for="welcome_back_message">Welcome Back Message:</label>
+                <input type="text" id="welcome_back_message" name="welcome_back_message" value="{{.server.WelcomeBackMessage}}" class="form-input-inline" placeholder="Optional message for returning players" title="Message sent to chat when a returning player connects (overrides the Welcome Message for returning players)." autocomplete="off">
+            </div>
+
+            <div class="form-row form-row-full">
+                <label for="welcome_delay_seconds">Message Delay (sec):</label>
+                <div>
+                    <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" value="{{.server.WelcomeDelaySeconds}}" class="form-input-inline" min="0" max="600" placeholder="1" autocomplete="off" title="Delay before sending welcome / welcome back messages.">
+                    <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages" style="margin-left: 8px;">Message Tokens</button>
+                </div>
             </div>
 
             

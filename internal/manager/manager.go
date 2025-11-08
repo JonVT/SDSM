@@ -107,10 +107,21 @@ type Manager struct {
 		list        []string
 		generatedAt time.Time
 	}
+	// Languages cache per channel (beta=false/true) to avoid disk scan every ManagerGET.
+	languagesCacheMu sync.RWMutex `json:"-"`
+	languagesCache   map[bool]struct {
+		list     []string
+		cachedAt time.Time
+	}
 	progressMu       sync.RWMutex
 	progressByType   map[DeployType]*UpdateProgress
 	serverProgressMu sync.RWMutex
 	serverProgress   map[int]*ServerCopyProgress
+	// DetachedServers determines whether managed game server processes should remain
+	// running if SDSM exits. When true, user-initiated shutdown can optionally leave
+	// servers running. Processes are started in their own process group to avoid
+	// receiving parent signals.
+	DetachedServers bool `json:"detached_servers"`
 }
 
 type UpdateProgress struct {
@@ -701,6 +712,12 @@ func (m *Manager) load() (bool, error) {
 	m.Servers = temp.Servers
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
+	m.DetachedServers = temp.DetachedServers
+
+	// Environment variable override (does not persist unless saved explicitly)
+	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
+		m.DetachedServers = true
+	}
 
 	// Update fields from temp, but preserve existing Paths if temp.Paths is nil
 	if temp.Paths != nil && temp.Paths.RootPath != "" {
@@ -1028,17 +1045,45 @@ func (m *Manager) Shutdown() {
 	time.Sleep(1000 * time.Millisecond)
 
 	m.Log.Write("Shutting down all servers.")
-	for _, srv := range m.Servers {
-		m.Log.Write(fmt.Sprintf("Stopping server: %s", srv.Name))
-		srv.Stop()
+	if m.DetachedServers {
+		m.Log.Write("Shutdown requested (detached mode disabled for this operation). Stopping all servers.")
 	}
-	m.Log.Write("All servers stopped successfully.")
+	for _, srv := range m.Servers {
+		if srv.IsRunning() {
+			m.Log.Write(fmt.Sprintf("Stopping server: %s", srv.Name))
+			srv.Stop()
+		}
+	}
+	m.Log.Write("All servers stop sequence completed.")
 	m.Save()
 	m.Active = false
 	m.Log.Write("SDSM is shutting down.")
-
 	// Exit the application
 	time.Sleep(1000 * time.Millisecond) // Give logs time to flush
+	os.Exit(0)
+}
+
+// If stopServers is false, running servers are left alive; they were started in their own
+// process group and will continue independently.
+func (m *Manager) ExitDetached(stopServers bool) {
+	// Allow HTTP response to complete before exiting
+	time.Sleep(1000 * time.Millisecond)
+	if stopServers {
+		m.Log.Write("Detached shutdown: stopping all servers before exit.")
+		for _, srv := range m.Servers {
+			if srv.IsRunning() {
+				m.Log.Write(fmt.Sprintf("Stopping server: %s", srv.Name))
+				srv.Stop()
+			}
+		}
+		m.Log.Write("All servers stopped.")
+	} else {
+		m.Log.Write("Detached shutdown: leaving servers running.")
+	}
+	m.Save()
+	m.Active = false
+	m.Log.Write("SDSM exiting now.")
+	time.Sleep(1000 * time.Millisecond)
 	os.Exit(0)
 }
 
@@ -1204,19 +1249,40 @@ func (m *Manager) GetLanguages() []string {
 // GetLanguagesForVersion returns available languages for release/beta
 // independently using the RocketStation language scan.
 func (m *Manager) GetLanguagesForVersion(beta bool) []string {
-	base := m.getGameDataPathForVersion(beta)
-	if langs, err := ScanLanguages(base); err == nil && len(langs) > 0 {
-		out := make([]string, 0, len(langs))
-		for _, l := range langs {
-			name := strings.TrimSuffix(l.FileName, ".xml")
-			if name != "" && !strings.Contains(name, "_") {
-				out = append(out, name)
-			}
-		}
-		sort.Strings(out)
-		return out
+	// Cache TTL for languages: modest since language set rarely changes.
+	const languagesCacheTTL = 10 * time.Minute
+	m.languagesCacheMu.RLock()
+	cache := m.languagesCache
+	entry, has := cache[beta]
+	m.languagesCacheMu.RUnlock()
+	if has && len(entry.list) > 0 && time.Since(entry.cachedAt) < languagesCacheTTL {
+		// Return a copy to avoid external mutation.
+		copyList := make([]string, len(entry.list))
+		copy(copyList, entry.list)
+		return copyList
 	}
-	return []string{}
+	base := m.getGameDataPathForVersion(beta)
+	langs, err := ScanLanguages(base)
+	if err != nil || len(langs) == 0 {
+		return []string{}
+	}
+	out := make([]string, 0, len(langs))
+	for _, l := range langs {
+		name := strings.TrimSuffix(l.FileName, ".xml")
+		if name != "" && !strings.Contains(name, "_") {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	m.languagesCacheMu.Lock()
+	if m.languagesCache == nil {
+		m.languagesCache = make(map[bool]struct { list []string; cachedAt time.Time })
+	}
+	m.languagesCache[beta] = struct { list []string; cachedAt time.Time }{list: out, cachedAt: time.Now()}
+	m.languagesCacheMu.Unlock()
+	copyList := make([]string, len(out))
+	copy(copyList, out)
+	return copyList
 }
 
 // WorldInfo contains localized world name, description, and the relative

@@ -39,6 +39,15 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 			"maxPlayers":  s.MaxClients,
 			"running":     s.IsRunning(),
 			"starting":    s.Starting,
+			"stopping":    s.Stopping,
+			"stopping_eta": func() int {
+				if s.Stopping && !s.StoppingEnds.IsZero() {
+					remaining := int(time.Until(s.StoppingEnds).Seconds())
+					if remaining < 0 { return 0 }
+					return remaining
+				}
+				return 0
+			}(),
 			"paused":      s.Paused,
 			"storming":    s.Storming,
 		},
@@ -46,6 +55,28 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 	if msg, err := json.Marshal(payload); err == nil {
 		h.hub.Broadcast(msg)
 	}
+}
+
+// ServerClientsGET issues a CLIENTS command and returns current live clients after brief delay.
+func (h *ManagerHandlers) ServerClientsGET(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"invalid server id"}); return }
+	s := h.manager.ServerByID(serverID)
+	if s == nil { c.JSON(http.StatusNotFound, gin.H{"error":"server not found"}); return }
+	if !s.IsRunning() { c.JSON(http.StatusConflict, gin.H{"error":"server not running"}); return }
+	// Issue command and return immediately; log handlers will reconcile clients asynchronously.
+	if err := s.SendCommand("console", "CLIENTS"); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error":"failed to issue CLIENTS"}); return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"status":"queued"})
+}
+
+// shutdownDelayForServer mirrors the server's shutdown delay logic for handler usage.
+func shutdownDelayForServer(s *models.Server) time.Duration {
+	if s == nil { return 0 }
+	if s.ShutdownDelaySeconds > 0 { return time.Duration(s.ShutdownDelaySeconds) * time.Second }
+	if s.ShutdownDelaySeconds == 0 { return 0 }
+	return 2 * time.Second
 }
 
 func (h *ManagerHandlers) broadcastStats() {
@@ -175,6 +206,15 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"name":           s.Name,
 		"running":        s.IsRunning(),
 		"starting":       s.Starting,
+		"stopping":       s.Stopping,
+		"stopping_eta": func() int {
+			if s.Stopping && !s.StoppingEnds.IsZero() {
+				rem := int(time.Until(s.StoppingEnds).Seconds())
+				if rem < 0 { return 0 }
+				return rem
+			}
+			return 0
+		}(),
 		"port":           s.Port,
 		"max_clients":    s.MaxClients,
 		"player_count":   len(liveClients),
@@ -225,6 +265,28 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 		return
 	}
 
+	// If server is currently in a delayed shutdown window, treat Start as a cancellation request.
+	if s.Running && s.Stopping {
+		if s.CancelStop() {
+			// Broadcast updated state (still running, stopping cleared)
+			h.broadcastServerStatus(s)
+			h.broadcastStats()
+			if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+				c.Header("HX-Trigger", "refresh")
+				c.Header("X-Toast-Type", "success")
+				c.Header("X-Toast-Title", "Shutdown Canceled")
+				c.Header("X-Toast-Message", s.Name+" will keep running.")
+				c.HTML(http.StatusOK, "server_card.html", s)
+				return
+			}
+			c.Header("X-Toast-Type", "success")
+			c.Header("X-Toast-Title", "Shutdown Canceled")
+			c.Header("X-Toast-Message", s.Name+" will keep running.")
+			c.JSON(http.StatusOK, gin.H{"status": "shutdown_canceled"})
+			return
+		}
+	}
+
 	s.Start()
 	// Broadcast status + stats for realtime dashboards
 	h.broadcastServerStatus(s)
@@ -270,23 +332,55 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 		return
 	}
 
-	s.Stop()
-	// Broadcast status + stats for realtime dashboards
-	h.broadcastServerStatus(s)
-	h.broadcastStats()
+	// Use asynchronous stop so UI can show 'Stopping' state and allow cancellation.
+	s.StopAsync(func(srv *models.Server) {
+		// Broadcast each significant state change (scheduled, canceled, final stopped)
+		h.broadcastServerStatus(srv)
+		h.broadcastStats()
+	})
+
+	// Initial response reflects scheduling (server still running for delayed stops)
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
-		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
 		c.Header("HX-Trigger", "refresh")
-		c.Header("X-Toast-Type", "success")
-		c.Header("X-Toast-Title", "Server Stopped")
-		c.Header("X-Toast-Message", s.Name+" has been stopped.")
+		c.Header("X-Toast-Type", "info")
+		c.Header("X-Toast-Title", "Shutdown Scheduled")
+		if shutdownDelayForServer(s) > 0 {
+			// Local timeframe formatter (duplicate of models.Server.formatTimeframe logic, kept unexported there)
+			formatTf := func(d time.Duration) string {
+				secs := int(d.Seconds())
+				if secs < 60 { if secs == 1 { return "1 second" }; return fmt.Sprintf("%d seconds", secs) }
+				m := secs / 60; rem := secs % 60
+				if rem == 0 { if m == 1 { return "1 minute" }; return fmt.Sprintf("%d minutes", m) }
+				if m == 1 { if rem == 1 { return "1 minute 1 second" }; return fmt.Sprintf("1 minute %d seconds", rem) }
+				if rem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+				return fmt.Sprintf("%d minutes %d seconds", m, rem)
+			}
+			c.Header("X-Toast-Message", fmt.Sprintf("%s will shut down in %s (click Keep Running to cancel).", s.Name, formatTf(shutdownDelayForServer(s))))
+		} else {
+			c.Header("X-Toast-Message", s.Name+" is stopping now.")
+		}
 		c.HTML(http.StatusOK, "server_card.html", s)
 		return
 	}
-	c.Header("X-Toast-Type", "success")
-	c.Header("X-Toast-Title", "Server Stopped")
-	c.Header("X-Toast-Message", s.Name+" has been stopped.")
-	c.JSON(http.StatusOK, gin.H{"status": "stopped"})
+	c.Header("X-Toast-Type", "info")
+	c.Header("X-Toast-Title", "Shutdown Scheduled")
+	if shutdownDelayForServer(s) > 0 {
+		formatTf := func(d time.Duration) string {
+			secs := int(d.Seconds())
+			if secs < 60 { if secs == 1 { return "1 second" }; return fmt.Sprintf("%d seconds", secs) }
+			m := secs / 60; rem := secs % 60
+			if rem == 0 { if m == 1 { return "1 minute" }; return fmt.Sprintf("%d minutes", m) }
+			if m == 1 { if rem == 1 { return "1 minute 1 second" }; return fmt.Sprintf("1 minute %d seconds", rem) }
+			if rem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+			return fmt.Sprintf("%d minutes %d seconds", m, rem)
+		}
+		d := shutdownDelayForServer(s)
+		c.Header("X-Toast-Message", fmt.Sprintf("%s will shut down in %s.", s.Name, formatTf(d)))
+		c.JSON(http.StatusOK, gin.H{"status": "scheduled", "eta_seconds": int(d.Seconds())})
+		return
+	}
+	c.Header("X-Toast-Message", s.Name+" is stopping now.")
+	c.JSON(http.StatusOK, gin.H{"status": "stopping"})
 }
 
 // APIServerRestart restarts a server asynchronously
@@ -641,6 +735,18 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		}
 		s.WelcomeMessage = clean
 	}
+	if wbm, ok := body["welcome_back_message"]; ok {
+		clean := middleware.SanitizeString(wbm)
+		clean = strings.ReplaceAll(strings.ReplaceAll(clean, "\r", " "), "\n", " ")
+		clean = strings.TrimSpace(clean)
+		if len(clean) > 300 { clean = clean[:300] }
+		s.WelcomeBackMessage = clean
+	}
+	if wd, ok := body["welcome_delay_seconds"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(wd)); err == nil && n >= 0 && n <= 600 {
+			s.WelcomeDelaySeconds = n
+		}
+	}
 
 	if maxClientsStr := body["max_clients"]; maxClientsStr != "" {
 		if maxClients, err := strconv.Atoi(maxClientsStr); err == nil && maxClients >= 1 && maxClients <= 100 {
@@ -829,6 +935,7 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
 		return
 	}
+	// Support both JSON and x-www-form-urlencoded bodies
 	var req struct {
 		Name                  string `json:"name"`
 		World                 string `json:"world"`
@@ -855,9 +962,40 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		DisconnectTimeout     int    `json:"disconnect_timeout"`
 		Visible               bool   `json:"server_visible"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
-		return
+	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+			return
+		}
+	} else {
+		// Form-encoded fallback
+		_ = c.Request.ParseForm()
+		req.Name = middleware.SanitizeString(c.PostForm("name"))
+		req.World = middleware.SanitizeString(c.PostForm("world"))
+		req.StartLocation = middleware.SanitizeString(c.PostForm("start_location"))
+		req.StartCondition = middleware.SanitizeString(c.PostForm("start_condition"))
+		req.Difficulty = middleware.SanitizeString(c.PostForm("difficulty"))
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("port"))); err == nil { req.Port = v }
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("max_clients"))); err == nil { req.MaxClients = v }
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("save_interval"))); err == nil { req.SaveInterval = v }
+		if v := strings.TrimSpace(c.PostForm("restart_delay_seconds")); v != "" { if n, err := strconv.Atoi(v); err == nil { req.RestartDelaySeconds = n } }
+		if v := strings.TrimSpace(c.PostForm("shutdown_delay_seconds")); v != "" { if n, err := strconv.Atoi(v); err == nil { req.ShutdownDelaySeconds = n } }
+		req.Password = c.PostForm("password")
+		req.AuthSecret = c.PostForm("auth_secret")
+		// Booleans: interpret on/true/1
+		parseBool := func(s string) bool { s = strings.TrimSpace(strings.ToLower(s)); return s == "on" || s == "true" || s == "1" }
+		req.Beta = strings.TrimSpace(c.PostForm("beta")) == "true"
+		req.AutoStart = parseBool(c.PostForm("auto_start"))
+		req.AutoUpdate = parseBool(c.PostForm("auto_update"))
+		req.AutoSave = parseBool(c.PostForm("auto_save"))
+		req.AutoPause = parseBool(c.PostForm("auto_pause"))
+		req.PlayerSaves = parseBool(c.PostForm("player_saves"))
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("max_auto_saves"))); err == nil { req.MaxAutoSaves = v }
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("max_quick_saves"))); err == nil { req.MaxQuickSaves = v }
+		req.DeleteSkeletonOnDecay = parseBool(c.PostForm("delete_skeleton_on_decay"))
+		req.UseSteamP2P = parseBool(c.PostForm("use_steam_p2p"))
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("disconnect_timeout"))); err == nil { req.DisconnectTimeout = v }
+		req.Visible = parseBool(c.PostForm("server_visible"))
 	}
 
 	// Validation similar to NewServerPOST
@@ -1175,6 +1313,8 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	serverVisible := c.PostForm("server_visible") == "on"
 	welcomeMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_message")), "\r", " "), "\n", " "))
 	if len(welcomeMessage) > 300 { welcomeMessage = welcomeMessage[:300] }
+	welcomeBackMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_back_message")), "\r", " "), "\n", " "))
+	if len(welcomeBackMessage) > 300 { welcomeBackMessage = welcomeBackMessage[:300] }
 
 	// Numeric fields with defaults
 	port, _ := middleware.ValidatePort(c.PostForm("port")) // validate later for availability
@@ -1312,6 +1452,7 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		RestartDelaySeconds:   restartDelay,
 		ShutdownDelaySeconds:  shutdownDelay,
 		WelcomeMessage:        welcomeMessage,
+		WelcomeBackMessage:    welcomeBackMessage,
 	}
 
 	// Default language selection similar to other create paths
@@ -1578,7 +1719,8 @@ func (h *ManagerHandlers) APIServerChat(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "message required"})
 		return
 	}
-	if err := s.SendCommand("chat", req.Message); err != nil {
+	msg := s.RenderChatMessage(req.Message, nil)
+	if err := s.SendCommand("chat", msg); err != nil {
 		c.Header("X-Toast-Type", "error")
 		c.Header("X-Toast-Title", "Chat Failed")
 		c.Header("X-Toast-Message", err.Error())
@@ -1904,52 +2046,6 @@ func (h *ManagerHandlers) APIServerLoad(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// APIServerPause toggles pause state. JSON: { "pause": true|false }
-func (h *ManagerHandlers) APIServerPause(c *gin.Context) {
-	serverID, err := strconv.Atoi(c.Param("server_id"))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
-		return
-	}
-	role := c.GetString("role")
-	if role != "admin" {
-		if val, ok := c.Get("username"); ok {
-			if user, ok2 := val.(string); ok2 {
-				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
-					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-					return
-				}
-			}
-		}
-	}
-	s := h.manager.ServerByID(serverID)
-	if s == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
-		return
-	}
-	var req struct {
-		Pause bool `json:"pause"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
-		return
-	}
-	cmd := "PAUSE false"
-	if req.Pause {
-		cmd = "PAUSE true"
-	}
-	if err := s.SendCommand("console", cmd); err != nil {
-		c.Header("X-Toast-Type", "error")
-		c.Header("X-Toast-Title", "Pause Failed")
-		c.Header("X-Toast-Message", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.Header("X-Toast-Type", "success")
-	c.Header("X-Toast-Title", "Pause Updated")
-	c.Header("X-Toast-Message", "Pause state updated.")
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
-}
 
 // APIServerStorm toggles storm. JSON: { "start": true|false }
 func (h *ManagerHandlers) APIServerStorm(c *gin.Context) {
@@ -2261,6 +2357,29 @@ func (h *ManagerHandlers) APIServerUnban(c *gin.Context) {
 	c.Header("X-Toast-Title", "Player Unbanned")
 	c.Header("X-Toast-Message", "Removed from blacklist.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServersStopAll stops all running servers (admin only).
+func (h *ManagerHandlers) APIServersStopAll(c *gin.Context) {
+	role := c.GetString("role")
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	scheduled := 0
+	for _, s := range h.manager.Servers {
+		if s != nil && s.IsRunning() {
+			s.StopAsync(func(srv *models.Server){
+				h.broadcastServerStatus(srv)
+				h.broadcastStats()
+			})
+			scheduled++
+		}
+	}
+	c.Header("X-Toast-Type", "info")
+	c.Header("X-Toast-Title", "Shutdown Scheduled")
+	c.Header("X-Toast-Message", fmt.Sprintf("Shutting down %d servers.", scheduled))
+	c.JSON(http.StatusOK, gin.H{"scheduled": scheduled})
 }
 
 // APIServerSaves lists server save files for a given type (e.g., auto, manual).

@@ -132,4 +132,24 @@
         background: var(--surface-soft);
         color: var(--text-primary);
     }
+
+    /* Server Configuration: widen first column, narrow second for dual-field rows */
+    .card-config .grid-2 { grid-template-columns: 1.6fr 1fr; }
+    @media (max-width: 780px) {
+        /* Preserve stacking on narrow screens */
+        .card-config .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Server Configuration: tighten vertical rhythm and align numeric inputs */
+    .card-config .form-grid-compact { gap: var(--space-2); }
+    .card-config .form-row { gap: var(--space-2); }
+    /* Option A: use vertical labels on non-grid rows (label above input) */
+    .card-config .form-row:not(.grid-2) { grid-template-columns: 1fr; align-items: start; }
+    .card-config .form-row:not(.grid-2) > label { margin-bottom: 4px; }
+    .card-config input.form-input-inline[type="number"] { width: 160px; max-width: 160px; }
+    @media (max-width: 780px) {
+        .card-config input.form-input-inline[type="number"] { width: 100%; max-width: none; }
+    }
+
+    /* Removed separate token row; tokens button now inline with delay input */
 </style>

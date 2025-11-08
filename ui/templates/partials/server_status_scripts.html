@@ -71,7 +71,6 @@
     const startButton = document.getElementById('btn-start');
     const stopButton = document.getElementById('btn-stop');
     const restartButton = document.getElementById('btn-restart');
-    const pauseButton = document.getElementById('btn-pause');
     const saveMainButton = document.getElementById('btn-save-main');
     const saveMenuButton = document.getElementById('btn-save-menu');
     const saveSplitRoot = document.getElementById('save-split');
@@ -110,6 +109,7 @@
     let serverIsRunning = rootEl.dataset.serverRunning === "true";
     let serverIsPaused = rootEl.dataset.serverPaused === "true";
     let serverIsStarting = rootEl.dataset.serverStarting === "true";
+    let serverIsStopping = rootEl.dataset.serverStopping === "true"; // new
     let updateButton = null;
     let progressContainer = null;
     let progressFill = null;
@@ -126,6 +126,9 @@
     let refreshUpdateButtonState = function() {};
     // Stop-button countdown state
     let stoppingCountdownActive = false;
+    // Local pill countdown for stopping state
+    let pillStoppingInterval = null;
+    let pillStoppingRemaining = 0;
     let stopCountdownTimer = null;
     let stopCountdownEnd = 0;
     let stopOriginalHTML = null;
@@ -1170,6 +1173,21 @@
         updateLiveCount(players.length);
     }
 
+    // On-demand live players refresh when clicking the pill
+    if (playersLiveCount) {
+        playersLiveCount.style.cursor = 'pointer';
+        playersLiveCount.addEventListener('click', () => {
+            if (!serverId) return;
+            playersLiveCount.setAttribute('aria-busy','true');
+            playersLiveCount.classList.add('loading');
+            // Trigger CLIENTS on the server; the status poller will reflect changes
+            fetch(`/server/${serverId}/clients`, { headers:{'Accept':'application/json'}, credentials:'same-origin' })
+              .then(()=>{ /* ignore body; rely on subsequent status poll */ })
+              .catch(()=>{})
+              .finally(()=>{ setTimeout(()=>{ try { if (typeof fetchStatus === 'function') fetchStatus(); } catch(_) {} playersLiveCount.removeAttribute('aria-busy'); playersLiveCount.classList.remove('loading'); }, 600); });
+        });
+    }
+
     function renderHistoryPlayers(history) {
         if (!playersHistoryBody) {
             return;
@@ -1387,12 +1405,12 @@
         const running = typeof statusObj.running === 'boolean' ? statusObj.running : serverIsRunning;
         const paused = typeof statusObj.paused === 'boolean' ? statusObj.paused : serverIsPaused;
         const starting = typeof statusObj.starting === 'boolean' ? statusObj.starting : serverIsStarting;
+        const stopping = typeof statusObj.stopping === 'boolean' ? statusObj.stopping : serverIsStopping;
 
         if (connectionLost) {
             setButtonDisabled(startButton, true);
             setButtonDisabled(stopButton, true);
             setButtonDisabled(restartButton, true);
-            setButtonDisabled(pauseButton, true);
             setButtonDisabled(saveMainButton, true);
             setButtonDisabled(saveMenuButton, true);
             setButtonDisabled(deleteButton, true);
@@ -1409,8 +1427,24 @@
         }
 
         if (startButton) {
-            showElement(startButton, !running);
-            setButtonDisabled(startButton, running || progressActive);
+            // Show start button when server is not running OR when running but in stopping window (to allow cancellation)
+            showElement(startButton, !running || (running && stopping));
+            // Enabled for cancellation when stopping; disabled otherwise if already running
+            const disable = (!stopping && running) || progressActive;
+            setButtonDisabled(startButton, disable);
+            // Update label to reflect cancellation action when stopping
+            try {
+                const icon = startButton.querySelector('svg');
+                const iconHTML = icon ? icon.outerHTML : '';
+                if (running && stopping) {
+                    // Keep Running (cancel shutdown)
+                    startButton.innerHTML = iconHTML + ' Keep Running';
+                    startButton.title = 'Cancel scheduled shutdown';
+                } else {
+                    startButton.innerHTML = iconHTML + ' Start';
+                    startButton.title = 'Start the server';
+                }
+            } catch(_) {}
         }
 
         if (stopButton) {
@@ -1427,24 +1461,6 @@
             }
         }
 
-        if (pauseButton) {
-            // Toggle label and semantic variant based on paused state
-            const wasResume = pauseButton.textContent && pauseButton.textContent.trim().toLowerCase() === 'resume';
-            const nextLabel = paused ? 'Resume' : 'Pause';
-            if (!wasResume || nextLabel !== 'Resume') {
-                pauseButton.textContent = nextLabel;
-            }
-            // Apply variant classes: Resume -> success (green), Pause -> warning (amber)
-            try {
-                pauseButton.classList.remove('btn-success', 'btn-warning');
-                if (paused) {
-                    pauseButton.classList.add('btn-success');
-                } else {
-                    pauseButton.classList.add('btn-warning');
-                }
-            } catch(_) {}
-            setButtonDisabled(pauseButton, !running || progressActive || starting);
-        }
 
         if (saveMainButton) {
             setButtonDisabled(saveMainButton, !running || progressActive || starting);
@@ -1494,6 +1510,7 @@
         serverIsRunning = running;
         serverIsPaused = paused;
         serverIsStarting = starting;
+        serverIsStopping = stopping;
     }
 
     // Worlds and data keyed by stable world IDs; names are localized for display
@@ -1714,7 +1731,14 @@
         const worlds = worldsByVersion[versionKey] || [];
         const state = versionState[versionKey];
 
-        if (!worldSelect) return;
+        // If there is no visible world selector (read-only world), still populate
+        // dependent selects and the world thumbnail using the initial world.
+        if (!worldSelect) {
+            updateWorldOptions();
+            updateWorldThumb();
+            updateParamsValidity();
+            return;
+        }
         worldSelect.innerHTML = '';
 
         if (!worlds.length) {
@@ -2403,12 +2427,24 @@
 
             const running = !!data.running;
             const starting = !!data.starting;
+            const stopping = !!data.stopping; // new flag from backend
+            const stoppingEta = (data.stopping_eta !== undefined && data.stopping_eta !== null) ? Number(data.stopping_eta) : null;
+            // Store last ETA for client-side countdown smoothing
+            if (!isNaN(stoppingEta) && stoppingEta !== null) {
+                rootEl.dataset.stoppingEta = String(stoppingEta);
+                rootEl.dataset.stoppingEtaUpdated = String(Date.now());
+            } else if (!stopping) {
+                delete rootEl.dataset.stoppingEta;
+                delete rootEl.dataset.stoppingEtaUpdated;
+            }
             serverIsRunning = running;
             serverIsStarting = starting;
             rootEl.dataset.serverRunning = running ? 'true' : 'false';
             rootEl.dataset.serverStarting = starting ? 'true' : 'false';
             serverIsPaused = !!data.paused && running;
+            serverIsStopping = stopping && running;
             rootEl.dataset.serverPaused = serverIsPaused ? 'true' : 'false';
+            rootEl.dataset.serverStopping = serverIsStopping ? 'true' : 'false';
 
             if (statusIndicator) {
                 statusIndicator.classList.toggle('starting', running && starting);
@@ -2418,15 +2454,22 @@
             }
             // Apply pill variant classes to container for visual styling (starting, running, paused, stopped)
             if (statusContainer) {
-                statusContainer.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting');
+                statusContainer.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting', 'is-stopping');
                 statusContainer.classList.toggle('is-starting', running && starting);
-                statusContainer.classList.toggle('is-running', running && !serverIsPaused && !starting);
+                statusContainer.classList.toggle('is-stopping', running && stopping && !starting);
+                statusContainer.classList.toggle('is-running', running && !serverIsPaused && !starting && !stopping);
                 statusContainer.classList.toggle('is-paused', running && serverIsPaused);
                 statusContainer.classList.toggle('is-stopped', !running);
             }
             if (statusText) {
                 if (starting && running) {
                     statusText.textContent = 'Starting';
+                } else if (stopping && running) {
+                    if (stoppingEta !== null && !isNaN(stoppingEta) && stoppingEta > 0) {
+                        statusText.textContent = `Stopping (${stoppingEta}s)`;
+                    } else {
+                        statusText.textContent = 'Stopping';
+                    }
                 } else if (!running) {
                     statusText.textContent = 'Stopped';
                 } else if (serverIsPaused) {
@@ -2434,6 +2477,35 @@
                 } else {
                     statusText.textContent = 'Running';
                 }
+            }
+
+            // Manage local pill countdown interval
+            if (stopping && running) {
+                const etaRaw = rootEl.dataset.stoppingEta ? Number(rootEl.dataset.stoppingEta) : NaN;
+                if (!isNaN(etaRaw) && etaRaw > 0) {
+                    // Reset remaining if broadcast ETA increased or interval not started
+                    if (pillStoppingRemaining === 0 || etaRaw > pillStoppingRemaining) {
+                        pillStoppingRemaining = etaRaw;
+                    }
+                    if (!pillStoppingInterval) {
+                        pillStoppingInterval = setInterval(() => {
+                            // Abort if server state changed
+                            const stillStopping = rootEl.dataset.serverRunning === 'true' && stoppingCountdownActive || (!!rootEl.dataset.stoppingEta && rootEl.dataset.serverRunning === 'true');
+                            if (!stillStopping) { clearInterval(pillStoppingInterval); pillStoppingInterval = null; return; }
+                            pillStoppingRemaining = Math.max(0, pillStoppingRemaining - 1);
+                            if (statusText) {
+                                statusText.textContent = pillStoppingRemaining > 0 ? `Stopping (${pillStoppingRemaining}s)` : 'Stopping';
+                            }
+                            if (pillStoppingRemaining <= 0) {
+                                clearInterval(pillStoppingInterval);
+                                pillStoppingInterval = null;
+                            }
+                        }, 1000);
+                    }
+                }
+            } else {
+                if (pillStoppingInterval) { clearInterval(pillStoppingInterval); pillStoppingInterval = null; }
+                pillStoppingRemaining = 0;
             }
 
             // If server is no longer running, clear any active stop countdown UI
@@ -3077,37 +3149,6 @@
             });
         })();
 
-        // Pause/Resume button: sends PAUSE true/false console command via API
-        (function(){
-            if (!pauseButton || !serverId) return;
-            pauseButton.addEventListener('click', function(e){
-                e.preventDefault();
-                if (pauseButton.disabled) return;
-                const isPaused = serverIsPaused;
-                const command = isPaused ? false : true;
-                setButtonDisabled(pauseButton, true);
-                toggleButtonSpinner(pauseButton, true);
-                fetch(`/api/servers/${serverId}/pause`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ pause: command })
-                })
-                .then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const type = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    fetchStatus();
-                })
-                .catch(() => { /* no-op */ })
-                .finally(() => { toggleButtonSpinner(pauseButton, false); setButtonDisabled(pauseButton, false); });
-            });
-        })();
 
         // Storm Start/Stop button: sends STORM start/stop via API and updates label
         (function(){

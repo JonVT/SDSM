@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"strconv"
 	"strings"
 	"sync"
@@ -112,7 +113,10 @@ type ServerConfig struct {
 	Mods                 []string
 	RestartDelaySeconds  int
 	// WelcomeMessage is an optional chat message broadcast when a player connects
-	WelcomeMessage string
+	WelcomeMessage     string
+	WelcomeBackMessage string // Sent to returning players (present in players log)
+	// WelcomeDelaySeconds controls how long to wait after connect before sending welcome/welcome-back
+	WelcomeDelaySeconds int
 }
 
 // Server represents a managed dedicated server instance, including
@@ -121,7 +125,7 @@ type Server struct {
 	ID             int           `json:"id"`
 	Proc           *exec.Cmd     `json:"-"`
 	Thrd           chan bool     `json:"-"`
-	stdin          io.WriteCloser `json:"-"`
+	stdin          io.WriteCloser `json:"-"` // deprecated: stdin fallback removed; retained for struct compatibility
 	Logger         *utils.Logger `json:"-"`
 	Paths          *utils.Paths  `json:"-"`
 	Name           string        `json:"name"`
@@ -158,7 +162,9 @@ type Server struct {
 	RestartDelaySeconds  int      `json:"restart_delay_seconds"`
 	SCONPort             int      `json:"scon_port"` // Port for SCON plugin HTTP API
 	// WelcomeMessage is sent as a chat/SAY message each time a player connects (if non-empty)
-	WelcomeMessage string     `json:"welcome_message"`
+	WelcomeMessage     string `json:"welcome_message"`
+	WelcomeBackMessage string `json:"welcome_back_message"`
+	WelcomeDelaySeconds int   `json:"welcome_delay_seconds"`
 	ServerStarted  *time.Time `json:"server_started,omitempty"`
 	ServerSaved    *time.Time `json:"server_saved,omitempty"`
 	Clients        []*Client  `json:"-"`
@@ -166,6 +172,9 @@ type Server struct {
 	Storming       bool       `json:"-"`
 	Paused         bool       `json:"-"`
 	Starting       bool       `json:"-"`
+	Stopping       bool       `json:"-"` // set true during shutdown delay window
+	StoppingEnds   time.Time  `json:"-"` // timestamp when shutdown expected to occur
+	StoppingCancel chan struct{} `json:"-"` // cancellation channel for delayed shutdown
 	Running        bool       `json:"-"`
 	LastLogLine    string     `json:"-"`
 	// LastError is a human-readable description of the last fatal/startup error detected from logs.
@@ -185,6 +194,80 @@ type Server struct {
 	pendingPlayerSaveMu  sync.Mutex
 	pendingPlayerSave    []string
 	lastPlayerSaveQueued map[string]time.Time
+	// Transient state for parsing CLIENTS response blocks from logs
+	clientsScanActive bool
+	clientsScanSeen   map[string]struct{}
+	clientsScanStart  time.Time
+}
+
+// beginClientsScan initializes a transient scan of currently connected clients based on
+// a CLIENTS response block in the server log.
+func (s *Server) beginClientsScan() {
+	s.clientsScanActive = true
+	if s.clientsScanSeen == nil {
+		s.clientsScanSeen = make(map[string]struct{})
+	} else {
+		for k := range s.clientsScanSeen { delete(s.clientsScanSeen, k) }
+	}
+	s.clientsScanStart = time.Now()
+}
+
+// noteClientsScan records a seen client (steamID or name) as part of the active scan and
+// ensures the client is present and marked online.
+func (s *Server) noteClientsScan(steamID, name string, when time.Time) {
+	if !s.clientsScanActive { return }
+	id := strings.TrimSpace(steamID)
+	nm := strings.TrimSpace(name)
+	key := id
+	if key == "" { key = strings.ToLower(nm) }
+	if key == "" { return }
+	s.clientsScanSeen[key] = struct{}{}
+	// Ensure client exists and is online
+	// Try by SteamID first
+	for _, existing := range s.Clients {
+		if existing == nil { continue }
+		if id != "" && strings.EqualFold(existing.SteamID, id) {
+			// clear disconnect if previously set
+			existing.DisconnectDatetime = nil
+			if existing.Name == "" && nm != "" { existing.Name = nm }
+			return
+		}
+	}
+	// Fallback by name (if no SteamID)
+	if id == "" && nm != "" {
+		for _, existing := range s.Clients {
+			if existing == nil { continue }
+			if strings.EqualFold(existing.Name, nm) {
+				existing.DisconnectDatetime = nil
+				return
+			}
+		}
+	}
+	// Not found; add a new online client entry
+	if when.IsZero() { when = time.Now() }
+	c := &Client{ SteamID: id, Name: nm, ConnectDatetime: when }
+	if s.recordClientSession(c) {
+		s.appendPlayerLog(c)
+	}
+}
+
+// endClientsScan finalizes a CLIENTS scan by marking any currently live clients not seen
+// in the scan as disconnected now.
+func (s *Server) endClientsScan() {
+	if !s.clientsScanActive { return }
+	now := time.Now()
+	seen := s.clientsScanSeen
+	for _, existing := range s.LiveClients() {
+		if existing == nil { continue }
+		k := strings.TrimSpace(existing.SteamID)
+		if k == "" { k = strings.ToLower(strings.TrimSpace(existing.Name)) }
+		if k == "" { continue }
+		if _, ok := seen[k]; !ok {
+			existing.DisconnectDatetime = &now
+		}
+	}
+	s.rewritePlayersLog()
+	s.clientsScanActive = false
 }
 
 // queuePendingPlayerSave enqueues a manual save filename to be moved to playersave once completed.
@@ -1053,6 +1136,12 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 
 	// Welcome message (optional)
 	s.WelcomeMessage = strings.TrimSpace(cfg.WelcomeMessage)
+	s.WelcomeBackMessage = strings.TrimSpace(cfg.WelcomeBackMessage)
+	if cfg.WelcomeDelaySeconds >= 0 {
+		s.WelcomeDelaySeconds = cfg.WelcomeDelaySeconds
+	} else {
+		s.WelcomeDelaySeconds = 1
+	}
 
 	if cfg.RestartDelaySeconds >= 0 {
 		s.RestartDelaySeconds = cfg.RestartDelaySeconds
@@ -1076,6 +1165,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		Running:              false,
 		RestartDelaySeconds:  DefaultRestartDelaySeconds,
 		ShutdownDelaySeconds: 2,
+		WelcomeDelaySeconds:  1,
 	}
 
 	s.EnsureLogger(paths)
@@ -1433,74 +1523,166 @@ func (s *Server) installBepInEx(gameDir string) error {
 
 // Stop terminates the server process (if running), marks clients disconnected,
 // flushes logs, and resets in-memory chat when appropriate.
+// Stop performs an immediate (blocking) shutdown with any configured delay, without cancellation support.
+// Used by internal restart flows and legacy code paths where a synchronous stop is acceptable.
 func (s *Server) Stop() {
-	// Send warning message to players if server is running
-	if s.Running && s.Proc != nil {
-		// Compute delay and announce schedule
-		delay := s.shutdownDelayDuration()
-		// Helper to format timeframe for chat ("Xs" or "M minutes S seconds")
-		formatTimeframe := func(d time.Duration) string {
-			secs := int(d.Seconds())
-			if secs < 60 {
-				if secs == 1 {
-					return "1 second"
-				}
-				return fmt.Sprintf("%d seconds", secs)
-			}
-			m := secs / 60
-			sRem := secs % 60
-			if sRem == 0 {
-				if m == 1 {
-					return "1 minute"
-				}
-				return fmt.Sprintf("%d minutes", m)
-			}
-			if m == 1 {
-				if sRem == 1 {
-					return "1 minute 1 second"
-				}
-				return fmt.Sprintf("1 minute %d seconds", sRem)
-			}
-			if sRem == 1 {
-				return fmt.Sprintf("%d minutes 1 second", m)
-			}
-			return fmt.Sprintf("%d minutes %d seconds", m, sRem)
-		}
-
-		if delay > 0 {
-			// Initial notice with full timeframe
-			if err := s.SendCommand("chat", "Server is shutting down in "+formatTimeframe(delay)); err != nil {
-				if s.Logger != nil {
-					s.Logger.Write(fmt.Sprintf("Failed to send shutdown notice: %v", err))
-				}
-			}
-			// Second notice at T-10s when there is enough time
-			if delay > 10*time.Second {
-				time.Sleep(delay - 10*time.Second)
-				if err := s.SendCommand("chat", "Server is shutting down in 10 seconds"); err != nil {
-					if s.Logger != nil {
-						s.Logger.Write(fmt.Sprintf("Failed to send 10s notice: %v", err))
-					}
-				}
-				time.Sleep(10 * time.Second)
-			} else {
-				time.Sleep(delay)
-			}
-		} else {
-			// No delay: still announce an immediate shutdown
-			_ = s.SendCommand("chat", "Shutting down")
-		}
-		// Send QUIT command for graceful shutdown
-		if err := s.SendCommand("console", "QUIT"); err != nil {
-			if s.Logger != nil {
-				s.Logger.Write(fmt.Sprintf("Failed to send QUIT command: %v", err))
-			}
-		}
-		// Wait briefly for graceful shutdown
-		time.Sleep(3 * time.Second)
+	if !s.Running || s.Proc == nil {
+		// Nothing to stop; mark state and return
+		s.Running = false
+		s.Stopping = false
+		s.Starting = false
+		return
 	}
+	delay := s.shutdownDelayDuration()
+	if delay <= 0 {
+		// No delay: perform immediate shutdown
+		s.performFinalShutdown()
+		return
+	}
+	// Blocking delayed shutdown (legacy path). Sleeps cannot be canceled.
+	s.Stopping = true
+	s.StoppingEnds = time.Now().Add(delay)
+	s.sendShutdownNotices(delay)
+	s.performFinalShutdown()
+}
 
+// StopAsync schedules a delayed shutdown and returns immediately. If a delay is configured (>0),
+// players receive staged notices and the process is terminated after the countdown. A cancellation
+// channel allows interruption via CancelStop(). The provided broadcast callback (optional) is invoked
+// after state changes (initial schedule, cancellation, final termination) so the UI can refresh promptly.
+func (s *Server) StopAsync(broadcast func(*Server)) {
+	if s == nil || !s.Running || s.Proc == nil {
+		// Fallback to immediate stop logic
+		s.Stop()
+		if broadcast != nil {
+			broadcast(s)
+		}
+		return
+	}
+	delay := s.shutdownDelayDuration()
+	if delay <= 0 {
+		// Immediate path
+		s.performFinalShutdown()
+		if broadcast != nil { broadcast(s) }
+		return
+	}
+	if s.Stopping {
+		// Already scheduled; nothing to do
+		if broadcast != nil { broadcast(s) }
+		return
+	}
+	s.Stopping = true
+	s.StoppingEnds = time.Now().Add(delay)
+	// Create a fresh cancellation channel
+	s.StoppingCancel = make(chan struct{})
+	s.sendInitialShutdownNotice(delay)
+	if broadcast != nil { broadcast(s) }
+	go func(cancel <-chan struct{}, srv *Server, d time.Duration, bc func(*Server)) {
+		// Countdown logic with 1s ticks to allow responsive cancellation
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		tenSecondNoticeSent := false
+		for {
+			remaining := time.Until(srv.StoppingEnds)
+			if remaining <= 0 {
+				break
+			}
+			if remaining <= 10*time.Second && !tenSecondNoticeSent {
+				// Send 10s notice once
+				if remaining > 0 { srv.sendTenSecondNotice() }
+				tenSecondNoticeSent = true
+			}
+			select {
+			case <-cancel:
+				// Cancellation requested; finalize without stopping process
+				if srv.Logger != nil {
+					srv.Logger.Write("Shutdown canceled before completion")
+				}
+				srv.sendCancellationNotice()
+				srv.Stopping = false
+				srv.StoppingEnds = time.Time{}
+				if bc != nil { bc(srv) }
+				return
+			case <-ticker.C:
+				// continue loop
+			}
+		}
+		// Final notice + QUIT
+		srv.sendFinalNotice()
+		srv.performFinalShutdown()
+		if bc != nil { bc(srv) }
+	}(s.StoppingCancel, s, delay, broadcast)
+}
+
+// CancelStop interrupts a pending asynchronous shutdown (if any). Returns true if cancellation occurred.
+func (s *Server) CancelStop() bool {
+	if s == nil || !s.Stopping {
+		return false
+	}
+	if s.StoppingCancel != nil {
+		// Safe close: recover if already closed
+		select {
+		case <-s.StoppingCancel:
+			// already closed
+		default:
+			close(s.StoppingCancel)
+		}
+		s.StoppingCancel = nil
+		return true
+	}
+	return false
+}
+
+// Helper: send formatted timeframe + initial notice
+func (s *Server) sendInitialShutdownNotice(delay time.Duration) {
+	s.sendChat("Server is shutting down in " + s.formatTimeframe(delay))
+}
+
+func (s *Server) sendTenSecondNotice() { s.sendChat("Server is shutting down in 10 seconds") }
+func (s *Server) sendFinalNotice() { s.sendChat("Server shutting down now") }
+func (s *Server) sendCancellationNotice() { s.sendChat("Shutdown canceled; server will remain running") }
+
+func (s *Server) sendChat(msg string) {
+	if s == nil || !s.Running || s.Proc == nil {
+		return
+	}
+	expanded := s.RenderChatMessage(msg, nil)
+	if err := s.SendCommand("chat", expanded); err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Failed to send chat notice '%s': %v", expanded, err))
+		}
+	}
+}
+
+// sendShutdownNotices is used by the legacy blocking Stop() path.
+func (s *Server) sendShutdownNotices(delay time.Duration) {
+	s.sendInitialShutdownNotice(delay)
+	if delay > 10*time.Second {
+		time.Sleep(delay - 10*time.Second)
+		s.sendTenSecondNotice()
+		time.Sleep(10 * time.Second)
+	} else {
+		time.Sleep(delay)
+	}
+	s.sendFinalNotice()
+}
+
+// performFinalShutdown issues QUIT and finalizes state.
+func (s *Server) performFinalShutdown() {
+	if s == nil || !s.Running || s.Proc == nil {
+		s.Running = false
+		s.Stopping = false
+		s.Starting = false
+		return
+	}
+	if err := s.SendCommand("console", "QUIT"); err != nil {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Failed to send QUIT command: %v", err))
+		}
+	}
+	time.Sleep(3 * time.Second)
 	s.Running = false
+	s.Stopping = false
 	s.Starting = false
 	now := time.Now()
 	s.markAllClientsDisconnected(now)
@@ -1511,6 +1693,77 @@ func (s *Server) Stop() {
 	if s.Proc != nil {
 		s.Proc.Process.Kill()
 	}
+}
+
+// formatTimeframe turns a duration into a player-friendly phrase.
+func (s *Server) formatTimeframe(d time.Duration) string {
+	secs := int(d.Seconds())
+	if secs < 60 {
+		if secs == 1 { return "1 second" }
+		return fmt.Sprintf("%d seconds", secs)
+	}
+	m := secs / 60
+	sRem := secs % 60
+	if sRem == 0 {
+		if m == 1 { return "1 minute" }
+		return fmt.Sprintf("%d minutes", m)
+	}
+	if m == 1 {
+		if sRem == 1 { return "1 minute 1 second" }
+		return fmt.Sprintf("1 minute %d seconds", sRem)
+	}
+	if sRem == 1 { return fmt.Sprintf("%d minutes 1 second", m) }
+	return fmt.Sprintf("%d minutes %d seconds", m, sRem)
+}
+
+// RenderChatMessage expands supported tokens in outbound SAY/chat messages.
+// Supported tokens:
+//  {player}      - connecting player's name (when provided in ctx)
+//  {lastplayer}  - most recent connected player's name (history fallback)
+//  {server}      - server name
+//  {world}       - current world id/name
+//  {time}        - current local time (HH:MM)
+//  {date}        - current local date (YYYY-MM-DD)
+// The ctx map may include { "player": "Name" } during connect events.
+func (s *Server) RenderChatMessage(msg string, ctx map[string]string) string {
+	if s == nil {
+		return msg
+	}
+	out := msg
+	// Helper to replace a token if present
+	replace := func(token, value string) {
+		out = strings.ReplaceAll(out, "{"+token+"}", value)
+	}
+	// Player tokens
+	var playerName string
+	if ctx != nil {
+		playerName = strings.TrimSpace(ctx["player"])
+	}
+	if playerName != "" {
+		replace("player", playerName)
+	} else if strings.Contains(out, "{player}") {
+		replace("player", s.LastConnectedPlayerName())
+	}
+	if strings.Contains(out, "{lastplayer}") {
+		replace("lastplayer", s.LastConnectedPlayerName())
+	}
+	// Server/world tokens
+	replace("server", s.Name)
+	w := s.WorldID
+	if strings.TrimSpace(w) == "" { w = s.World }
+	replace("world", w)
+	// Time/date tokens
+	now := time.Now()
+	replace("time", now.Format("15:04"))
+	replace("date", now.Format("2006-01-02"))
+	// Additional tokens
+	replace("player_count", fmt.Sprintf("%d", len(s.LiveClients())))
+	replace("max_players", fmt.Sprintf("%d", s.MaxClients))
+	if s.Port > 0 { replace("port", fmt.Sprintf("%d", s.Port)) }
+	replace("difficulty", s.Difficulty)
+	replace("language", s.Language)
+	replace("beta", func() string { if s.Beta { return "beta" }; return "release" }())
+	return out
 }
 
 func (s *Server) markAllClientsDisconnected(t time.Time) {
@@ -1724,14 +1977,30 @@ func (s *Server) Start() {
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
 
+	// Detach process group when detached mode is enabled via environment variable.
+	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
+		if s.Logger != nil {
+			s.Logger.Write("Applying detached process group (Setpgid) for server process")
+		}
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+
 	if s.Logger != nil {
 		s.Logger.Write("Starting server process")
 	}
-	// Prepare stdin pipe before starting so we can fall back to stdin commands if SCON is unavailable
-	if pipe, err := cmd.StdinPipe(); err == nil {
-		s.stdin = pipe
-	} else if s.Logger != nil {
-		s.Logger.Write(fmt.Sprintf("Warning: failed to open stdin pipe: %v", err))
+	// stdin fallback removed: Stationeers does not accept stdin commands reliably
+	// If manager is configured for detached servers, start process in its own group (Unix)
+	if runtime.GOOS != "windows" {
+		if m := s.Paths; m != nil { /* placeholder if future path checks needed */ }
+		// Setpgid will prevent receiving parent termination signals
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		if s != nil && s.Paths != nil { /* no-op references to avoid unused warnings */ }
+		// We will decide detached behavior based on environment variable until wired to Manager at start
+		if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
+			cmd.SysProcAttr.Setpgid = true
+		}
 	}
 	if err := cmd.Start(); err != nil {
 		if s.Logger != nil {
@@ -1764,10 +2033,7 @@ func (s *Server) Start() {
 		s.Running = false
 		s.Starting = false
 		s.Proc = nil
-		if s.stdin != nil {
-			_ = s.stdin.Close()
-			s.stdin = nil
-		}
+		// stdin fallback removed
 		close(stop)
 		if s.Thrd == stop {
 			s.Thrd = nil
@@ -2000,8 +2266,8 @@ func (s *Server) CurrentSCONPort() int {
 	return 8081
 }
 
-// SendRaw writes a single console line to the running server's stdin.
-// It returns an error if the server is not running or stdin is unavailable.
+// SendRaw sends a single console command via SCON HTTP API.
+// Returns an error if the server is not running or SCON API is unavailable.
 func (s *Server) SendRaw(line string) error {
 	if s == nil {
 		return fmt.Errorf("server unavailable")
@@ -2020,7 +2286,7 @@ func (s *Server) SendRaw(line string) error {
 		return fmt.Errorf("server is not running")
 	}
 
-	// Use SCON HTTP API when available; otherwise fall back to stdin
+	// Use SCON HTTP API only; stdin fallback is not supported
 	// Prefer dynamic detection from BepInEx logs; fallback to game port + 1
 	rconPort := s.CurrentSCONPort()
 
@@ -2047,12 +2313,6 @@ func (s *Server) SendRaw(line string) error {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("SCON HTTP POST failed: %v", err))
 		}
-		// Fallback to stdin when SCON is unavailable
-		if s.stdin != nil {
-			if _, werr := io.WriteString(s.stdin, trimmed+"\n"); werr == nil {
-				return nil
-			}
-		}
 		return fmt.Errorf("failed to send command to SCON API: %w", err)
 	}
 	defer resp.Body.Close()
@@ -2066,12 +2326,6 @@ func (s *Server) SendRaw(line string) error {
 		}
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("SCON API error %d: %s", resp.StatusCode, bodyStr))
-		}
-		// Fallback to stdin on non-200 as well
-		if s.stdin != nil {
-			if _, werr := io.WriteString(s.stdin, trimmed+"\n"); werr == nil {
-				return nil
-			}
 		}
 		return fmt.Errorf("SCON API returned status %d: %s", resp.StatusCode, bodyStr)
 	}

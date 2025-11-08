@@ -627,6 +627,12 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 	if len(welcomeMessage) > 300 {
 		welcomeMessage = welcomeMessage[:300]
 	}
+	welcomeBackMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_back_message")), "\r", " "), "\n", " "))
+	if len(welcomeBackMessage) > 300 { welcomeBackMessage = welcomeBackMessage[:300] }
+	welcomeDelay := 1
+	if v := strings.TrimSpace(c.PostForm("welcome_delay_seconds")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 600 { welcomeDelay = n }
+	}
 
 	formState := gin.H{
 		"name":                     name,
@@ -653,6 +659,8 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		"use_steam_p2p":            useSteamP2P,
 		"disconnect_timeout":       disconnectTimeout,
 		"welcome_message":          welcomeMessage,
+		"welcome_back_message":     welcomeBackMessage,
+		"welcome_delay_seconds":    welcomeDelay,
 	}
 	// Reflect Player Saves already included; keep extended settings for redisplay
 	// Player Saves preference for UI (client-side feature)
@@ -814,6 +822,8 @@ func (h *ManagerHandlers) NewServerPOST(c *gin.Context) {
 		RestartDelaySeconds:   restartDelay,
 		ShutdownDelaySeconds:  shutdownDelay,
 		WelcomeMessage:        welcomeMessage,
+		WelcomeBackMessage:    welcomeBackMessage,
+		WelcomeDelaySeconds:   welcomeDelay,
 	}
 
 	// Set default language based on selected channel
