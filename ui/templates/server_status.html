@@ -111,7 +111,13 @@
                     </h3>
                     <div class="right-title-actions">
                         {{ if eq .role "admin" }}
-                        <button type="button" id="btn-rename-server" class="btn btn-secondary btn-min-sm" title="Rename server" aria-label="Rename server">Rename</button>
+                        <button type="button" id="btn-rename-server" class="btn btn-secondary btn-min-sm" title="Rename server" aria-label="Rename server">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
+                                <path d="M14.06 4.94l3.75 3.75"></path>
+                            </svg>
+                            <span class="ml-6">Rename</span>
+                        </button>
                         {{ end }}
                         <div class="lang-control relative">
                             <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
