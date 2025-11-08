@@ -1959,6 +1959,18 @@
             const renameBtn = document.getElementById('btn-rename-server');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
+                        // If an inline startup error banner is present on load, also surface a modal
+                        try {
+                            const banner = document.getElementById('server-error-banner');
+                            const textNode = document.getElementById('server-error-text');
+                            if (banner && textNode) {
+                                const msg = (textNode.textContent || '').trim();
+                                if (msg) {
+                                    if (window.askInfo) window.askInfo({ title: 'Server Startup Error', message: msg, confirmText: 'Close' });
+                                    else if (window.openInfo) window.openInfo({ title: 'Server Startup Error', message: msg, confirmText: 'Close' });
+                                }
+                            }
+                        } catch(_) {}
                 // Token Help modal wiring (for Chat and Welcome Message)
                 (function(){
                     const chatTokenBtn = document.getElementById('chat-token-help');

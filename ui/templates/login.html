@@ -328,6 +328,17 @@
             } else {
                 document.getElementById('password').focus();
             }
+            // Modalize initial server-rendered error banner if present
+            try {
+                const inlineErr = document.querySelector('.error-message[role="alert"]');
+                if (inlineErr) {
+                    const msg = (inlineErr.textContent || '').trim();
+                    if (msg) {
+                        if (window.askInfo) window.askInfo({ title:'Login Error', message: msg, confirmText:'Close' });
+                        else if (window.openInfo) window.openInfo({ title:'Login Error', message: msg, confirmText:'Close' });
+                    }
+                }
+            } catch(_) {}
         });
     </script>
 </body>

@@ -664,6 +664,16 @@
         }
 
         document.addEventListener("DOMContentLoaded", () => {
+            try {
+                const inlineErr = document.querySelector('.alert.alert-error[role="alert"]');
+                if (inlineErr && (window.askInfo || window.openInfo)) {
+                    const msg = (inlineErr.textContent || '').trim();
+                    if (msg) {
+                        if (window.askInfo) window.askInfo({ title: 'Create Server Error', message: msg, confirmText: 'Close' });
+                        else window.openInfo({ title: 'Create Server Error', message: msg, confirmText: 'Close' });
+                    }
+                }
+            } catch(_) {}
             const worldSelect = document.getElementById("world_select");
             const locSelect = document.getElementById("start_location");
             const condSelect = document.getElementById("start_condition");

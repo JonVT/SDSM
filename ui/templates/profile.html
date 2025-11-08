@@ -138,7 +138,27 @@
       if (cp) cp.addEventListener('input', updateHint);
       updateHint();
 
-      // Success info after POST
+      // Modalize inline error/success banners (still keep them for accessibility)
+      try {
+        const errBanner = document.querySelector('.alert.alert-error[role="alert"] .alert-message');
+        if (errBanner) {
+          const emsg = (errBanner.textContent||'').trim();
+          if (emsg) {
+            if (window.askInfo) window.askInfo({ title:'Update Failed', message: emsg, confirmText:'Close' });
+            else if (window.openInfo) window.openInfo({ title:'Update Failed', message: emsg, confirmText:'Close' });
+          }
+        }
+        const okBanner = document.querySelector('.alert.alert-success[role="status"] .alert-message');
+        if (okBanner) {
+          const smsg = (okBanner.textContent||'').trim();
+          if (smsg) {
+            if (window.askInfo) window.askInfo({ title:'Profile Updated', message: smsg, confirmText:'OK' });
+            else if (window.openInfo) window.openInfo({ title:'Profile Updated', message: smsg, confirmText:'OK' });
+          }
+        }
+      } catch(_) {}
+
+      // Success info after POST (flags from redirect)
       try {
         const success = flags && flags.dataset ? (flags.dataset.success || '').trim() : '';
         if (success) {

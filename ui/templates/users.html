@@ -34,7 +34,7 @@
 
   <main class="container manager-content">
     {{ if .error }}
-    <div class="alert alert-danger" role="alert">{{ .error }}</div>
+    <div class="alert alert-danger" role="alert" id="users-inline-error">{{ .error }}</div>
     {{ end }}
 
     <section class="card p-4 mb-4">
@@ -144,6 +144,18 @@
       setTheme(current === 'dark' ? 'light' : 'dark');
     }
     setTheme(getStoredTheme());
+
+    // Modalize initial error if present
+    try {
+      const inlineErr = document.getElementById('users-inline-error');
+      if (inlineErr) {
+        const msg = (inlineErr.textContent || '').trim();
+        if (msg) {
+          if (window.askInfo) window.askInfo({ title:'User Management Error', message: msg, confirmText:'Close' });
+          else if (window.openInfo) window.openInfo({ title:'User Management Error', message: msg, confirmText:'Close' });
+        }
+      }
+    } catch(_) {}
   </script>
 </body>
 </html>

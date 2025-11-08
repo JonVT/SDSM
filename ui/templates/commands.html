@@ -175,9 +175,9 @@
         });
     })();
     </script>
+    {{/* Ensure modal partials are available when this template is rendered standalone */}}
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
 </body>
 </html>
 {{ end }}
-{{/* Ensure modal partials are available when this template is rendered standalone */}}
-{{ template "modal_templates" . }}
-{{ template "modal_scripts" . }}

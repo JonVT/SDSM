@@ -340,6 +340,24 @@
         const installSection = document.getElementById('install-section');
         const updatesHint = document.getElementById('updatesHint');
 
+        function maybePromptUpdates(data) {
+            try {
+                const shouldPrompt = data && data.updatesAvailable && !data.inProgress && !sessionStorage.getItem('setupUpdatesPrompted');
+                if (!shouldPrompt) return;
+                sessionStorage.setItem('setupUpdatesPrompted', '1');
+                if (window.askConfirm) {
+                    window.askConfirm({
+                        title: 'Updates Available',
+                        message: 'New versions are available. Update components now?\n\nYou can view the changelog on the updates page.',
+                        confirmText: 'Update Now',
+                        cancelText: 'Later'
+                    }).then(ok => { if (ok) runUpdate(); });
+                } else if (window.confirm) {
+                    if (window.confirm('Updates available. Update components now?')) runUpdate();
+                }
+            } catch (_) { /* noop */ }
+        }
+
         function updateErrorBox(errors) {
             if (!errorBox || !errorList) {
                 return;
@@ -498,6 +516,9 @@
                     if (updatesHint) {
                         updatesHint.classList.toggle('hidden', !(data.updatesAvailable && !data.inProgress));
                     }
+
+                    // Politely prompt user to update when available
+                    maybePromptUpdates(data);
 
                     const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
 
@@ -684,6 +705,8 @@
                         if (!updateBtn) { updateBtn = document.getElementById('updateBtn'); }
                         if (updateBtn) updateBtn.classList.toggle('hidden', !data.updatesAvailable);
                         if (updatesHint) updatesHint.classList.toggle('hidden', !data.updatesAvailable);
+                        // Prompt once if updates are available and we're idle
+                        maybePromptUpdates(data);
                     }
                 }).catch(()=>{});
         })();
@@ -697,6 +720,23 @@
         }
         function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); setTheme(current === 'dark' ? 'light' : 'dark'); }
         setTheme(getStoredTheme());
+
+        // If server rendered errors are present, surface them in a modal too
+        (function showInitialErrors(){
+            try {
+                if (errorBox && errorBox.classList.contains('active')) {
+                    const items = Array.from((errorList || document.createElement('ul')).querySelectorAll('li'))
+                        .map(li => (li.textContent || '').trim()).filter(Boolean);
+                    if (items.length) {
+                        if (window.openInfo) {
+                            window.openInfo({ title:'Setup Issues', message: items.join('\n'), confirmText:'Review' });
+                        } else if (window.alert) {
+                            window.alert(items.join('\n'));
+                        }
+                    }
+                }
+            } catch(_) { /* noop */ }
+        })();
     </script>
 </body>
 </html>

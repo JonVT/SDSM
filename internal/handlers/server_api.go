@@ -3082,8 +3082,10 @@ func (h *ManagerHandlers) APIServers(c *gin.Context) {
 	}
 
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
+		// Include role so nested partials (e.g., server_card.html) can conditionally render admin controls
 		c.HTML(http.StatusOK, "server_cards.html", gin.H{
 			"servers": servers,
+			"role":    role,
 		})
 		return
 	}
