@@ -255,6 +255,15 @@ func setupRouter() *gin.Engine {
 			}
 			return false
 		},
+		// dict builds a map for passing multiple values to partial templates.
+		"dict": func(values ...interface{}) map[string]interface{} {
+			m := make(map[string]interface{})
+			for i := 0; i+1 < len(values); i += 2 {
+				key, _ := values[i].(string)
+				m[key] = values[i+1]
+			}
+			return m
+		},
 		// initials returns up to the first two runes of a string in uppercase for avatar badges
 		"initials": func(s string) string {
 			s = strings.TrimSpace(s)

@@ -2,7 +2,9 @@
 {{/*
   Renders a single server card. Dot MUST be a *models.Server.
 */}}
-{{ $srv := . }}
+{{/* Expect dot to be a dict with keys Server and Role */}}
+{{ $srv := .Server }}
+{{ $role := .Role }}
 
 <article class="glass-card server-card" data-server-id="{{ $srv.ID }}" data-target-url="/server/{{ $srv.ID }}">
   <div class="card-header">
@@ -108,7 +110,7 @@
         Start
       </button>
     {{ end }}
-    {{ if eq $.role "admin" }}
+    {{ if eq $role "admin" }}
     <button
       class="btn btn-secondary btn-pill"
       data-action="rename-server"

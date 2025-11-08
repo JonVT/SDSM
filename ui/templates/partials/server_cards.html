@@ -1,7 +1,7 @@
 {{ $list := index . "servers" }}
 {{ if gt (len $list) 0 }}
   {{ range $list }}
-    {{ template "server_card.html" . }}
+    {{ template "server_card.html" (dict "Server" . "Role" $.role) }}
   {{ end }}
 {{ else }}
   <div class="glass-card empty-state">
