@@ -2,34 +2,33 @@
     // Global guard to prevent ReferenceError if handlers run before DOMContentLoaded sets locals
     window.__sdsmPendingSubmit = window.__sdsmPendingSubmit || false;
     function openLogPopup(serverId) {
-        const popup = document.getElementById('logPopup');
-        const body = document.getElementById('logPopupBody');
-        popup.classList.add('active');
-        body.textContent = 'Loading log...';
-        
-        // Fetch server log via API
-        fetch(`/api/servers/${serverId}/log`, { credentials: 'same-origin' })
-            .then(r => r.text())
-            .then(log => {
-                body.textContent = log || 'No log data available';
-                // Auto-scroll to bottom
-                body.scrollTop = body.scrollHeight;
-            })
-            .catch(err => {
-                body.textContent = 'Error loading log: ' + err.message;
-            });
+        if (typeof window.openInfo === 'function') {
+            const body = document.createElement('div');
+            body.className = 'log-popup-body';
+            body.textContent = 'Loading...';
+            window.openInfo({ title: 'Server Log', body, buttonText: 'Close' });
+            fetch(`/api/servers/${serverId}/log`, { credentials: 'same-origin' })
+                .then(r => r.text())
+                .then(log => { body.textContent = log || 'No log data available'; body.scrollTop = body.scrollHeight; })
+                .catch(err => { body.textContent = 'Error loading log: ' + err.message; });
+        } else {
+            // Minimal fallback using askInfo helper
+            fetch(`/api/servers/${serverId}/log`, { credentials: 'same-origin' })
+                .then(r => r.text())
+                .then(log => {
+                    askInfo({ title: 'Server Log', message: (log || 'No log data available').slice(0, 4000) });
+                })
+                .catch(err => { askInfo({ title: 'Server Log Error', message: 'Error loading log: ' + err.message }); });
+        }
     }
 
     function closeLogPopup() {
-        document.getElementById('logPopup').classList.remove('active');
+        const el = document.getElementById('logPopup');
+        if (el) el.classList.remove('active');
     }
 
     // Close popup when clicking outside
-    document.getElementById('logPopup').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeLogPopup();
-        }
-    });
+    // Legacy logPopup element removed; no click handler necessary
 
     function getStoredTheme() {
         return localStorage.getItem('theme') || 'dark';
@@ -49,6 +48,28 @@
         const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
         const next = current === 'dark' ? 'light' : 'dark';
         setTheme(next);
+    }
+
+    // Unified confirm wrapper using modal helper when available
+    function askConfirm(options, fallbackMessage) {
+        try {
+            if (window.openConfirm) {
+                return window.openConfirm(options);
+            }
+        } catch(_) {}
+        return Promise.resolve(window.confirm(fallbackMessage));
+    }
+
+    // Unified info wrapper using modal helper when available
+    function askInfo(options) {
+        try {
+            if (window.openInfo) {
+                const body = document.createElement('div');
+                body.textContent = options.message || '';
+                return window.openInfo({ title: options.title || 'Info', body, buttonText: options.buttonText || 'Close' });
+            }
+        } catch(_) {}
+        return Promise.resolve(alert((options.title ? options.title + ': ' : '') + (options.message || '')));
     }
 
     // Initialize theme
@@ -659,23 +680,33 @@
                 const steamId = (delAllBtn.dataset.steamId || '').trim();
                 if (!steamId) return;
                 e.stopPropagation();
-                delAllBtn.disabled = true;
-                fetch(`/api/servers/${serverId}/player-saves/delete-all`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ steam_id: steamId })
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const typeH = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    fetchPlayerSaves();
-                }).catch(() => {}).finally(() => { delAllBtn.disabled = false; });
+                function proceed(){
+                    delAllBtn.disabled = true;
+                    fetch(`/api/servers/${serverId}/player-saves/delete-all`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ steam_id: steamId })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const typeH = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchPlayerSaves();
+                    }).catch(() => {}).finally(() => { delAllBtn.disabled = false; });
+                }
+                askConfirm({
+                    title: 'Delete All Player Files',
+                    body: 'Delete all save files for this player? This does not exclude the player from future saves.',
+                    confirmText: 'Delete All',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '⚠'
+                }, 'Delete all files for this player?').then(ok => { if (ok) proceed(); });
                 return;
             }
             if (headerRow && !excludeBtn) {
@@ -699,23 +730,33 @@
                 const steamId = (excludeBtn.dataset.steamId || '').trim();
                 if (!steamId) return;
                 e.stopPropagation();
-                excludeBtn.disabled = true;
-                fetch(`/api/servers/${serverId}/player-saves/exclude`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ steam_id: steamId })
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const typeH = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    fetchPlayerSaves();
-                }).catch(() => {}).finally(() => { excludeBtn.disabled = false; });
+                function proceed(){
+                    excludeBtn.disabled = true;
+                    fetch(`/api/servers/${serverId}/player-saves/exclude`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ steam_id: steamId })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const typeH = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchPlayerSaves();
+                    }).catch(() => {}).finally(() => { excludeBtn.disabled = false; });
+                }
+                askConfirm({
+                    title: 'Delete + Exclude Player',
+                    body: 'Delete all files for this player and exclude them from future player saves?',
+                    confirmText: 'Delete + Exclude',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '⚠'
+                }, 'Delete files and exclude this player from future saves?').then(ok => { if (ok) proceed(); });
                 return;
             }
             if (loadBtn) {
@@ -724,26 +765,33 @@
                 const name = (loadBtn.dataset.filename || '').trim();
                 if (!path && !name) return;
                 const type = (loadBtn.dataset.type || 'auto');
-                const confirmed = window.confirm('Load this save? The current world state will be replaced.');
-                if (!confirmed) return;
-                loadBtn.disabled = true;
-                fetch(`/api/servers/${serverId}/load`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ type, name })
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const type = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
-                        }
-                    } catch(_) {}
-                }).catch(() => {
-                    // no-op
-                }).finally(() => { loadBtn.disabled = false; });
+                function doLoad(){
+                    loadBtn.disabled = true;
+                    fetch(`/api/servers/${serverId}/load`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ type, name })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                            }
+                        } catch(_) {}
+                    }).catch(() => {
+                        // no-op
+                    }).finally(() => { loadBtn.disabled = false; });
+                }
+                askConfirm({
+                    title: 'Load Save',
+                    body: 'Load this save? The current world state will be replaced.',
+                    confirmText: 'Load',
+                    cancelText: 'Cancel',
+                    icon: '↻'
+                }, 'Load this save? The current world state will be replaced.').then(ok => { if (ok) doLoad(); });
                 return;
             }
             if (delBtn) {
@@ -751,38 +799,46 @@
                 const name = (delBtn.dataset.filename || '').trim();
                 const type = (delBtn.dataset.type || 'auto');
                 if (!name) return;
-                const confirmed = window.confirm('Delete this save file permanently?');
-                if (!confirmed) return;
-                delBtn.disabled = true;
-                const url = new URL(window.location.origin + `/api/servers/${serverId}/saves`);
-                url.searchParams.set('type', type);
-                url.searchParams.set('name', name);
-                fetch(url.toString(), {
-                    method: 'DELETE',
-                    credentials: 'same-origin',
-                    headers: { 'Accept': 'application/json' }
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const typeH = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    // Refresh the currently active tab after deletion
-                    try {
-                        const activeTab = savesTabs.querySelector('.tab.active');
-                        const filter = activeTab ? activeTab.getAttribute('data-save-filter') : '';
-                        if (filter === 'auto') fetchAutoSaves();
-                        else if (filter === 'quick') fetchQuickSaves();
-                        else if (filter === 'manual') fetchManualSaves();
-                        else if (filter === 'player') fetchPlayerSaves();
-                        else fetchAllSaves();
-                    } catch(_) { fetchAllSaves(); }
-                }).catch(() => {
-                    // no-op
-                }).finally(() => { delBtn.disabled = false; });
+                function doDelete(){
+                    delBtn.disabled = true;
+                    const url = new URL(window.location.origin + `/api/servers/${serverId}/saves`);
+                    url.searchParams.set('type', type);
+                    url.searchParams.set('name', name);
+                    fetch(url.toString(), {
+                        method: 'DELETE',
+                        credentials: 'same-origin',
+                        headers: { 'Accept': 'application/json' }
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const typeH = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: typeH || 'success', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        // Refresh the currently active tab after deletion
+                        try {
+                            const activeTab = savesTabs.querySelector('.tab.active');
+                            const filter = activeTab ? activeTab.getAttribute('data-save-filter') : '';
+                            if (filter === 'auto') fetchAutoSaves();
+                            else if (filter === 'quick') fetchQuickSaves();
+                            else if (filter === 'manual') fetchManualSaves();
+                            else if (filter === 'player') fetchPlayerSaves();
+                            else fetchAllSaves();
+                        } catch(_) { fetchAllSaves(); }
+                    }).catch(() => {
+                        // no-op
+                    }).finally(() => { delBtn.disabled = false; });
+                }
+                askConfirm({
+                    title: 'Delete Save',
+                    body: 'Delete this save file permanently?',
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '🗑'
+                }, 'Delete this save file permanently?').then(ok => { if (ok) doDelete(); });
             }
         });
     }
@@ -1900,28 +1956,42 @@
         const langBtn = document.getElementById('btn-language');
         const langMenu = document.getElementById('language-menu');
         const currLangLabel = document.getElementById('current-language');
+            const renameBtn = document.getElementById('btn-rename-server');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
                 // Token Help modal wiring (for Chat and Welcome Message)
                 (function(){
-                    const tokenModal = document.getElementById('tokenHelpModal');
-                    const tokenClose = document.getElementById('tokenHelpClose');
-                    const openButtons = [];
                     const chatTokenBtn = document.getElementById('chat-token-help');
                     const welcomeTokenBtn = document.getElementById('welcome-token-help');
-                    if (chatTokenBtn) openButtons.push(chatTokenBtn);
-                    if (welcomeTokenBtn) openButtons.push(welcomeTokenBtn);
-                    function openModal(){ if (tokenModal) tokenModal.classList.add('active'); }
-                    function closeModal(){ if (tokenModal) tokenModal.classList.remove('active'); }
-                    openButtons.forEach(btn => btn.addEventListener('click', (e) => { e.preventDefault(); openModal(); }));
-                    if (tokenClose) tokenClose.addEventListener('click', closeModal);
-                    if (tokenModal) tokenModal.addEventListener('click', (e) => { if (e.target === tokenModal) closeModal(); });
-                    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+                    function buildBody(){
+                        const wrap = document.createElement('div');
+                        wrap.innerHTML = '<p>You can include these tokens in chat messages and the Welcome Message. They will be replaced automatically before sending to the server.</p>'+
+                            '<ul class="pl-5">'
+                            + '<li><code>[ServerName]</code>: The server name</li>'
+                            + '<li><code>[WorldName]</code>: The world name</li>'
+                            + '<li><code>[WorldID]</code>: The world ID</li>'
+                            + '<li><code>[StartLocation]</code>: Start location</li>'
+                            + '<li><code>[StartCondition]</code>: Start condition</li>'
+                            + '<li><code>[Date]</code>: Current date (YYYY-MM-DD)</li>'
+                            + '<li><code>[Time]</code>: Current time (HH:MM:SS)</li>'
+                            + '<li><code>[LastPlayer]</code>: Name of the last player to connect</li>'
+                            + '</ul>';
+                        return wrap;
+                    }
+                    function openTokenHelp(e){
+                        if (e) e.preventDefault();
+                        if (typeof window.openInfo === 'function') {
+                            window.openInfo({ title: 'Chat Token Reference', body: buildBody(), buttonText: 'Close' });
+                        }
+                    }
+                    if (chatTokenBtn) chatTokenBtn.addEventListener('click', openTokenHelp);
+                    if (welcomeTokenBtn) welcomeTokenBtn.addEventListener('click', openTokenHelp);
                 })();
         const updateParamsBtn = document.getElementById('btn-update-params');
-        const modal = document.getElementById('paramChangeModal');
-        const modalConfirm = document.getElementById('paramChangeConfirm');
-        const modalCancel = document.getElementById('paramChangeCancel');
+        // Legacy param change modal elements removed; now handled by openConfirm helper
+        const modal = null;
+        const modalConfirm = null;
+        const modalCancel = null;
         const confirmFlag = document.getElementById('confirm-reset-saves-flag');
         // More/Less toggle for Server Control card
         const controlCard = document.querySelector('.card.card-control');
@@ -1965,6 +2035,73 @@
         // Language is no longer a startup parameter; dropdown remains for backward compatibility only if present
         populateLanguageOptions();
         updateWorldThumb();
+            // Rename server handler (admin only button present when role == admin)
+            if (renameBtn) {
+                renameBtn.addEventListener('click', function(){
+                    const serverId = String(rootEl.dataset.serverId || '').trim();
+                    if (!serverId) return;
+                    const nameEl = document.getElementById('server-name');
+                    const current = nameEl ? (nameEl.textContent || '').trim() : '';
+
+                    const tpl = document.getElementById('renameModalTemplate');
+                    let modal;
+                    if (tpl) {
+                        modal = tpl.cloneNode(true);
+                        modal.id = '';
+                        modal.style.display = '';
+                        modal.classList.add('active');
+                    } else {
+                        modal = document.createElement('div');
+                        modal.className = 'confirm-modal active';
+                        modal.innerHTML = '<div class="modal-card">'
+                            + '<div class="modal-header"><h3 class="modal-title">Rename Server</h3></div>'
+                            + '<div class="modal-body">'
+                            + '<label for="rename-input">New Name</label>'
+                            + '<input id="rename-input" class="form-input" style="margin-top:8px;width:100%;" />'
+                            + '</div>'
+                            + '<div class="modal-actions">'
+                            + '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>'
+                            + '<button type="button" class="btn btn-primary" data-action="apply">Save</button>'
+                            + '</div>'
+                            + '</div>';
+                    }
+                    document.body.appendChild(modal);
+                    const input = modal.querySelector('#rename-input');
+                    if (input) { input.value = current; input.focus(); try { input.select && input.select(); } catch(_) {} }
+                    const cleanup = () => { try { modal.remove(); } catch(_) {} try { renameBtn.disabled = false; } catch(_) {} };
+                    const onBackdrop = (e) => { if (e.target === modal) { modal.removeEventListener('click', onBackdrop); cleanup(); } };
+                    modal.addEventListener('click', onBackdrop);
+                    const cancelEl = modal.querySelector('[data-action=cancel]');
+                    const applyEl = modal.querySelector('[data-action=apply]');
+                    if (cancelEl) cancelEl.addEventListener('click', cleanup);
+                    if (applyEl) applyEl.addEventListener('click', () => {
+                        const val = (input && input.value || '').trim();
+                        if (!val || val === current) { cleanup(); return; }
+                        renameBtn.disabled = true;
+                        fetch('/server/' + serverId, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                            body: new URLSearchParams({ update: 'true', name: val })
+                        }).then(res => {
+                            try {
+                                const typeH = res.headers.get('X-Toast-Type');
+                                const titleH = res.headers.get('X-Toast-Title') || 'Server Renamed';
+                                const msgH = res.headers.get('X-Toast-Message') || 'Server name updated.';
+                                if (msgH && typeof window.showToast === 'function') {
+                                    window.showToast({ type: typeH || 'success', title: titleH, message: msgH });
+                                }
+                            } catch(_) {}
+                            if (res.ok && nameEl) {
+                                nameEl.textContent = val;
+                                try { document.title = val + ' - SDSM'; } catch(_) {}
+                            }
+                        }).catch(()=>{}).finally(cleanup);
+                    });
+                    const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); window.removeEventListener('keydown', escHandler); } };
+                    window.addEventListener('keydown', escHandler);
+                });
+            }
                 // Start SCON health polling
                 try {
                     paintSCONHealth(false);
@@ -2677,24 +2814,7 @@
             return (currWorld !== initWorldRef) || (currLoc !== initLocRef) || (currCond !== initCondRef);
         }
 
-        function showParamChangeModal(onConfirm, onCancel){
-            if (modal) {
-                modal.classList.add('active');
-                const cleanup = () => {
-                    if (modalConfirm) modalConfirm.removeEventListener('click', confirmHandler);
-                    if (modalCancel) modalCancel.removeEventListener('click', cancelHandler);
-                    modal.removeEventListener('click', backdropHandler);
-                };
-                const confirmHandler = () => { cleanup(); if (typeof onConfirm === 'function') onConfirm(); };
-                const cancelHandler = () => { cleanup(); if (typeof onCancel === 'function') onCancel(); };
-                const backdropHandler = (ev) => { if (ev.target === modal) cancelHandler(); };
-                if (modalConfirm) modalConfirm.addEventListener('click', confirmHandler, { once: true });
-                if (modalCancel) modalCancel.addEventListener('click', cancelHandler, { once: true });
-                modal.addEventListener('click', backdropHandler);
-                return true;
-            }
-            return false;
-        }
+        // Legacy param change modal removed; confirmation handled by openConfirm/native confirm only.
 
         // Intercept Startup Parameters Update submit with blocking confirm when core params changed
         if (paramsForm && updateParamsBtn) {
@@ -2728,13 +2848,14 @@
                     paramsForm.submit();
                 };
                 const canceled = () => {};
-                const shown = showParamChangeModal(proceed, () => { try { modal.classList.remove('active'); } catch(_) {} });
-                if (!shown) {
-                    // Native fallback confirm if custom modal not available
-                    if (window.confirm('Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?')) {
-                        proceed();
-                    }
-                }
+                askConfirm({
+                    title: 'Reset Saves Required',
+                    body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '⚠'
+                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceed(); });
             });
 
             // Also intercept direct button clicks (some browsers may bypass submit listener in edge cases)
@@ -2777,12 +2898,14 @@
                     window.__sdsmPendingSubmit = true;
                     paramsForm.submit();
                 };
-                const shown = showParamChangeModal(proceed, () => { try { modal.classList.remove('active'); } catch(_) {} });
-                if (!shown) {
-                    if (window.confirm('Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?')) {
-                        proceed();
-                    }
-                }
+                askConfirm({
+                    title: 'Reset Saves Required',
+                    body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
+                    confirmText: 'Continue',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '⚠'
+                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceed(); });
             });
         }
 
@@ -2977,34 +3100,40 @@
             if (!deleteButton) return;
             deleteButton.addEventListener('click', function(e){
                 if (deleteButton.disabled) return;
-                // Respect existing confirm() on the button
-                const confirmed = window.confirm('Are you sure you want to delete this server? This action cannot be undone.');
-                if (!confirmed) return;
                 e.preventDefault();
-                setButtonDisabled(deleteButton, true);
-                toggleButtonSpinner(deleteButton, true);
-                const serverId = Number(rootEl.dataset.serverId || '0');
-                fetch(`/api/servers/${serverId}/delete`, {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin'
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const type = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: type || 'success', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    // Redirect to dashboard after a short delay to allow toast to render
-                    setTimeout(() => { window.location.href = '/dashboard'; }, 300);
-                }).catch(() => {
-                    // stay on page
-                }).finally(() => {
-                    toggleButtonSpinner(deleteButton, false);
-                    setButtonDisabled(deleteButton, false);
-                });
+                function proceed(){
+                    setButtonDisabled(deleteButton, true);
+                    toggleButtonSpinner(deleteButton, true);
+                    const serverId = Number(rootEl.dataset.serverId || '0');
+                    fetch(`/api/servers/${serverId}/delete`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin'
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || 'success', title: title || '', message });
+                            }
+                        } catch(_) {}
+                        setTimeout(() => { window.location.href = '/dashboard'; }, 300);
+                    }).catch(() => {
+                        // stay on page
+                    }).finally(() => {
+                        toggleButtonSpinner(deleteButton, false);
+                        setButtonDisabled(deleteButton, false);
+                    });
+                }
+                askConfirm({
+                    title: 'Delete Server',
+                    body: '<p>This will permanently delete this server and all of its files.</p><p><strong>This action cannot be undone.</strong></p>',
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    danger: true,
+                    icon: '⚠'
+                }, 'Are you sure you want to delete this server? This action cannot be undone.').then(ok => { if (ok) proceed(); });
             });
         })();
 
@@ -3052,51 +3181,93 @@
 
             if (saveMenuBtn) saveMenuBtn.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn.disabled) return; toggleSaveMenu(); });
 
-            // Save As… flow with input modal
-            const saveAsModal = document.getElementById('saveAsModal');
-            const saveAsInput = document.getElementById('saveAsName');
-            const saveAsConfirm = document.getElementById('saveAsConfirm');
-            const saveAsCancel = document.getElementById('saveAsCancel');
+            // Save As… flow using shared prompt modal (fallback to legacy modal if helpers unavailable)
+            (function(){
+                const legacy = {
+                    modal: document.getElementById('saveAsModal'),
+                    input: document.getElementById('saveAsName'),
+                    confirm: document.getElementById('saveAsConfirm'),
+                    cancel: document.getElementById('saveAsCancel')
+                };
 
-            function openSaveAs(){
-                closeSaveMenu();
-                if (!saveAsModal) return;
-                saveAsModal.classList.add('active');
-                setTimeout(() => { try { saveAsInput && saveAsInput.focus(); saveAsInput && saveAsInput.select && saveAsInput.select(); } catch(_) {} }, 0);
-            }
-            function closeSaveAs(){ if (saveAsModal) saveAsModal.classList.remove('active'); }
+                function doSaveAs(name, btnToDisable){
+                    if (!name) return Promise.resolve();
+                    if (btnToDisable) setButtonDisabled(btnToDisable, true);
+                    return fetch(`/api/servers/${serverId}/save-as`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ name })
+                    }).then((res) => {
+                        try {
+                            if (typeof window.showToast === 'function') {
+                                const type = res.headers.get('X-Toast-Type');
+                                const title = res.headers.get('X-Toast-Title');
+                                const message = res.headers.get('X-Toast-Message');
+                                if (message) window.showToast({ type: type || (res.ok ? 'success' : 'error'), title: title || '', message });
+                            }
+                        } catch(_) {}
+                        fetchStatus();
+                    }).catch(() => {}).finally(() => {
+                        if (btnToDisable) setButtonDisabled(btnToDisable, false);
+                    });
+                }
 
-            if (saveAsAction) saveAsAction.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn && saveMenuBtn.disabled) return; openSaveAs(); });
-            if (saveAsCancel) saveAsCancel.addEventListener('click', function(){ closeSaveAs(); });
-            if (saveAsModal) saveAsModal.addEventListener('click', function(ev){ if (ev.target === saveAsModal) closeSaveAs(); });
-            if (saveAsConfirm) saveAsConfirm.addEventListener('click', function(){
-                if (!saveAsInput) { closeSaveAs(); return; }
-                const raw = (saveAsInput.value || '').trim();
-                if (!raw) { notifyError && notifyError('Please enter a name for your save.'); try { saveAsInput.focus(); } catch(_) {}; return; }
-                // Disable confirm while request is in-flight
-                setButtonDisabled(saveAsConfirm, true);
-                fetch(`/api/servers/${serverId}/save-as`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: JSON.stringify({ name: raw })
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const type = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: type || (res.ok ? 'success' : 'error'), title: title || '', message });
-                        }
-                    } catch(_) {}
-                    fetchStatus();
-                    closeSaveAs();
-                }).catch(() => {
-                    // keep modal open on failure; toast should indicate error
-                }).finally(() => {
-                    setButtonDisabled(saveAsConfirm, false);
+                function openSaveAsPrompt(){
+                    closeSaveMenu();
+                    if (typeof window.openPrompt === 'function'){
+                        window.openPrompt({
+                            title: 'Save As…',
+                            label: 'Enter a name for your save',
+                            placeholder: 'e.g., MyBase_NightShift',
+                            confirmText: 'Save',
+                            cancelText: 'Cancel',
+                            validate: function(v){
+                                if (!v || !v.trim()) return 'Please enter a name for your save.';
+                                if (v.length > 100) return 'Name must be at most 100 characters.';
+                                return true;
+                            }
+                        }).then(val => {
+                            if (val == null) return; // cancelled
+                            const name = String(val).trim();
+                            if (!name) return;
+                            return doSaveAs(name);
+                        });
+                        return;
+                    }
+                    // Legacy fallback to existing modal if present
+                    const m = legacy.modal;
+                    const input = legacy.input;
+                    const btnConfirm = legacy.confirm;
+                    const btnCancel = legacy.cancel;
+                    if (!m || !input || !btnConfirm){ return; }
+                    m.classList.add('active');
+                    setTimeout(() => { try { input && input.focus(); input && input.select && input.select(); } catch(_) {} }, 0);
+                    function onCancel(){ try { m.classList.remove('active'); } catch(_) {} cleanup(); }
+                    function onConfirm(){
+                        const raw = (input.value || '').trim();
+                        if (!raw) { notifyError && notifyError('Please enter a name for your save.'); try { input.focus(); } catch(_) {}; return; }
+                        setButtonDisabled(btnConfirm, true);
+                        doSaveAs(raw, btnConfirm).then(() => { try { m.classList.remove('active'); } catch(_) {} }).finally(() => { setButtonDisabled(btnConfirm, false); cleanup(); });
+                    }
+                    function onBackdrop(ev){ if (ev.target === m) onCancel(); }
+                    function onKey(ev){ if (ev.key === 'Enter') { ev.preventDefault(); onConfirm(); } }
+                    function cleanup(){
+                        btnCancel && btnCancel.removeEventListener('click', onCancel);
+                        btnConfirm && btnConfirm.removeEventListener('click', onConfirm);
+                        m && m.removeEventListener('click', onBackdrop);
+                        input && input.removeEventListener('keydown', onKey);
+                    }
+                    btnCancel && btnCancel.addEventListener('click', onCancel);
+                    btnConfirm && btnConfirm.addEventListener('click', onConfirm);
+                    m && m.addEventListener('click', onBackdrop);
+                    input && input.addEventListener('keydown', onKey);
+                }
+
+                if (saveAsAction) saveAsAction.addEventListener('click', function(e){
+                    e.preventDefault(); if (saveMenuBtn && saveMenuBtn.disabled) return; openSaveAsPrompt();
                 });
-            });
+            })();
         })();
 
 

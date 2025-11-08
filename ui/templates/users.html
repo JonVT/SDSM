@@ -94,7 +94,7 @@
                   <input name="reset_password_value" type="password" class="form-input w-160" placeholder="new password" />
                   <button type="submit" class="btn btn-secondary">Set Password</button>
                 </form>
-                <form method="POST" action="/users" class="inline ml-2" onsubmit="return confirm('Delete user {{ .Username }}?');">
+                <form method="POST" action="/users" class="inline ml-2" data-delete-user="{{ .Username }}">
                   <button name="delete" value="{{ .Username }}" type="submit" class="btn btn-danger">Delete</button>
                 </form>
               </td>
@@ -106,9 +106,30 @@
     </section>
   </main>
 
+  {{ template "modal_templates" . }}
+  {{ template "modal_scripts" . }}
+
   {{ template "footer" . }}
 
   <script>
+    // Attach modal-based confirmation to delete forms
+    (function(){
+      function askConfirm(options, fallbackMessage) {
+        try { if (window.openConfirm) return window.openConfirm(options); } catch(_) {}
+        return Promise.resolve(window.confirm(fallbackMessage));
+      }
+      document.addEventListener('DOMContentLoaded', function(){
+        document.querySelectorAll('form[data-delete-user]').forEach(function(form){
+          form.addEventListener('submit', function(e){
+            e.preventDefault();
+            var username = form.getAttribute('data-delete-user') || (form.querySelector('button[name="delete"]') || {}).value || '';
+            askConfirm({ title:'Delete User', message:'Delete user '+username+'?', confirmText:'Delete', cancelText:'Cancel', danger:true }, 'Delete user '+username+'?')
+              .then(function(ok){ if (ok) form.submit(); });
+          });
+        });
+      });
+    })();
+
     function getStoredTheme() {
       return localStorage.getItem('theme') || 'dark';
     }

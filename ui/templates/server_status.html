@@ -109,12 +109,17 @@
                         {{ end }}
                         <span id="server-name">{{.server.Name}}</span>
                     </h3>
-                    <div class="lang-control relative">
-                        <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
-                            <span aria-hidden="true">🌐</span>
-                            <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
-                        </button>
-                        <div id="language-menu" class="lang-dropdown" role="menu" aria-label="Languages"></div>
+                    <div class="right-title-actions">
+                        {{ if eq .role "admin" }}
+                        <button type="button" id="btn-rename-server" class="btn btn-secondary btn-min-sm" title="Rename server" aria-label="Rename server">Rename</button>
+                        {{ end }}
+                        <div class="lang-control relative">
+                            <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
+                                <span aria-hidden="true">🌐</span>
+                                <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
+                            </button>
+                            <div id="language-menu" class="lang-dropdown" role="menu" aria-label="Languages"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -200,6 +205,9 @@
     </div>
 
     {{ template "server_status_modals.html" . }}
+    {{ template "rename_modal" . }}
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
 
     {{ template "server_status_scripts.html" . }}
     {{ template "toast.html" . }}

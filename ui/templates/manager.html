@@ -149,6 +149,13 @@
             height: 18px;
         }
 
+        /* Ensure consistent checkbox sizing across browsers */
+        .form-checkbox {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+
         /* Position Update button aligned with inputs (second column), add space above */
         .config-form .form-row-full {
             grid-template-columns: minmax(110px, 160px) 1fr; /* keep consistent with label column */
@@ -252,6 +259,16 @@
                 } else if (sp) {
                     sp.remove();
                 }
+            }
+
+            // Unified confirm wrapper using modal helper when available
+            function askConfirm(options, fallbackMessage) {
+                try {
+                    if (window.openConfirm) {
+                        return window.openConfirm(options);
+                    }
+                } catch(_) {}
+                return Promise.resolve(window.confirm(fallbackMessage));
             }
 
             function showMessage(text, isError) {
@@ -570,35 +587,40 @@
 
             function postFooterAction(kind, btn, confirmingText, startedText, successText, errorText) {
                 if (!btn) return;
-                if (!confirm(confirmingText)) return;
 
-                const params = new URLSearchParams();
-                params.append(kind, '1');
+                const danger = (kind === 'shutdown' || kind === 'restart');
+                askConfirm({ title: 'Confirm', message: confirmingText, confirmText: 'Confirm', cancelText: 'Cancel', danger }, confirmingText)
+                    .then((ok) => {
+                        if (!ok) return;
 
-                disableFooterButtons(true);
-                showButtonSpinner(btn, true);
-                showMessage(startedText, false);
+                        const params = new URLSearchParams();
+                        params.append(kind, '1');
 
-                fetch('/update', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin',
-                    body: params.toString()
-                })
-                    .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json().catch(() => ({})); })
-                    .then(() => {
-                        showMessage(successText, false);
-                        setTimeout(() => disableFooterButtons(false), 3000);
-                    })
-                    .catch((err) => {
-                        const e = err && err.error ? err.error : errorText;
-                        showMessage(e, true);
-                        if (window.showToast) window.showToast({ type: 'error', title: 'Request Failed', message: e });
-                        disableFooterButtons(false);
+                        disableFooterButtons(true);
+                        showButtonSpinner(btn, true);
+                        showMessage(startedText, false);
+
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: params.toString()
+                        })
+                            .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json().catch(() => ({})); })
+                            .then(() => {
+                                showMessage(successText, false);
+                                setTimeout(() => disableFooterButtons(false), 3000);
+                            })
+                            .catch((err) => {
+                                const e = err && err.error ? err.error : errorText;
+                                showMessage(e, true);
+                                if (window.showToast) window.showToast({ type: 'error', title: 'Request Failed', message: e });
+                                disableFooterButtons(false);
+                            });
                     });
             }
 
@@ -610,25 +632,27 @@
                     const runningCountEl = document.getElementById('server-count-running');
                     const runningCount = runningCountEl ? parseInt(runningCountEl.textContent || '0', 10) : 0;
                     if (detachedEnabled && runningCount > 0) {
-                        const alsoStop = confirm('Servers are running and detached mode is enabled. Stop all servers as well?');
-                        const params = new URLSearchParams();
-                        params.append('shutdown', '1');
-                        params.append('stop_servers', alsoStop ? '1' : '0');
-                        disableFooterButtons(true);
-                        showButtonSpinner(shutdownBtn, true);
-                        showMessage('Shutting down SDSM…', false);
-                        fetch('/shutdown', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Accept': 'application/json'
-                            },
-                            credentials: 'same-origin',
-                            body: params.toString()
-                        }).then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((d)=>Promise.reject(d)); } return res.json().catch(()=>({})); })
-                        .then(()=>{ showMessage('Shutdown initiated. The UI may go offline shortly.', false); setTimeout(()=>disableFooterButtons(false), 3000); })
-                        .catch((err)=>{ const e = err && err.error ? err.error : 'Unable to shutdown SDSM. Please try again.'; showMessage(e, true); if (window.showToast) window.showToast({type:'error', title:'Request Failed', message:e}); disableFooterButtons(false); });
+                        askConfirm({ title: 'Shutdown', message: 'Servers are running and detached mode is enabled. Stop all servers as well?', confirmText: 'Stop Servers', cancelText: 'Do Not Stop', danger: true }, 'Servers are running and detached mode is enabled. Stop all servers as well?')
+                          .then((alsoStop) => {
+                              const params = new URLSearchParams();
+                              params.append('shutdown', '1');
+                              params.append('stop_servers', alsoStop ? '1' : '0');
+                              disableFooterButtons(true);
+                              showButtonSpinner(shutdownBtn, true);
+                              showMessage('Shutting down SDSM…', false);
+                              fetch('/shutdown', {
+                                  method: 'POST',
+                                  headers: {
+                                      'Content-Type': 'application/x-www-form-urlencoded',
+                                      'X-Requested-With': 'XMLHttpRequest',
+                                      'Accept': 'application/json'
+                                  },
+                                  credentials: 'same-origin',
+                                  body: params.toString()
+                              }).then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((d)=>Promise.reject(d)); } return res.json().catch(()=>({})); })
+                              .then(()=>{ showMessage('Shutdown initiated. The UI may go offline shortly.', false); setTimeout(()=>disableFooterButtons(false), 3000); })
+                              .catch((err)=>{ const e = err && err.error ? err.error : 'Unable to shutdown SDSM. Please try again.'; showMessage(e, true); if (window.showToast) window.showToast({type:'error', title:'Request Failed', message:e}); disableFooterButtons(false); });
+                          });
                         return;
                     }
                     postFooterAction(
@@ -689,8 +713,10 @@
                         if (window.showToast) window.showToast({ type: 'info', title: 'No Servers', message: 'There are no running servers to stop.' });
                         return;
                     }
-                    if (!confirm('Stop ALL running servers? Active processes will be terminated.')) return;
-                    stopAllBtn.disabled = true;
+                    askConfirm({ title: 'Stop All Servers', message: 'Stop ALL running servers? Active processes will be terminated.', confirmText: 'Stop All', cancelText: 'Cancel', danger: true }, 'Stop ALL running servers? Active processes will be terminated.')
+                      .then((ok) => {
+                        if (!ok) return;
+                        stopAllBtn.disabled = true;
                     showButtonSpinner(stopAllBtn, true);
                     fetch('/api/servers/stop-all', {
                         method: 'POST',
@@ -711,7 +737,8 @@
                     .finally(() => {
                         updateStopAllDisabled();
                         showButtonSpinner(stopAllBtn, false);
-                    });
+                        });
+                      });
                 });
             }
 
@@ -939,8 +966,11 @@
                         });
                         tdA.appendChild(btnPw);
                         // Delete button
-                        const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2'; btnDel.textContent='Delete';
-                        btnDel.addEventListener('click', () => { if(confirm('Delete user '+u.username+'?')) deleteUser(u.username); });
+                                                const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2'; btnDel.textContent='Delete';
+                                                btnDel.addEventListener('click', () => {
+                                                        askConfirm({ title: 'Delete User', message: 'Delete user '+u.username+'?', confirmText: 'Delete', cancelText: 'Cancel', danger: true }, 'Delete user '+u.username+'?')
+                                                            .then((ok) => { if (ok) deleteUser(u.username); });
+                                                });
                         tdA.appendChild(btnDel);
                         // Assignments button (operators only)
                         const isOperator = String(u.role).toLowerCase() === 'operator';
@@ -1147,12 +1177,17 @@
                         </div>
                         <div class="form-group">
                             <label for="start_update">Update at Start</label>
-                            <input type="checkbox" id="start_update" name="start_update" {{if .start_update}}checked{{end}}>
+                            <div class="field-inline items-start gap-2">
+                                <input type="checkbox" id="start_update" name="start_update" class="form-checkbox" {{if .start_update}}checked{{end}}>
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
+                                    When enabled, SDSM will check and apply updates automatically on startup.
+                                </span>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="detached_servers">Detached Servers (keep running if SDSM exits)</label>
                             <div class="field-inline items-start gap-2">
-                                <input type="checkbox" id="detached_servers" name="detached_servers" {{if .detached}}checked{{end}}>
+                                <input type="checkbox" id="detached_servers" name="detached_servers" class="form-checkbox" {{if .detached}}checked{{end}}>
                                 <span class="text-secondary text-sm flex-1" aria-live="polite">
                                     When enabled, servers are started in a separate process group and will continue running if SDSM is stopped. Environment variable <code>SDSM_DETACHED_SERVERS</code> may override this at runtime.
                                 </span>
@@ -1546,6 +1581,9 @@
     </script>
     
     
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
+
     {{ template "toast.html" . }}
     {{ template "footer" . }}
 </body>

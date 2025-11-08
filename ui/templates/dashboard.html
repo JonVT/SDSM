@@ -121,322 +121,45 @@
     {{ end }}
 
     {{ template "footer" . }}
+    {{ template "rename_modal" . }}
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
 
     <script>
         let ws;
-
-        function getStoredTheme() {
-            return localStorage.getItem('theme') || 'dark';
-        }
-
-        function setTheme(theme) {
-            const html = document.documentElement;
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = document.getElementById('theme-icon');
-            if (icon) {
-                icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-            }
-        }
-
-        function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
-            const next = current === 'dark' ? 'light' : 'dark';
-            setTheme(next);
-        }
-
+        function getStoredTheme(){ return localStorage.getItem('theme') || 'dark'; }
+        function setTheme(theme){ document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); const icon=document.getElementById('theme-icon'); if(icon){ icon.textContent = theme === 'dark' ? '☀️' : '🌙'; } }
+        function toggleTheme(){ const current=document.documentElement.getAttribute('data-theme') || getStoredTheme(); setTheme(current==='dark'?'light':'dark'); }
         setTheme(getStoredTheme());
 
-        function bindServerCardNavigation(root) {
-            const cards = (root || document).querySelectorAll('.server-card');
-            cards.forEach(card => {
-                if (card.dataset.navigationBound === 'true') {
-                    return;
-                }
-                card.dataset.navigationBound = 'true';
-                card.addEventListener('click', event => {
-                    if (event.target.closest('[data-stop-navigation="true"]')) {
-                        return;
-                    }
-                    const url = card.getAttribute('data-target-url');
-                    if (url) {
-                        window.location.href = url;
-                    }
-                });
-            });
-        }
-
+        function bindServerCardNavigation(root){ const cards=(root||document).querySelectorAll('.server-card'); cards.forEach(card=>{ if(card.dataset.navigationBound==='true') return; card.dataset.navigationBound='true'; card.addEventListener('click', e=>{ if(e.target.closest('[data-stop-navigation="true"]')) return; const url=card.getAttribute('data-target-url'); if(url) window.location.href=url; }); }); }
         bindServerCardNavigation();
 
-        document.addEventListener('htmx:afterSwap', event => {
-            if (event.target && event.target.closest('#server-grid')) {
-                bindServerCardNavigation(event.target.closest('#server-grid'));
-            }
-        });
+        function ensureRenameHandler(){ if(document.__renameHandlerBound) return; document.__renameHandlerBound=true; document.addEventListener('click', e=>{ const btn=e.target.closest('button[data-action="rename-server"]'); if(!btn) return; e.preventDefault(); btn.disabled=true; const card=btn.closest('.server-card'); const sid=card && card.getAttribute('data-server-id'); const current=(card && card.querySelector('[data-server-name]')?.textContent || '').trim(); if(!sid){ btn.disabled=false; return; } const tpl=document.getElementById('renameModalTemplate'); let modal; if(tpl){ modal=tpl.cloneNode(true); modal.id=''; modal.style.display=''; modal.classList.add('active'); } else { modal=document.createElement('div'); modal.className='confirm-modal active'; modal.innerHTML='<div class="modal-card"><div class="modal-header"><h3 class="modal-title">Rename Server</h3></div><div class="modal-body"><label for="rename-input">New Name</label><input id="rename-input" class="form-input" style="margin-top:8px;width:100%;" /></div><div class="modal-actions"><button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button><button type="button" class="btn btn-primary" data-action="apply">Save</button></div></div>'; } document.body.appendChild(modal); const input=modal.querySelector('#rename-input'); if(input) input.value=current; const cleanup=()=>{ try{ btn.disabled=false; }catch(_){} }; modal.addEventListener('click', function onBg(ev){ if(ev.target===modal){ modal.removeEventListener('click', onBg); modal.remove(); cleanup(); }}); const cancelBtn=modal.querySelector('[data-action="cancel"]'); const applyBtn=modal.querySelector('[data-action="apply"]'); if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ modal.remove(); cleanup(); }); if(applyBtn) applyBtn.addEventListener('click', ()=>{ const val=(input && input.value || '').trim(); if(!val || val===current){ modal.remove(); cleanup(); return; } fetch(`/server/${sid}`, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body:new URLSearchParams({update:'true', name:val}) }).then(res=>{ try{ const type=res.headers.get('X-Toast-Type'); const title=res.headers.get('X-Toast-Title')||'Server Renamed'; const msg=res.headers.get('X-Toast-Message')||'Server name updated.'; if(typeof window.showToast==='function' && msg){ window.showToast({type:type||'success', title, message:msg}); } }catch(_){} if(res.ok && card){ const nm=card.querySelector('[data-server-name]'); if(nm) nm.textContent=val; } }).catch(()=>{}).finally(()=>{ modal.remove(); cleanup(); }); }); }); }
+        ensureRenameHandler();
 
-        const HEALTH_ENDPOINT = '/healthz';
-        const HEALTH_TIMEOUT = 4000;
-        const HEALTH_INTERVAL_OK = 15000;
-        const HEALTH_INTERVAL_LOST = 5000;
-        let healthTimer = null;
-        let healthLost = false;
+        document.addEventListener('htmx:afterSwap', e=>{ if(e.target && e.target.closest('#server-grid')){ bindServerCardNavigation(e.target.closest('#server-grid')); ensureRenameHandler(); } });
 
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => console.log('WebSocket connected');
-            ws.onmessage = event => handleRealtimeUpdate(JSON.parse(event.data));
-            ws.onclose = () => setTimeout(connectWebSocket, 3000);
-            ws.onerror = error => console.error('WebSocket error:', error);
+        const HEALTH_ENDPOINT='/healthz', HEALTH_TIMEOUT=4000, HEALTH_INTERVAL_OK=15000, HEALTH_INTERVAL_LOST=5000; let healthTimer=null, healthLost=false;
+        function setDashboardConnectionBanner(active,text){ if(window.top && window.top!==window && typeof window.top.setConnectionBanner==='function'){ window.top.setConnectionBanner(!!active, text||''); return; } const banner=document.getElementById('connection-banner'); const bannerText=document.getElementById('connection-banner-text'); if(!banner) return; if(active){ banner.classList.add('active'); if(bannerText && text){ bannerText.textContent=text; } document.body.style.paddingTop='3.5rem'; } else { banner.classList.remove('active'); document.body.style.paddingTop=''; } }
+        function scheduleHealthCheck(delay){ if(healthTimer) clearTimeout(healthTimer); healthTimer=setTimeout(runHealthCheck, delay); }
+        function runHealthCheck(){ const controller=new AbortController(); const timeoutId=setTimeout(()=>controller.abort(), HEALTH_TIMEOUT); fetch(HEALTH_ENDPOINT,{cache:'no-store',credentials:'same-origin',signal:controller.signal}).then(r=>{ clearTimeout(timeoutId); if(!r.ok) throw new Error('Health check failed'); if(healthLost){ healthLost=false; setDashboardConnectionBanner(true,'Connection restored. Reloading...'); setTimeout(()=>{ setDashboardConnectionBanner(false); window.location.reload(); },1200); return; } setDashboardConnectionBanner(false); }).catch(()=>{ clearTimeout(timeoutId); if(!healthLost){ healthLost=true; setDashboardConnectionBanner(true,'Connection lost. Attempting to reconnect...'); } }).finally(()=>{ scheduleHealthCheck(healthLost?HEALTH_INTERVAL_LOST:HEALTH_INTERVAL_OK); }); }
+        function startHealthMonitor(){ const reloadBtn=document.getElementById('connection-banner-action'); if(reloadBtn) reloadBtn.addEventListener('click',()=>window.location.reload()); runHealthCheck(); }
+        function connectWebSocket(){ const protocol=window.location.protocol==='https:'?'wss:':'ws:'; const wsUrl=`${protocol}//${window.location.host}/ws`; ws=new WebSocket(wsUrl); ws.onopen=()=>console.log('WebSocket connected'); ws.onmessage=e=>handleRealtimeUpdate(JSON.parse(e.data)); ws.onclose=()=>setTimeout(connectWebSocket,3000); ws.onerror=err=>console.error('WebSocket error:',err); }
+        function handleRealtimeUpdate(data){ switch(data.type){ case 'server_status': case 'server_update': updateServerStatus(data.serverId,data.status); break; case 'servers_changed': try{ htmx.trigger('#server-grid','refresh'); }catch(_){} try{ htmx.trigger('.stats-grid','refresh'); }catch(_){} break; case 'stats_update': updateStats(data.stats); break; default: console.log('Unknown update type:', data.type); } }
+        function updateServerStatus(serverId,status){ const card=document.querySelector(`[data-server-id="${serverId}"]`); if(!card) return; const statusBadge=card.querySelector('[data-status]'); const stormBadge=card.querySelector('[data-storm]'); if(statusBadge){ const isRunning=!!status.running; const isStarting=!!status.starting && isRunning; const isPaused=!!status.paused && isRunning && !isStarting; statusBadge.classList.remove('status-running','status-idle','is-running','is-stopped','is-paused','is-starting'); statusBadge.classList.toggle('is-starting',isStarting); statusBadge.classList.toggle('is-running',isRunning && !isPaused && !isStarting); statusBadge.classList.toggle('is-paused',isRunning && isPaused); statusBadge.classList.toggle('is-stopped',!isRunning); const label=isStarting?'Starting':(!isRunning?'Stopped':(isPaused?'Paused':'Running')); statusBadge.setAttribute('aria-label',`Status: ${label}`); statusBadge.setAttribute('title',label); }
+            if(stormBadge){ const isRunning=!!status.running; const isStorming=!!status.storming && isRunning; if(isRunning && isStorming){ stormBadge.style.display=''; stormBadge.classList.remove('is-storm','is-clear'); stormBadge.classList.add('is-storm'); stormBadge.setAttribute('aria-label','Storm'); stormBadge.setAttribute('title','Storm'); stormBadge.textContent=''; } else { stormBadge.style.display='none'; } }
+            if(status.name!==undefined){ const nameEl=card.querySelector('[data-server-name]'); if(nameEl) nameEl.textContent=status.name; }
+            if(status.port!==undefined){ const portEl=card.querySelector('[data-port-value]'); if(portEl) portEl.textContent=String(status.port); }
+            if(status.playerCount!==undefined){ const pcEl=card.querySelector('[data-player-count]'); if(pcEl) pcEl.textContent=`${status.playerCount}/${status.maxPlayers||'?'}`; }
+            if(status.world!==undefined){ const wEl=card.querySelector('[data-world-value]'); if(wEl) wEl.textContent=status.world; }
         }
-
-        function setDashboardConnectionBanner(active, text) {
-            // If rendered inside the main frame, delegate to top-level banner
-            if (window.top && window.top !== window && typeof window.top.setConnectionBanner === 'function') {
-                window.top.setConnectionBanner(!!active, text || '');
-                return;
-            }
-            const banner = document.getElementById('connection-banner');
-            const bannerText = document.getElementById('connection-banner-text');
-            if (!banner) {
-                return;
-            }
-            if (active) {
-                banner.classList.add('active');
-                if (bannerText && text) {
-                    bannerText.textContent = text;
-                }
-                document.body.style.paddingTop = '3.5rem';
-            } else {
-                banner.classList.remove('active');
-                document.body.style.paddingTop = '';
-            }
-        }
-
-        function scheduleHealthCheck(delay) {
-            if (healthTimer) {
-                clearTimeout(healthTimer);
-            }
-            healthTimer = setTimeout(runHealthCheck, delay);
-        }
-
-        function runHealthCheck() {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
-            fetch(HEALTH_ENDPOINT, {
-                cache: 'no-store',
-                credentials: 'same-origin',
-                signal: controller.signal
-            })
-                .then(response => {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) {
-                        throw new Error('Health check failed');
-                    }
-                    if (healthLost) {
-                        healthLost = false;
-                        setDashboardConnectionBanner(true, 'Connection restored. Reloading...');
-                        setTimeout(() => {
-                            setDashboardConnectionBanner(false);
-                            window.location.reload();
-                        }, 1200);
-                        return;
-                    }
-                    setDashboardConnectionBanner(false);
-                })
-                .catch(() => {
-                    clearTimeout(timeoutId);
-                    if (!healthLost) {
-                        healthLost = true;
-                        setDashboardConnectionBanner(true, 'Connection lost. Attempting to reconnect...');
-                    }
-                })
-                .finally(() => {
-                    scheduleHealthCheck(healthLost ? HEALTH_INTERVAL_LOST : HEALTH_INTERVAL_OK);
-                });
-        }
-
-        function startHealthMonitor() {
-            const reloadBtn = document.getElementById('connection-banner-action');
-            if (reloadBtn) {
-                reloadBtn.addEventListener('click', () => window.location.reload());
-            }
-            runHealthCheck();
-        }
-
-        function handleRealtimeUpdate(data) {
-            switch (data.type) {
-                case 'server_status':
-                    updateServerStatus(data.serverId, data.status);
-                    break;
-                case 'server_update':
-                    updateServerStatus(data.serverId, data.status);
-                    break;
-                case 'servers_changed':
-                    // Immediately refresh server grid and stats
-                    try { htmx.trigger('#server-grid', 'refresh'); } catch (e) {}
-                    try { htmx.trigger('.stats-grid', 'refresh'); } catch (e) {}
-                    break;
-                case 'stats_update':
-                    updateStats(data.stats);
-                    break;
-                default:
-                    console.log('Unknown update type:', data.type);
-            }
-        }
-
-        function updateServerStatus(serverId, status) {
-            const serverCard = document.querySelector(`[data-server-id="${serverId}"]`);
-            if (!serverCard) {
-                return;
-            }
-            const statusBadge = serverCard.querySelector('[data-status]');
-            const stormBadge = serverCard.querySelector('[data-storm]');
-            if (statusBadge) {
-                const isRunning = !!status.running;
-                const isStarting = !!status.starting && isRunning;
-                const isPaused = !!status.paused && isRunning && !isStarting;
-
-                // Normalize pill variant classes (running, paused, stopped)
-                statusBadge.classList.remove('status-running', 'status-idle', 'is-running', 'is-stopped', 'is-paused', 'is-starting');
-                statusBadge.classList.toggle('is-starting', isStarting);
-                statusBadge.classList.toggle('is-running', isRunning && !isPaused && !isStarting);
-                statusBadge.classList.toggle('is-paused', isRunning && isPaused);
-                statusBadge.classList.toggle('is-stopped', !isRunning);
-
-                // For cards, render as a dot only. Provide an accessible label.
-                const desiredLabel = isStarting ? 'Starting' : (!isRunning ? 'Stopped' : (isPaused ? 'Paused' : 'Running'));
-                statusBadge.setAttribute('aria-label', `Status: ${desiredLabel}`);
-                statusBadge.setAttribute('title', desiredLabel);
-            }
-            // Update storm badge
-            if (stormBadge) {
-                const isRunning = !!status.running;
-                const isStorming = !!status.storming && isRunning;
-                if (isRunning && isStorming) {
-                    stormBadge.style.display = '';
-                    stormBadge.classList.remove('is-storm', 'is-clear');
-                    stormBadge.classList.add('is-storm');
-                    stormBadge.setAttribute('aria-label', 'Storm');
-                    stormBadge.setAttribute('title', 'Storm');
-                    // Ensure no visible text for dot-only UI
-                    stormBadge.textContent = '';
-                } else {
-                    stormBadge.style.display = 'none';
-                }
-            }
-            // Update server name if provided
-            if (status.name !== undefined) {
-                const nameEl = serverCard.querySelector('[data-server-name]');
-                if (nameEl) {
-                    nameEl.textContent = status.name;
-                }
-            }
-            // Update port if provided
-            if (status.port !== undefined) {
-                const portEl = serverCard.querySelector('[data-port-value]');
-                if (portEl) {
-                    portEl.textContent = String(status.port);
-                }
-            }
-            if (status.playerCount !== undefined) {
-                const playerInfo = serverCard.querySelector('[data-player-count]');
-                if (playerInfo) {
-                    playerInfo.textContent = `${status.playerCount}/${status.maxPlayers || '?'}`;
-                }
-            }
-            // Update world if provided
-            if (status.world !== undefined) {
-                const worldEl = serverCard.querySelector('[data-world-value]');
-                if (worldEl) {
-                    worldEl.textContent = status.world;
-                }
-            }
-        }
-
-        function updateStats(stats) {
-            if (stats.totalServers !== undefined) {
-                const total = document.getElementById('total-servers');
-                if (total) total.textContent = stats.totalServers;
-                const hTotal = document.getElementById('header-total-servers');
-                if (hTotal) hTotal.textContent = stats.totalServers;
-                const hSuffix = document.getElementById('header-total-servers-suffix');
-                if (hSuffix) hSuffix.textContent = stats.totalServers === 1 ? '' : 's';
-            }
-            if (stats.activeServers !== undefined) {
-                const active = document.getElementById('active-servers');
-                if (active) active.textContent = stats.activeServers;
-                const hActive = document.getElementById('header-active-servers');
-                if (hActive) hActive.textContent = stats.activeServers;
-            }
-            if (stats.totalPlayers !== undefined) {
-                const players = document.getElementById('total-players');
-                if (players) players.textContent = stats.totalPlayers;
-                const hPlayers = document.getElementById('header-total-players');
-                if (hPlayers) hPlayers.textContent = stats.totalPlayers;
-            }
-            const refresh = document.getElementById('last-refresh');
-            if (refresh) {
-                const now = new Date();
-                refresh.textContent = now.toLocaleTimeString();
-            }
-        }
-
-        // Lightweight header poll to ensure header stats stay in sync even without websocket
-        function pollHeaderStats() {
-            fetch('/api/stats', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin', cache: 'no-store' })
-                .then(r => r.ok ? r.json() : null)
-                .then(data => { if (data) updateStats(data); })
-                .catch(() => {});
-        }
-
-        function createNewServer() {
-            window.location.href = '/server/new';
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            connectWebSocket();
-            startHealthMonitor();
-            // Initial header stats + interval
-            pollHeaderStats();
-            setInterval(pollHeaderStats, 30000);
-
-            document.body.addEventListener('htmx:beforeRequest', event => {
-                if (event.detail.elt?.getAttribute('hx-indicator') === '#refresh-indicator') {
-                    document.getElementById('refresh-indicator')?.classList.remove('hidden');
-                }
-            });
-
-            document.body.addEventListener('htmx:afterRequest', event => {
-                if (event.detail.elt?.getAttribute('hx-indicator') === '#refresh-indicator') {
-                    document.getElementById('refresh-indicator')?.classList.add('hidden');
-                }
-            });
-
-            setInterval(() => {
-                htmx.trigger('#server-grid', 'refresh');
-                htmx.trigger('.stats-grid', 'refresh');
-            }, 30000);
-        });
-
-        document.addEventListener('keydown', event => {
-            if (event.ctrlKey && event.shiftKey && event.key === 'T') {
-                event.preventDefault();
-                toggleTheme();
-            }
-            if (event.ctrlKey && event.key === 'r') {
-                event.preventDefault();
-                htmx.trigger('#server-grid', 'refresh');
-            }
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (ws) {
-                ws.close();
-            }
-        });
+        function updateStats(stats){ if(stats.totalServers!==undefined){ const total=document.getElementById('total-servers'); if(total) total.textContent=stats.totalServers; const hTotal=document.getElementById('header-total-servers'); if(hTotal) hTotal.textContent=stats.totalServers; const hSuffix=document.getElementById('header-total-servers-suffix'); if(hSuffix) hSuffix.textContent=stats.totalServers===1?'':'s'; } if(stats.activeServers!==undefined){ const active=document.getElementById('active-servers'); if(active) active.textContent=stats.activeServers; const hActive=document.getElementById('header-active-servers'); if(hActive) hActive.textContent=stats.activeServers; } if(stats.totalPlayers!==undefined){ const players=document.getElementById('total-players'); if(players) players.textContent=stats.totalPlayers; const hPlayers=document.getElementById('header-total-players'); if(hPlayers) hPlayers.textContent=stats.totalPlayers; } const refresh=document.getElementById('last-refresh'); if(refresh){ refresh.textContent=new Date().toLocaleTimeString(); } }
+        function pollHeaderStats(){ fetch('/api/stats',{ headers:{'Accept':'application/json'}, credentials:'same-origin', cache:'no-store' }).then(r=>r.ok?r.json():null).then(d=>{ if(d) updateStats(d); }).catch(()=>{}); }
+        function createNewServer(){ window.location.href='/server/new'; }
+        document.addEventListener('DOMContentLoaded', ()=>{ connectWebSocket(); startHealthMonitor(); pollHeaderStats(); setInterval(pollHeaderStats,30000); document.body.addEventListener('htmx:beforeRequest', ev=>{ if(ev.detail.elt?.getAttribute('hx-indicator')==='#refresh-indicator'){ document.getElementById('refresh-indicator')?.classList.remove('hidden'); } }); document.body.addEventListener('htmx:afterRequest', ev=>{ if(ev.detail.elt?.getAttribute('hx-indicator')==='#refresh-indicator'){ document.getElementById('refresh-indicator')?.classList.add('hidden'); } }); setInterval(()=>{ htmx.trigger('#server-grid','refresh'); htmx.trigger('.stats-grid','refresh'); },30000); });
+        document.addEventListener('keydown', ev=>{ if(ev.ctrlKey && ev.shiftKey && ev.key==='T'){ ev.preventDefault(); toggleTheme(); } if(ev.ctrlKey && ev.key==='r'){ ev.preventDefault(); htmx.trigger('#server-grid','refresh'); } });
+        window.addEventListener('beforeunload', ()=>{ if(ws) ws.close(); });
     </script>
     
     {{ template "toast.html" . }}

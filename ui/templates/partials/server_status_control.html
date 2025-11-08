@@ -98,7 +98,7 @@
                             </svg>
                             Update Server Files
                         </button>
-                    <button type="submit" name="delete" value="true" id="btn-delete" class="btn btn-danger" title="Delete this server and its files" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}} onclick="return confirm('Are you sure you want to delete this server? This action cannot be undone.')">
+                    <button type="submit" name="delete" value="true" id="btn-delete" class="btn btn-danger" title="Delete this server and its files" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}}>
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                 <polyline points="3 6 5 6 21 6"/>
                                 <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>

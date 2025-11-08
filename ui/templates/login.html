@@ -196,6 +196,8 @@
         </div>
     </main>
     
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
     {{ template "footer" . }}
     
     <script>
@@ -292,25 +294,22 @@
         }
         
         function showError(message) {
+            try {
+                if (window.openInfo) {
+                    window.openInfo({ title: 'Login Error', message: String(message || 'An error occurred'), confirmText: 'Close' });
+                    return;
+                }
+            } catch(_) {}
+            // Fallback inline banner if modal helpers unavailable
             const existingError = document.querySelector('.error-message');
-            if (existingError) {
-                existingError.remove();
-            }
-            
+            if (existingError) { existingError.remove(); }
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.setAttribute('role', 'alert');
-            errorDiv.textContent = message;
-            
+            errorDiv.textContent = String(message || 'An error occurred');
             const form = document.getElementById('login-form');
             form.parentNode.insertBefore(errorDiv, form);
-            
-            // Remove after 5 seconds
-            setTimeout(() => {
-                if (errorDiv.parentNode) {
-                    errorDiv.remove();
-                }
-            }, 5000);
+            setTimeout(() => { if (errorDiv.parentNode) { errorDiv.remove(); } }, 5000);
         }
         
         // Keyboard shortcuts

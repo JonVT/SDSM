@@ -134,10 +134,12 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	sconPort := s.CurrentSCONPort()
 	sconURL := fmt.Sprintf("http://localhost:%d/", sconPort)
 
+	role := c.GetString("role")
 	payload := gin.H{
 		"server":    s,
 		"manager":   h.manager,
 		"username":  username,
+		"role":      role,
 		"worldInfo": worldInfo,
 		// Canonical world ID used by the client as initial selection
 		"resolved_world_id": resolvedWorldID,
@@ -354,6 +356,7 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	c.HTML(http.StatusOK, "dashboard.html", gin.H{
 		"servers":  servers,
 		"username": username,
+		"role":     role,
 	})
 }
 

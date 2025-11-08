@@ -92,8 +92,7 @@
     .lang-dropdown { transition: opacity 120ms ease, transform 120ms ease; opacity: 0; transform: translateY(-6px); pointer-events: none; }
     .lang-dropdown.active { display: block; opacity: 1; transform: translateY(0); pointer-events: auto; }
 
-    /* Make Save As modal neutral in tone */
-    #saveAsModal .modal-header .icon { color: var(--text-secondary); }
+    /* Save As uses shared prompt modal; specific icon color rule removed */
 
     /* Fixed label width for More-section rows to align controls */
     .card-more-section .more-label { flex: 0 0 160px; }
@@ -162,4 +161,9 @@
     .inline-form { display: inline; }
     .input-wide { min-width: 240px; }
     .checkbox-row { display: block; }
+
+    /* Rename modal now uses shared template sizing; custom rule removed */
+
+    /* Align rename + language controls to the right, side by side */
+    .right-title-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
 </style>

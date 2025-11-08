@@ -68,6 +68,11 @@ Backend consistency and UI cleanup refinements landed recently. Highlights:
 - UI utilities and template cleanup
 	- Removed inline styles from templates in `ui/templates/`; shared, utility-first CSS lives in `ui/static/ui-theme.css` (and `modern.css`).
 	- The only intentional dynamic inline style left is progress bar width in long-running tasks.
+- Unified modal system (Confirm/Prompt/Info)
+	- Added shared templates in `ui/templates/partials/modal_templates.html` and helpers in `ui/templates/partials/modal_scripts.html`.
+	- Use `openConfirm({ title, body, confirmText, cancelText, danger })`, `openPrompt({ title, label, placeholder, defaultValue, validate })`, and `openInfo({ title, body, buttonText })`.
+	- Included on pages via `{{ template "modal_templates" . }}` and `{{ template "modal_scripts" . }}`; removes fragile inline onclick handlers and page-specific modals.
+	- Server Status now uses these for Rename, Save As, Delete, Load Save, Param-change confirmation, Token Help, and Log popup.
 - Language handling
 	- Language selection is handled via a dedicated endpoint and is no longer treated as a startup parameter change.
 
@@ -289,6 +294,11 @@ UI notes
 
 - Utility-first CSS lives in `ui/static/ui-theme.css` (plus `modern.css`).
 - Templates in `ui/templates/` avoid inline styles; HTMX-triggered updates consume toast headers for user feedback.
+- Modals: include `{{ template "modal_templates" . }}` and `{{ template "modal_scripts" . }}` on pages that need dialogs.
+	- Confirm: `openConfirm({ title:'Delete Server', body:'<p>…</p>', confirmText:'Delete', danger:true })` → Promise<boolean>.
+	- Prompt: `openPrompt({ title:'Save As…', label:'Name', validate:(v)=>v?true:'Required' })` → Promise<string|null>.
+	- Info: `openInfo({ title:'Help', body: someNodeOrHTML })` → Promise<void>.
+	- Helpers auto-handle focus trapping, Escape/backdrop close, and return Promises for clean async flows.
 
 Formatting, tests, lint
 - `gofmt -w ./internal ./cmd`

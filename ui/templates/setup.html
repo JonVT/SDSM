@@ -320,6 +320,8 @@
         </div>
     </main>
 
+    {{ template "modal_templates" . }}
+    {{ template "modal_scripts" . }}
     {{ template "footer" . }}
 
     <script>
@@ -424,16 +426,16 @@
                     fetchSetupProgress();
                 } else {
                     stopProgressAnimation();
-                    if (progressText) {
-                        progressText.textContent = '⚠️ Failed to start setup. Check the log and try again.';
-                    }
+                    const msg = 'Failed to start setup. Check the log and try again.';
+                    if (progressText) { progressText.textContent = '⚠️ ' + msg; }
+                    try { if (window.openInfo) window.openInfo({ title:'Setup Error', message: msg, confirmText:'Close' }); } catch(_) {}
                     setButtonsDisabled(false);
                 }
             }).catch(error => {
                 stopProgressAnimation();
-                if (progressText) {
-                    progressText.textContent = `⚠️ Setup failed to start: ${error.message}`;
-                }
+                const msg = `Setup failed to start: ${error.message}`;
+                if (progressText) { progressText.textContent = '⚠️ ' + msg; }
+                try { if (window.openInfo) window.openInfo({ title:'Setup Error', message: msg, confirmText:'Close' }); } catch(_) {}
                 setButtonsDisabled(false);
             });
         }
@@ -468,16 +470,16 @@
                     fetchSetupProgress();
                 } else {
                     stopProgressAnimation();
-                    if (progressText) {
-                        progressText.textContent = '⚠️ Failed to start update. Check the log and try again.';
-                    }
+                    const msg = 'Failed to start update. Check the log and try again.';
+                    if (progressText) { progressText.textContent = '⚠️ ' + msg; }
+                    try { if (window.openInfo) window.openInfo({ title:'Update Error', message: msg, confirmText:'Close' }); } catch(_) {}
                     setButtonsDisabled(false);
                 }
             }).catch(error => {
                 stopProgressAnimation();
-                if (progressText) {
-                    progressText.textContent = `⚠️ Update failed to start: ${error.message}`;
-                }
+                const msg = `Update failed to start: ${error.message}`;
+                if (progressText) { progressText.textContent = '⚠️ ' + msg; }
+                try { if (window.openInfo) window.openInfo({ title:'Update Error', message: msg, confirmText:'Close' }); } catch(_) {}
                 setButtonsDisabled(false);
             });
         }
@@ -511,9 +513,8 @@
                         stopProgressAnimation();
 
                         if (data.errors && data.errors.length) {
-                            if (progressText) {
-                                progressText.textContent = '⚠️ Setup encountered errors. Review the details below.';
-                            }
+                            if (progressText) { progressText.textContent = '⚠️ Setup encountered errors. Review the details below.'; }
+                            try { if (window.openInfo) window.openInfo({ title:'Setup Errors', message: (data.errors||[]).join('\n'), confirmText:'Close' }); } catch(_) {}
                             if (progressFill) {
                                 progressFill.style.width = '0%';
                             }
@@ -537,9 +538,8 @@
                                 window.location.href = '/manager';
                             }, 500);
                         } else {
-                            if (progressText) {
-                                progressText.textContent = '⚠️ Some components are still missing. Please try again.';
-                            }
+                            if (progressText) { progressText.textContent = '⚠️ Some components are still missing. Please try again.'; }
+                            try { if (window.openInfo) window.openInfo({ title:'Components Missing', message:'Some components are still missing. Please try again.', confirmText:'Close' }); } catch(_) {}
                             if (progressFill) {
                                 progressFill.style.width = '0%';
                             }

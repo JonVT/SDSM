@@ -117,7 +117,7 @@
     function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); const next = current === 'dark' ? 'light' : 'dark'; setTheme(next); }
     setTheme(getStoredTheme());
 
-    // Password match hint + success toast
+    // Password match hint + success toast (modal if available)
     document.addEventListener('DOMContentLoaded', function(){
       const np = document.getElementById('new_password');
       const cp = document.getElementById('confirm_password');
@@ -138,16 +138,22 @@
       if (cp) cp.addEventListener('input', updateHint);
       updateHint();
 
-      // Success toast after POST
+      // Success info after POST
       try {
         const success = flags && flags.dataset ? (flags.dataset.success || '').trim() : '';
-        if (success && window.showToast) {
-          window.showToast({ type: 'success', title: 'Profile Updated', message: success });
+        if (success) {
+          if (window.openInfo) {
+            window.openInfo({ title: 'Profile Updated', message: success, confirmText: 'OK' });
+          } else if (window.showToast) {
+            window.showToast({ type: 'success', title: 'Profile Updated', message: success });
+          }
         }
       } catch(_) {}
     });
   </script>
 
+  {{ template "modal_templates" . }}
+  {{ template "modal_scripts" . }}
   {{ template "toast.html" . }}
 </body>
 </html>

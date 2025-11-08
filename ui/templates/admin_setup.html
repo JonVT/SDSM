@@ -33,6 +33,12 @@
       return true;
     }
     function showError(msg){
+      try {
+        if (window.openInfo) {
+          window.openInfo({ title: 'Setup Error', message: String(msg||'An error occurred'), confirmText: 'Close' });
+          return;
+        }
+      } catch(_) {}
       let box = document.getElementById('error-box');
       if(!box){
         box = document.createElement('div');
@@ -41,7 +47,7 @@
         const form = document.getElementById('setup-form');
         form.parentNode.insertBefore(box, form);
       }
-      box.textContent = msg;
+      box.textContent = String(msg||'An error occurred');
     }
   </script>
   <meta name="robots" content="noindex" />
@@ -94,6 +100,8 @@
       <p class="hint">If running headless, set env SDSM_VIEWER_USERNAME/SDSM_VIEWER_PASSWORD for an optional read-only user before first login.</p>
     </div>
   </main>
+  {{ template "modal_templates" . }}
+  {{ template "modal_scripts" . }}
   {{ template "footer" . }}
   <script>
     function getStoredTheme(){ return localStorage.getItem('theme') || 'dark'; }
