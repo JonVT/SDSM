@@ -164,9 +164,9 @@ jobs:
           # Extract PR numbers referenced in commit messages (#123 pattern)
           PR_NUMBERS=$(git log --pretty=format:'%s%n%b' $RANGE | grep -o '#[0-9]\+' | sort -u || true)
 
-          printf "# %s\n\n" "$VERSION" > RELEASE_BODY.md
-          printf "- Commit: %s\n" "$SHORT_SHA" >> RELEASE_BODY.md
-          printf "- Date: %s\n" "$DATE" >> RELEASE_BODY.md
+          printf -- "# %s\n\n" "$VERSION" > RELEASE_BODY.md
+          printf -- "- Commit: %s\n" "$SHORT_SHA" >> RELEASE_BODY.md
+          printf -- "- Date: %s\n" "$DATE" >> RELEASE_BODY.md
 
           echo >> RELEASE_BODY.md
           echo "## Authors" >> RELEASE_BODY.md
