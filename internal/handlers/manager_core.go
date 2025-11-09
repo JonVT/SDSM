@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
-    "sort"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
@@ -152,13 +152,13 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 
 	role := c.GetString("role")
 	payload := gin.H{
-		"server":    s,
-		"liveClients": liveSorted,
+		"server":         s,
+		"liveClients":    liveSorted,
 		"historyClients": historySorted,
-		"manager":   h.manager,
-		"username":  username,
-		"role":      role,
-		"worldInfo": worldInfo,
+		"manager":        h.manager,
+		"username":       username,
+		"role":           role,
+		"worldInfo":      worldInfo,
 		// Canonical world ID used by the client as initial selection
 		"resolved_world_id": resolvedWorldID,
 		// Stable world IDs and localized display names
