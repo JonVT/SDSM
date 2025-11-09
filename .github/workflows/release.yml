@@ -90,6 +90,17 @@ jobs:
           PKGDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
           mkdir -p "$PKGDIR"
           BASENAME="sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}"
+          echo "Listing OUTDIR before packaging:" && ls -la "$OUTDIR" || true
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            [[ -f "$OUTDIR/sdsm.exe" ]] || { echo "Missing sdsm.exe in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
+            if ! command -v zip >/dev/null 2>&1; then
+              sudo apt-get update -y && sudo apt-get install -y zip
+            fi
+            (cd "$OUTDIR" && zip -9 "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
+          else
+            [[ -f "$OUTDIR/sdsm" ]] || { echo "Missing sdsm in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
+            (cd "$OUTDIR" && tar -czf "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
+          fi
           if [[ "${{ matrix.os }}" == "windows" ]]; then
             (cd "$OUTDIR" && zip -9 "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
           else
