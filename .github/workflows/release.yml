@@ -101,11 +101,6 @@ jobs:
             [[ -f "$OUTDIR/sdsm" ]] || { echo "Missing sdsm in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
             (cd "$OUTDIR" && tar -czf "../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
           fi
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            (cd "$OUTDIR" && zip -9 "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
-          else
-            (cd "$OUTDIR" && tar -czf "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
-          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
