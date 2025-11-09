@@ -238,7 +238,7 @@ jobs:
           set -euxo pipefail
           VERSION="${{ steps.vars.outputs.version }}"
           shopt -s globstar nullglob
-          files=( dist/upload/**/SDSM.* dist/upload/checksums.txt )
+          files=( dist/upload/**/SDSM.* dist/upload/checksums.txt CHANGELOG.md )
           if (( ${#files[@]} )); then
             gh release upload "$VERSION" "${files[@]}" --clobber
           else
