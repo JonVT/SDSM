@@ -89,17 +89,17 @@ jobs:
           DESTDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
           mkdir -p "$DESTDIR"
           if [[ "${{ matrix.os }}" == "linux" ]]; then
-            ARCHIVE="sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz"
+            ARCHIVE="SDSM.tar.gz"
             tar -C "$OUTDIR" -czf "$DESTDIR/$ARCHIVE" "$BIN"
           else
-            cp "$OUTDIR/$BIN" "$DESTDIR/sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}${BIN##sdsm}"
+            cp "$OUTDIR/$BIN" "$DESTDIR/SDSM.exe"
           fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/sdsm_*
+          path: dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/SDSM.*
 
   release:
     name: Create consolidated release
@@ -184,7 +184,7 @@ jobs:
           echo >> RELEASE_BODY.md
           echo "## Artifacts" >> RELEASE_BODY.md
           shopt -s globstar nullglob
-          files=( dist/upload/**/sdsm_* )
+          files=( dist/upload/**/SDSM.* )
           for f in "${files[@]}"; do
             base=$(basename "$f")
             echo "- $base" >> RELEASE_BODY.md
@@ -207,7 +207,7 @@ jobs:
           set -euxo pipefail
           cd dist/upload
           shopt -s globstar nullglob
-          files=( **/sdsm_* )
+          files=( **/SDSM.* )
           if (( ${#files[@]} )); then
             sha256sum "${files[@]}" > checksums.txt
           else
@@ -237,7 +237,7 @@ jobs:
           set -euxo pipefail
           VERSION="${{ steps.vars.outputs.version }}"
           shopt -s globstar nullglob
-          files=( dist/upload/**/sdsm_* dist/upload/checksums.txt )
+          files=( dist/upload/**/SDSM.* dist/upload/checksums.txt )
           if (( ${#files[@]} )); then
             gh release upload "$VERSION" "${files[@]}" --clobber
           else
