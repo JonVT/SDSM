@@ -19,7 +19,7 @@ env:
 
 jobs:
   build:
-    name: Build and Release (${{ matrix.os }}/${{ matrix.arch }})
+    name: Build binaries
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -100,32 +100,49 @@ jobs:
             (cd "$OUTDIR" && tar -czf "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
           fi
 
-      - name: Generate checksum
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/*.tar.gz
+            dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/*.zip
+
+  release:
+    name: Create consolidated release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/upload
+
+      - name: Generate checksums
         shell: bash
-        env:
-          VERSION: ${{ steps.vars.outputs.version }}
         run: |
           set -euxo pipefail
-          PKGDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
-          cd "$PKGDIR"
-          file=""
-          if compgen -G "*.tar.gz" > /dev/null; then
-            file=$(ls -1 *.tar.gz)
+          cd dist/upload
+          shopt -s globstar nullglob
+          files=( **/*.tar.gz **/*.zip )
+          if (( ${#files[@]} )); then
+            sha256sum "${files[@]}" > checksums.txt
           else
-            file=$(ls -1 *.zip)
+            echo "No packaged files found." >&2
+            exit 1
           fi
-          sha256sum "$file" > "${file}.sha256"
 
-      - name: Create/Update Release (one artifact per release)
+      - name: Create/Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.vars.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
-          name: ${{ steps.vars.outputs.version }}-${{ matrix.os }}-${{ matrix.arch }}
-          body: |
-            Release ${{ steps.vars.outputs.version }} for ${{ matrix.os }}/${{ matrix.arch }}
+          tag_name: ${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
+          body: Consolidated multi-platform release
           draft: false
           prerelease: false
           files: |
-            dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/*
+            dist/upload/**/*.tar.gz
+            dist/upload/**/*.zip
+            dist/upload/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
