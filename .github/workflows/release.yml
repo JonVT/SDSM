@@ -215,7 +215,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create or update release metadata
+      - name: Create or update release metadata (published)
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,10 +223,11 @@ jobs:
           set -euo pipefail
           VERSION="${{ steps.vars.outputs.version }}"
           if gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release edit "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md
+            # Ensure the release is published (not a draft) and not marked prerelease
+            gh release edit "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md --draft=false --prerelease=false
           else
             # Create empty release first; assets uploaded next
-            gh release create "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md
+            gh release create "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md --draft=false --prerelease=false
           fi
 
       - name: Upload assets with overwrite
