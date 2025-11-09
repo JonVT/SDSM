@@ -113,10 +113,100 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      - name: Determine version
+        id: vars
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::No version provided and not a tag push. Provide inputs.version (e.g., v0.4.1)"
+            exit 1
+          fi
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist/upload
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release body
+        id: body
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.vars.outputs.version }}"
+          SHORT_SHA="${{ steps.vars.outputs.short_sha }}"
+          DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          # Find previous tag (by semver sort) excluding current
+          git fetch --tags --force >/dev/null 2>&1 || true
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | grep -v "^${VERSION}$" | head -n1 || true)
+          if [[ -n "$PREV_TAG" ]]; then
+            AUTHORS=$(git log --format='%aN' "$PREV_TAG".."$VERSION" | sort -u | tr '\n' '\n')
+            RANGE="$PREV_TAG..$VERSION"
+          else
+            AUTHORS=$(git log --format='%aN' "$VERSION" | sort -u | tr '\n' '\n')
+            RANGE="$VERSION"
+          fi
+          # Extract PR numbers referenced in commit messages (#123 pattern)
+          PR_NUMBERS=$(git log --pretty=format:'%s%n%b' $RANGE | grep -o '#[0-9]\+' | sort -u || true)
+
+          printf "# %s\n\n" "$VERSION" > RELEASE_BODY.md
+          printf "- Commit: %s\n" "$SHORT_SHA" >> RELEASE_BODY.md
+          printf "- Date: %s\n" "$DATE" >> RELEASE_BODY.md
+
+          echo >> RELEASE_BODY.md
+          echo "## Authors" >> RELEASE_BODY.md
+          if [[ -n "$AUTHORS" ]]; then
+            while IFS= read -r a; do
+              [[ -z "$a" ]] && continue
+              echo "- $a" >> RELEASE_BODY.md
+            done <<< "$AUTHORS"
+          else
+            echo "- N/A" >> RELEASE_BODY.md
+          fi
+
+          echo >> RELEASE_BODY.md
+          echo "## Pull Requests" >> RELEASE_BODY.md
+          if [[ -n "$PR_NUMBERS" ]]; then
+            for pr in $PR_NUMBERS; do
+              num=${pr#"#"}
+              echo "- $pr https://github.com/${GITHUB_REPOSITORY}/pull/$num" >> RELEASE_BODY.md
+            done
+          else
+            echo "- None" >> RELEASE_BODY.md
+          fi
+
+          echo >> RELEASE_BODY.md
+          echo "## Artifacts" >> RELEASE_BODY.md
+          shopt -s globstar nullglob
+          files=( dist/upload/**/*.tar.gz dist/upload/**/*.zip )
+          for f in "${files[@]}"; do
+            base=$(basename "$f")
+            echo "- $base" >> RELEASE_BODY.md
+          done
+          echo "- checksums.txt" >> RELEASE_BODY.md
+
+          echo >> RELEASE_BODY.md
+          echo "## Changes" >> RELEASE_BODY.md
+          if [[ -n "$PREV_TAG" ]]; then
+            echo "Comparing $PREV_TAG..$VERSION" >> RELEASE_BODY.md
+            echo >> RELEASE_BODY.md
+            git log --pretty=format:'- %s (%h)' "$PREV_TAG".."$VERSION" >> RELEASE_BODY.md || echo "- No commits found" >> RELEASE_BODY.md
+          else
+            echo "Initial release for this tag." >> RELEASE_BODY.md
+          fi
 
       - name: Generate checksums
         shell: bash
@@ -135,9 +225,9 @@ jobs:
       - name: Create/Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.build.outputs.version }}
-          name: ${{ needs.build.outputs.version }}
-          body: Consolidated multi-platform release
+          tag_name: ${{ steps.vars.outputs.version }}
+          name: ${{ steps.vars.outputs.version }}
+          body_path: RELEASE_BODY.md
           draft: false
           prerelease: false
           files: |
