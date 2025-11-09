@@ -96,10 +96,10 @@ jobs:
             if ! command -v zip >/dev/null 2>&1; then
               sudo apt-get update -y && sudo apt-get install -y zip
             fi
-            (cd "$OUTDIR" && zip -9 "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
+            (cd "$OUTDIR" && zip -9 "../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
           else
             [[ -f "$OUTDIR/sdsm" ]] || { echo "Missing sdsm in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
-            (cd "$OUTDIR" && tar -czf "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
+            (cd "$OUTDIR" && tar -czf "../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
           fi
           if [[ "${{ matrix.os }}" == "windows" ]]; then
             (cd "$OUTDIR" && zip -9 "../../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
