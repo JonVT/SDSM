@@ -33,10 +33,6 @@ jobs:
             arch: amd64
           - os: windows
             arch: arm64
-          - os: darwin
-            arch: amd64
-          - os: darwin
-            arch: arm64
     outputs:
       version: ${{ steps.vars.outputs.version }}
     steps:
@@ -222,17 +218,32 @@ jobs:
             exit 1
           fi
 
-      - name: Create/Update Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.vars.outputs.version }}
-          name: ${{ steps.vars.outputs.version }}
-          body_path: RELEASE_BODY.md
-          draft: false
-          prerelease: false
-          files: |
-            dist/upload/**/*.tar.gz
-            dist/upload/**/*.zip
-            dist/upload/checksums.txt
+      - name: Create or update release metadata
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.vars.outputs.version }}"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md
+          else
+            # Create empty release first; assets uploaded next
+            gh release create "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md
+          fi
+
+      - name: Upload assets with overwrite
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          VERSION="${{ steps.vars.outputs.version }}"
+          shopt -s globstar nullglob
+          files=( dist/upload/**/*.tar.gz dist/upload/**/*.zip dist/upload/checksums.txt )
+          if (( ${#files[@]} )); then
+            gh release upload "$VERSION" "${files[@]}" --clobber
+          else
+            echo "No files to upload" >&2
+            exit 1
+          fi
