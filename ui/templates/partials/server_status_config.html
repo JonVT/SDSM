@@ -60,6 +60,11 @@
             </div>
 
             <div class="form-row form-row-full">
+                <label for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec):</label>
+                <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" value="{{.server.BepInExInitTimeoutSeconds}}" class="form-input-inline" min="5" max="120" placeholder="10" autocomplete="off" title="Maximum time to wait for initial BepInEx bootstrap on Windows.">
+            </div>
+
+            <div class="form-row form-row-full">
                 <label for="welcome_message">Welcome Message:</label>
                 <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" title="Message sent to chat when any player connects." autocomplete="off">
             </div>

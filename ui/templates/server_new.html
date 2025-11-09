@@ -211,6 +211,13 @@
                                        value="{{ or (index $form "shutdown_delay_seconds") 2 }}" placeholder="2">
                                 <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
                             </div>
+
+                            <div class="form-group">
+                                <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
+                                <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120"
+                                       value="{{ or (index $form "bepinex_init_timeout_seconds") 10 }}" placeholder="10">
+                                <p class="help-text">Maximum time to wait for initial BepInEx bootstrap (Windows). Default 10.</p>
+                            </div>
                             
                             <div class="form-group">
                                 <label class="form-label" for="auth_secret">Auth Secret</label>

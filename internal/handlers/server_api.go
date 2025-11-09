@@ -806,6 +806,18 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// BepInEx init timeout (Windows bootstrap)
+	if v := strings.TrimSpace(body["bepinex_init_timeout_seconds"]); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n < 5 {
+				n = 5
+			} else if n > 120 {
+				n = 120
+			}
+			s.BepInExInitTimeoutSeconds = n
+		}
+	}
+
 	s.Visible = body["server_visible"] == "on" || body["server_visible"] == "true" || body["server_visible"] == "1"
 	s.Beta = body["beta"] == "true"
 	s.AutoStart = body["auto_start"] == "on" || body["auto_start"] == "true" || body["auto_start"] == "1"
@@ -914,30 +926,31 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 	}
 	// Support both JSON and x-www-form-urlencoded bodies
 	var req struct {
-		Name                  string `json:"name"`
-		World                 string `json:"world"`
-		StartLocation         string `json:"start_location"`
-		StartCondition        string `json:"start_condition"`
-		Difficulty            string `json:"difficulty"`
-		Port                  int    `json:"port"`
-		MaxClients            int    `json:"max_clients"`
-		Password              string `json:"password"`
-		AuthSecret            string `json:"auth_secret"`
-		SaveInterval          int    `json:"save_interval"`
-		RestartDelaySeconds   int    `json:"restart_delay_seconds"`
-		ShutdownDelaySeconds  int    `json:"shutdown_delay_seconds"`
-		Beta                  bool   `json:"beta"`
-		AutoStart             bool   `json:"auto_start"`
-		AutoUpdate            bool   `json:"auto_update"`
-		AutoSave              bool   `json:"auto_save"`
-		AutoPause             bool   `json:"auto_pause"`
-		PlayerSaves           bool   `json:"player_saves"`
-		MaxAutoSaves          int    `json:"max_auto_saves"`
-		MaxQuickSaves         int    `json:"max_quick_saves"`
-		DeleteSkeletonOnDecay bool   `json:"delete_skeleton_on_decay"`
-		UseSteamP2P           bool   `json:"use_steam_p2p"`
-		DisconnectTimeout     int    `json:"disconnect_timeout"`
-		Visible               bool   `json:"server_visible"`
+		Name                      string `json:"name"`
+		World                     string `json:"world"`
+		StartLocation             string `json:"start_location"`
+		StartCondition            string `json:"start_condition"`
+		Difficulty                string `json:"difficulty"`
+		Port                      int    `json:"port"`
+		MaxClients                int    `json:"max_clients"`
+		Password                  string `json:"password"`
+		AuthSecret                string `json:"auth_secret"`
+		SaveInterval              int    `json:"save_interval"`
+		RestartDelaySeconds       int    `json:"restart_delay_seconds"`
+		ShutdownDelaySeconds      int    `json:"shutdown_delay_seconds"`
+		Beta                      bool   `json:"beta"`
+		AutoStart                 bool   `json:"auto_start"`
+		AutoUpdate                bool   `json:"auto_update"`
+		AutoSave                  bool   `json:"auto_save"`
+		AutoPause                 bool   `json:"auto_pause"`
+		PlayerSaves               bool   `json:"player_saves"`
+		MaxAutoSaves              int    `json:"max_auto_saves"`
+		MaxQuickSaves             int    `json:"max_quick_saves"`
+		DeleteSkeletonOnDecay     bool   `json:"delete_skeleton_on_decay"`
+		UseSteamP2P               bool   `json:"use_steam_p2p"`
+		DisconnectTimeout         int    `json:"disconnect_timeout"`
+		Visible                   bool   `json:"server_visible"`
+		BepInExInitTimeoutSeconds int    `json:"bepinex_init_timeout_seconds"`
 	}
 	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -995,6 +1008,9 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("disconnect_timeout"))); err == nil {
 			req.DisconnectTimeout = v
 		}
+		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("bepinex_init_timeout_seconds"))); err == nil {
+			req.BepInExInitTimeoutSeconds = v
+		}
 		req.Visible = parseBool(c.PostForm("server_visible"))
 	}
 
@@ -1049,6 +1065,19 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		DisconnectTimeout:     ifZero(req.DisconnectTimeout, 10000),
 		RestartDelaySeconds:   v.RestartDelay,
 		ShutdownDelaySeconds:  v.ShutdownDelay,
+		BepInExInitTimeoutSeconds: func() int {
+			t := req.BepInExInitTimeoutSeconds
+			if t <= 0 {
+				t = 10
+			}
+			if t < 5 {
+				t = 5
+			}
+			if t > 120 {
+				t = 120
+			}
+			return t
+		}(),
 	}
 
 	// Default language selection similar to page flow
@@ -1343,6 +1372,12 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	maxAutoSaves := ifZero(parseIntSafe(c.PostForm("max_auto_saves"), 0), 5)
 	maxQuickSaves := ifZero(parseIntSafe(c.PostForm("max_quick_saves"), 0), 5)
 	disconnectTimeout := ifZero(parseIntSafe(c.PostForm("disconnect_timeout"), 0), 10000)
+	bepInExInitTimeout := parseIntSafe(c.PostForm("bepinex_init_timeout_seconds"), 10)
+	if bepInExInitTimeout < 5 {
+		bepInExInitTimeout = 5
+	} else if bepInExInitTimeout > 120 {
+		bepInExInitTimeout = 120
+	}
 
 	// Handle file upload early so we can parse world_meta.xml first
 	file, err := c.FormFile("save_file")
@@ -1465,34 +1500,35 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	}
 
 	cfg := &models.ServerConfig{
-		Name:                  v.Name,
-		World:                 v.World,
-		WorldID:               worldID,
-		Language:              "",
-		StartLocation:         v.StartLocation,
-		StartCondition:        v.StartCondition,
-		Difficulty:            v.Difficulty,
-		Port:                  v.Port,
-		Password:              password,
-		AuthSecret:            authSecret,
-		MaxClients:            v.MaxClients,
-		SaveInterval:          v.SaveInterval,
-		Visible:               serverVisible,
-		Beta:                  v.Beta,
-		AutoStart:             autoStart,
-		AutoUpdate:            autoUpdate,
-		AutoSave:              autoSave,
-		AutoPause:             autoPause,
-		PlayerSaves:           playerSaves,
-		MaxAutoSaves:          maxAutoSaves,
-		MaxQuickSaves:         maxQuickSaves,
-		DeleteSkeletonOnDecay: deleteSkeletonOnDecay,
-		UseSteamP2P:           useSteamP2P,
-		DisconnectTimeout:     disconnectTimeout,
-		RestartDelaySeconds:   v.RestartDelay,
-		ShutdownDelaySeconds:  v.ShutdownDelay,
-		WelcomeMessage:        welcomeMessage,
-		WelcomeBackMessage:    welcomeBackMessage,
+		Name:                      v.Name,
+		World:                     v.World,
+		WorldID:                   worldID,
+		Language:                  "",
+		StartLocation:             v.StartLocation,
+		StartCondition:            v.StartCondition,
+		Difficulty:                v.Difficulty,
+		Port:                      v.Port,
+		Password:                  password,
+		AuthSecret:                authSecret,
+		MaxClients:                v.MaxClients,
+		SaveInterval:              v.SaveInterval,
+		Visible:                   serverVisible,
+		Beta:                      v.Beta,
+		AutoStart:                 autoStart,
+		AutoUpdate:                autoUpdate,
+		AutoSave:                  autoSave,
+		AutoPause:                 autoPause,
+		PlayerSaves:               playerSaves,
+		MaxAutoSaves:              maxAutoSaves,
+		MaxQuickSaves:             maxQuickSaves,
+		DeleteSkeletonOnDecay:     deleteSkeletonOnDecay,
+		UseSteamP2P:               useSteamP2P,
+		DisconnectTimeout:         disconnectTimeout,
+		RestartDelaySeconds:       v.RestartDelay,
+		ShutdownDelaySeconds:      v.ShutdownDelay,
+		WelcomeMessage:            welcomeMessage,
+		WelcomeBackMessage:        welcomeBackMessage,
+		BepInExInitTimeoutSeconds: bepInExInitTimeout,
 	}
 
 	// Default language selection similar to other create paths
@@ -1962,7 +1998,7 @@ func (h *ManagerHandlers) APIServerSaveAs(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-		ToastSuccess(c, "Save As Requested", "Manual save requested.")
+	ToastSuccess(c, "Save As Requested", "Manual save requested.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -2154,7 +2190,7 @@ func (h *ManagerHandlers) APIServerCleanup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-		ToastSuccess(c, "Cleanup Started", "Cleanup command sent.")
+	ToastSuccess(c, "Cleanup Started", "Cleanup command sent.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
@@ -2224,8 +2260,8 @@ func (h *ManagerHandlers) APIServerKick(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-		// Realtime: player list and counts may change
-		h.BroadcastStatusAndStats(s)
+	// Realtime: player list and counts may change
+	h.BroadcastStatusAndStats(s)
 	ToastSuccess(c, "Player Kicked", "Kick command sent.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

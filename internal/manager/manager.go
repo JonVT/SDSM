@@ -713,10 +713,11 @@ func (m *Manager) load() (bool, error) {
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
 	m.DetachedServers = temp.DetachedServers
-
-	// Environment variable override (does not persist unless saved explicitly)
-	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
-		m.DetachedServers = true
+	// Default false when missing (zero value already false). Propagate to servers.
+	for _, srv := range m.Servers {
+		if srv != nil {
+			srv.Detached = m.DetachedServers
+		}
 	}
 
 	// Update fields from temp, but preserve existing Paths if temp.Paths is nil
@@ -1835,6 +1836,8 @@ func (m *Manager) AddServer(cfg *models.ServerConfig) (*models.Server, error) {
 
 	id := m.NextID()
 	srv := models.NewServerFromConfig(id, m.Paths, cfg)
+	// Apply current manager-level detached behavior to new server instances.
+	srv.Detached = m.DetachedServers
 
 	if srv.Paths != nil {
 		if err := os.MkdirAll(srv.Paths.ServerLogsDir(srv.ID), 0o755); err != nil {

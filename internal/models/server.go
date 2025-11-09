@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"sdsm/internal/utils"
@@ -117,6 +116,9 @@ type ServerConfig struct {
 	WelcomeBackMessage string // Sent to returning players (present in players log)
 	// WelcomeDelaySeconds controls how long to wait after connect before sending welcome/welcome-back
 	WelcomeDelaySeconds int
+	// BepInExInitTimeoutSeconds controls how long the initial bootstrap run is allowed
+	// to execute on Windows before being force-killed. Defaults to 10 seconds when absent.
+	BepInExInitTimeoutSeconds int
 }
 
 // Server represents a managed dedicated server instance, including
@@ -157,10 +159,15 @@ type Server struct {
 	// PlayerSaveExcludes lists Steam IDs for which player-save automation should be skipped
 	PlayerSaveExcludes []string `json:"player_save_excludes"`
 	// ShutdownDelaySeconds controls how long to wait after stop button before issuing QUIT
-	ShutdownDelaySeconds int      `json:"shutdown_delay_seconds"`
-	Mods                 []string `json:"mods"`
-	RestartDelaySeconds  int      `json:"restart_delay_seconds"`
-	SCONPort             int      `json:"scon_port"` // Port for SCON plugin HTTP API
+	ShutdownDelaySeconds      int      `json:"shutdown_delay_seconds"`
+	Mods                      []string `json:"mods"`
+	RestartDelaySeconds       int      `json:"restart_delay_seconds"`
+	SCONPort                  int      `json:"scon_port"`                    // Port for SCON plugin HTTP API
+	BepInExInitTimeoutSeconds int      `json:"bepinex_init_timeout_seconds"` // Timeout for initial BepInEx bootstrap (Windows)
+	// Detached indicates this server should start in its own process group (Unix) and remain
+	// running if the manager exits. It is derived from Manager.DetachedServers and is not
+	// persisted independently in sdsm.config.
+	Detached bool `json:"-"`
 	// WelcomeMessage is sent as a chat/SAY message each time a player connects (if non-empty)
 	WelcomeMessage      string        `json:"welcome_message"`
 	WelcomeBackMessage  string        `json:"welcome_back_message"`
@@ -1174,6 +1181,13 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 		s.RestartDelaySeconds = DefaultRestartDelaySeconds
 	}
 
+	// BepInEx init timeout (Windows only usage). Default 10s.
+	if cfg.BepInExInitTimeoutSeconds > 0 {
+		s.BepInExInitTimeoutSeconds = cfg.BepInExInitTimeoutSeconds
+	} else {
+		s.BepInExInitTimeoutSeconds = 10
+	}
+
 	s.EnsureLogger(paths)
 
 	return s
@@ -1181,16 +1195,17 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 
 func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 	s := &Server{
-		ID:                   serverID,
-		Paths:                paths,
-		Clients:              []*Client{},
-		Chat:                 []*Chat{},
-		Mods:                 []string{},
-		Paused:               false,
-		Running:              false,
-		RestartDelaySeconds:  DefaultRestartDelaySeconds,
-		ShutdownDelaySeconds: 2,
-		WelcomeDelaySeconds:  1,
+		ID:                        serverID,
+		Paths:                     paths,
+		Clients:                   []*Client{},
+		Chat:                      []*Chat{},
+		Mods:                      []string{},
+		Paused:                    false,
+		Running:                   false,
+		RestartDelaySeconds:       DefaultRestartDelaySeconds,
+		ShutdownDelaySeconds:      2,
+		WelcomeDelaySeconds:       1,
+		BepInExInitTimeoutSeconds: 10,
 	}
 
 	s.EnsureLogger(paths)
@@ -1505,7 +1520,7 @@ func (s *Server) installBepInEx(gameDir string) error {
 			s.Logger.Write("Starting server briefly to initialize BepInEx config")
 		}
 
-		// Run with a timeout in case it doesn't quit cleanly
+		// Run with a timeout in case it doesn't quit cleanly (configurable)
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to start server for BepInEx init: %w", err)
 		}
@@ -1516,13 +1531,17 @@ func (s *Server) installBepInEx(gameDir string) error {
 			done <- cmd.Wait()
 		}()
 
+		timeout := time.Duration(s.BepInExInitTimeoutSeconds)
+		if timeout <= 0 {
+			timeout = 10
+		}
 		select {
 		case err := <-done:
 			// Process exited on its own
 			if err != nil && s.Logger != nil {
 				s.Logger.Write(fmt.Sprintf("BepInEx init run exited with status: %v", err))
 			}
-		case <-time.After(10 * time.Second):
+		case <-time.After(timeout * time.Second):
 			// Timeout: kill the process
 			if cmd.Process != nil {
 				_ = cmd.Process.Kill()
@@ -1530,8 +1549,16 @@ func (s *Server) installBepInEx(gameDir string) error {
 			<-done // Wait for Wait() to return
 		}
 
-		if s.Logger != nil {
-			s.Logger.Write("BepInEx initialization run completed")
+		// Validate that BepInEx initialized by checking for a known directory
+		bepinexConfigDir := filepath.Join(gameDir, "BepInEx", "config")
+		if _, err := os.Stat(bepinexConfigDir); err == nil {
+			if s.Logger != nil {
+				s.Logger.Write("BepInEx initialization run completed successfully (config detected)")
+			}
+		} else {
+			if s.Logger != nil {
+				s.Logger.Write("Warning: BepInEx config directory not found after init run; plugins may not load until first full start")
+			}
 		}
 		return nil
 	}
@@ -2019,6 +2046,13 @@ func (s *Server) Start() {
 	if runtime.GOOS == "linux" {
 		// On Linux, use run_bepinex.sh as wrapper
 		scriptPath := filepath.Join(s.Paths.ServerGameDir(s.ID), "run_bepinex.sh")
+		// Warn if BepInEx directory exists but wrapper is missing
+		if _, err := os.Stat(scriptPath); err != nil {
+			bepDir := filepath.Join(s.Paths.ServerGameDir(s.ID), "BepInEx")
+			if _, berr := os.Stat(bepDir); berr == nil && s.Logger != nil {
+				s.Logger.Write("Warning: BepInEx directory present but run_bepinex.sh wrapper missing; plugins may not load")
+			}
+		}
 		// Make the script executable
 		if err := os.Chmod(scriptPath, 0o755); err != nil && s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Warning: failed to make run_bepinex.sh executable: %v", err))
@@ -2029,39 +2063,29 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write("Using run_bepinex.sh wrapper for BepInEx support")
 		}
-	} else {
+	} else if runtime.GOOS == "windows" {
 		// On Windows, run executable directly
 		cmd = exec.Command(executablePath, args...)
+	} else {
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Unsupported platform: %s. Server start aborted.", runtime.GOOS))
+		}
+		return
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
 
-	// Detach process group when detached mode is enabled via environment variable.
-	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
+	// Optionally detach process group (Unix uses Setpgid; Windows uses CREATE_NEW_PROCESS_GROUP).
+	if s.Detached {
 		if s.Logger != nil {
-			s.Logger.Write("Applying detached process group (Setpgid) for server process")
+			s.Logger.Write("Applying detached process group for server process")
 		}
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		setDetachedProcessGroup(cmd)
 	}
 
 	if s.Logger != nil {
 		s.Logger.Write("Starting server process")
 	}
 	// stdin fallback removed: Stationeers does not accept stdin commands reliably
-	// If manager is configured for detached servers, start process in its own group (Unix)
-	if runtime.GOOS != "windows" {
-		if m := s.Paths; m != nil { /* placeholder if future path checks needed */
-		}
-		// Setpgid will prevent receiving parent termination signals
-		if cmd.SysProcAttr == nil {
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-		}
-		if s != nil && s.Paths != nil { /* no-op references to avoid unused warnings */
-		}
-		// We will decide detached behavior based on environment variable until wired to Manager at start
-		if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
-			cmd.SysProcAttr.Setpgid = true
-		}
-	}
 	if err := cmd.Start(); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to start server process: %v", err))
@@ -2486,7 +2510,8 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
+	mode := info.Mode()
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
@@ -2496,7 +2521,19 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	return os.Chmod(dst, info.Mode())
+	// Normalize permissions on Unix-like systems: preserve exec bit if present; otherwise 0644
+	if runtime.GOOS != "windows" {
+		finalMode := mode
+		if mode.IsRegular() {
+			if (mode&0o111) != 0 || strings.HasSuffix(strings.ToLower(dst), ".sh") {
+				finalMode = 0o755
+			} else {
+				finalMode = 0o644
+			}
+		}
+		return os.Chmod(dst, finalMode)
+	}
+	return os.Chmod(dst, mode)
 }
 
 func filesDiffer(src, dst string) (bool, error) {
