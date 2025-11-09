@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"sdsm/internal/utils"
@@ -2035,33 +2034,20 @@ func (s *Server) Start() {
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
 
-	// Detach process group when detached mode is enabled via environment variable.
+	// Detach process group when detached mode is enabled via environment variable (non-Windows only).
 	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
 		if s.Logger != nil {
-			s.Logger.Write("Applying detached process group (Setpgid) for server process")
+			s.Logger.Write("Applying detached process attributes for server process")
 		}
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if attr := newSysProcAttrDetached(); attr != nil {
+			cmd.SysProcAttr = attr
+		}
 	}
 
 	if s.Logger != nil {
 		s.Logger.Write("Starting server process")
 	}
 	// stdin fallback removed: Stationeers does not accept stdin commands reliably
-	// If manager is configured for detached servers, start process in its own group (Unix)
-	if runtime.GOOS != "windows" {
-		if m := s.Paths; m != nil { /* placeholder if future path checks needed */
-		}
-		// Setpgid will prevent receiving parent termination signals
-		if cmd.SysProcAttr == nil {
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-		}
-		if s != nil && s.Paths != nil { /* no-op references to avoid unused warnings */
-		}
-		// We will decide detached behavior based on environment variable until wired to Manager at start
-		if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
-			cmd.SysProcAttr.Setpgid = true
-		}
-	}
 	if err := cmd.Start(); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to start server process: %v", err))
