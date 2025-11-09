@@ -2074,12 +2074,23 @@ func (s *Server) Start() {
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
 
+<<<<<<< HEAD
 	// Optionally detach process group (Unix uses Setpgid; Windows uses CREATE_NEW_PROCESS_GROUP).
 	if s.Detached {
 		if s.Logger != nil {
 			s.Logger.Write("Applying detached process group for server process")
 		}
 		setDetachedProcessGroup(cmd)
+=======
+	// Detach process group when detached mode is enabled via environment variable (non-Windows only).
+	if strings.EqualFold(os.Getenv("SDSM_DETACHED_SERVERS"), "true") {
+		if s.Logger != nil {
+			s.Logger.Write("Applying detached process attributes for server process")
+		}
+		if attr := newSysProcAttrDetached(); attr != nil {
+			cmd.SysProcAttr = attr
+		}
+>>>>>>> 44d4d2b6d671e6ebe9e2277707616f005484c0df
 	}
 
 	if s.Logger != nil {
