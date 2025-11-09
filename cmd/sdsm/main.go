@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	htmltmpl "html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -18,8 +19,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"io/fs"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
@@ -74,23 +73,7 @@ func (w managerLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-const (
-	envUseTLS  = "SDSM_USE_TLS"
-	envTLSCert = "SDSM_TLS_CERT"
-	envTLSKey  = "SDSM_TLS_KEY"
-)
-
-func envBool(key string) bool {
-	val := os.Getenv(key)
-	if val == "" {
-		return false
-	}
-	parsed, err := strconv.ParseBool(val)
-	if err != nil {
-		return false
-	}
-	return parsed
-}
+// TLS settings are now read from sdsm.config (manager fields).
 
 func main() {
 	// Set Gin mode
@@ -107,10 +90,12 @@ func main() {
 		wsHub:       middleware.NewHub(mgr.Log),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Minute/100), 10),
 		userStore:   manager.NewUserStore(mgr.Paths),
-		tlsEnabled:  envBool(envUseTLS),
-		tlsCertPath: os.Getenv(envTLSCert),
-		tlsKeyPath:  os.Getenv(envTLSKey),
 	}
+
+	// Apply TLS settings from config
+	app.tlsEnabled = app.manager.TLSEnabled
+	app.tlsCertPath = app.manager.TLSCertPath
+	app.tlsKeyPath = app.manager.TLSKeyPath
 
 	// Ensure config directories exist and load users
 	if app.manager.Paths != nil {
@@ -166,11 +151,18 @@ func main() {
 	}
 
 	// Start server in a goroutine
-	if app.tlsEnabled {
-		if app.tlsCertPath == "" || app.tlsKeyPath == "" {
-			logStuff(fmt.Sprintf("%s is enabled but %s or %s not provided", envUseTLS, envTLSCert, envTLSKey))
-			os.Exit(1)
+	certMissing := strings.TrimSpace(app.tlsCertPath) == ""
+	keyMissing := strings.TrimSpace(app.tlsKeyPath) == ""
+	useTLS := app.tlsEnabled && !certMissing && !keyMissing
+	if app.tlsEnabled && !useTLS {
+		logStuff("TLS enabled but certificate or key missing; falling back to HTTP")
+		app.tlsEnabled = false
+		if app.manager != nil {
+			app.manager.TLSEnabled = false
+			app.manager.Save()
 		}
+	}
+	if useTLS {
 		go func() {
 			logStuff(fmt.Sprintf("Starting HTTPS server on port %d", app.manager.Port))
 			if err := srv.ListenAndServeTLS(app.tlsCertPath, app.tlsKeyPath); err != nil && err != http.ErrServerClosed {
@@ -180,11 +172,7 @@ func main() {
 		}()
 	} else {
 		go func() {
-			if app.tlsEnabled {
-				fmt.Printf("Starting server at https://localhost:%d\n", app.manager.Port)
-			} else {
-				fmt.Printf("Starting server at http://localhost:%d\n", app.manager.Port)
-			}
+			fmt.Printf("Starting server at http://localhost:%d\n", app.manager.Port)
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				logStuff(fmt.Sprintf("Server failed to start: %v", err))
 				os.Exit(1)
@@ -192,25 +180,37 @@ func main() {
 		}()
 	}
 
-	// Wait for interrupt signal to gracefully shutdown
+	// Windows tray integration (configurable)
+	trayDone := make(chan struct{})
+	if app.manager.TrayEnabled {
+		go startTray(app, srv, trayDone)
+	} else {
+		close(trayDone)
+	}
+
+	// Wait for either system signal or tray exit to gracefully shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	logStuff("Shutting down server...")
 
-	// Shutdown manager first
-	app.manager.Shutdown()
+	// Block until an OS signal (Ctrl+C / termination) or tray exit
+	select {
+	case <-quit:
+		logStuff("Shutdown signal received")
+	case <-trayDone:
+		logStuff("Tray exit requested")
+	}
 
-	// Stop rate limiter cleanup goroutine
-	app.rateLimiter.Stop()
-
-	// Give server 5 seconds to finish handling requests
+	// Gracefully stop HTTP server (allow in-flight requests up to 5s)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
 	if err := srv.Shutdown(ctx); err != nil {
-		logStuff(fmt.Sprintf("Server forced to shutdown: %v", err))
-		os.Exit(1)
+		logStuff(fmt.Sprintf("HTTP server shutdown error: %v", err))
+	}
+	cancel()
+
+	// Exit manager, stopping servers unless detached mode keeps them running
+	if app.manager != nil {
+		stopServers := !app.manager.DetachedServers
+		app.manager.ExitDetached(stopServers)
 	}
 
 	logStuff("Server exited")
@@ -352,36 +352,6 @@ func setupRouter() *gin.Engine {
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
 
-	// Public routes
-	r.GET("/", func(c *gin.Context) {
-		token, err := c.Cookie(middleware.CookieName)
-		if err == nil {
-			if claims, validateErr := app.authService.ValidateToken(token); validateErr == nil {
-				// Choose landing page by role
-				target := "/dashboard"
-				if claims != nil && strings.TrimSpace(claims.Username) != "" {
-					if u, ok := app.userStore.Get(claims.Username); ok && u.Role == manager.RoleAdmin {
-						target = "/manager"
-					}
-				}
-				c.Redirect(http.StatusFound, target)
-				return
-			}
-		}
-		c.Redirect(http.StatusFound, "/login")
-	})
-
-	// Setup routes (no auth required for initial setup)
-	setup := r.Group("/setup")
-	{
-		setup.GET("", managerHandlers.SetupGET)
-		setup.GET("/status", managerHandlers.SetupStatusGET)
-		setup.GET("/progress", managerHandlers.SetupProgressGET)
-		setup.POST("/skip", managerHandlers.SetupSkipPOST)
-		setup.POST("/install", managerHandlers.SetupInstallPOST)
-		setup.POST("/update", managerHandlers.SetupUpdatePOST)
-	}
-
 	// Authentication routes
 	auth := r.Group("/")
 	{
@@ -495,6 +465,11 @@ func setupRouter() *gin.Engine {
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)
 		// Async manager versions (latest/deployed) for faster initial manager page load
 		api.GET("/manager/versions", managerHandlers.ManagerVersionsGET)
+		// Global manager logs APIs
+		api.GET("/manager/logs", managerHandlers.APIManagerLogsList)
+		api.GET("/manager/log/tail", managerHandlers.APIManagerLogTail)
+		api.POST("/manager/log/clear", managerHandlers.APIManagerLogClear)
+		api.GET("/manager/log/download", managerHandlers.APIManagerLogDownload)
 
 		// Admin-only user management API
 		api.GET("/users", func(c *gin.Context) {
@@ -658,3 +633,7 @@ func setupRouter() *gin.Engine {
 
 	return r
 }
+
+// startTray provides a Windows system tray icon allowing quick access and exit.
+// On non-Windows platforms it returns immediately.
+// startTray is implemented in platform-specific files.

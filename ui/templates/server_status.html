@@ -198,12 +198,18 @@
         
         <div class="card" id="server-logs-card">
             <div class="card-header">
-                <h2 class="card-title">Server Logs</h2>
+                <h2 class="card-title m-0">Server Logs</h2>
+                <button type="button" id="serverLogsToggle" class="btn btn-secondary btn-min-sm" aria-expanded="true" aria-controls="serverLogsContent" title="Collapse">
+                    <svg id="serverLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <span id="serverLogsToggleLabel" class="ml-6">Hide</span>
+                </button>
             </div>
-            <div class="logs-grid">
-                <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
-                <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">
-                    <div class="empty-state" id="log-tabs-empty">No log files found</div>
+            <div id="serverLogsContent" class="card-body" aria-hidden="false">
+                <div class="logs-grid">
+                    <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
+                    <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">
+                        <div class="empty-state" id="log-tabs-empty">No log files found</div>
+                    </div>
                 </div>
             </div>
         </div>

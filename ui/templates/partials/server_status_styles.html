@@ -106,6 +106,8 @@
         box-shadow: var(--shadow-lg);
         padding: 6px;
     }
+    /* Ensure Save split can display dropdown outside its bounds */
+    #save-split { overflow: visible; z-index: 6500; }
     /* When save controls are disabled, reflect neutral panel color */
     #save-split.is-disabled #save-menu {
         background: var(--bg-secondary);

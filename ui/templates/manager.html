@@ -16,6 +16,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
+        /* Confirm modal base styles for manager page (align center overlay) */
+        .confirm-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:1000}
+        .confirm-modal.active{display:flex}
+        .confirm-modal .modal-card{max-width:520px;width:92%;background:var(--panel-gradient);color:var(--text-primary);border:1px solid var(--panel-border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+        .confirm-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:10px}
+        .confirm-modal .modal-title{font-size:16px;font-weight:600;margin:0}
+        .confirm-modal .modal-body{padding:16px 20px;line-height:1.5}
+        .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--panel-border);display:flex;gap:10px;justify-content:flex-end}
         
         /* Connection banner uses shared styles from ui-theme.css */
         
@@ -44,7 +52,8 @@
         /* Software card: keep long messages and progress text from pushing layout */
         .update-message {
             display: none;
-            margin-bottom: var(--space-3);
+            /* Inline with Update All button now; remove bottom margin */
+            margin: 0;
             padding: var(--space-2) var(--space-3);
             border: 1px solid var(--panel-border);
             border-radius: var(--radius-md);
@@ -170,12 +179,16 @@
 
         /* Keep inline label/select rows tidy */
         .field-inline { display: inline-flex; align-items: center; gap: var(--space-1); }
-        .inline-controls { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+        .inline-controls { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; }
+        /* Set practical widths to keep controls on one line */
+        #um_new_username.form-input-inline { width: 180px; min-width: 160px; }
+        #um_new_password.form-input-inline { width: 200px; min-width: 160px; }
+        #um_new_role.form-input-inline { width: 140px; min-width: 120px; }
         /* Size/flow controls for Language/Source row */
         .lang-select { flex: 0 0 160px; width: 160px; max-width: 200px; }
         .source-select { flex: 1 1 260px; min-width: 220px; }
         @media (max-width: 640px) {
-            .inline-controls { flex-wrap: wrap; }
+            .inline-controls { flex-wrap: wrap; overflow-x: visible; }
             .lang-select, .source-select { flex: 1 1 100%; width: 100%; max-width: none; }
         }
         .field-inline label { margin: 0; }
@@ -958,7 +971,8 @@
                         const tdC = document.createElement('td'); tdC.textContent = (u.created_at ? new Date(u.created_at).toLocaleString() : ''); tr.appendChild(tdC);
                         const tdA = document.createElement('td');
                         // Reset password button
-                        const btnPw = document.createElement('button'); btnPw.className='btn btn-secondary'; btnPw.textContent='Set Password';
+                        const btnPw = document.createElement('button'); btnPw.className='btn btn-secondary';
+                        btnPw.innerHTML='{{ template "icon_key" . }} <span class="ml-4">Set Password</span>';
                         btnPw.addEventListener('click', () => {
                             const p = prompt('Enter new password for '+u.username+':');
                             if(p && p.length>=8){ resetPassword(u.username, p); }
@@ -966,7 +980,8 @@
                         });
                         tdA.appendChild(btnPw);
                         // Delete button
-                                                const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2'; btnDel.textContent='Delete';
+                        const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2';
+                        btnDel.innerHTML='{{ template "icon_trash" . }} <span class="ml-4">Delete</span>';
                                                 btnDel.addEventListener('click', () => {
                                                         askConfirm({ title: 'Delete User', message: 'Delete user '+u.username+'?', confirmText: 'Delete', cancelText: 'Cancel', danger: true }, 'Delete user '+u.username+'?')
                                                             .then((ok) => { if (ok) deleteUser(u.username); });
@@ -1145,11 +1160,7 @@
             </div>
             <div class="alert-content">
                 <div class="alert-title">Game data missing</div>
-                <ul class="alert-message m-0 pl-5">
-                    {{ range .game_data_warnings }}
-                    <li>{{ . }}</li>
-                    {{ end }}
-                </ul>
+                <ul class="alert-message m-0 pl-5">{{range .game_data_warnings}}<li>{{.}}</li>{{end}}</ul>
             </div>
         </div>
         {{ end }}
@@ -1185,11 +1196,64 @@
                             </div>
                         </div>
                         <div class="form-group">
+                            <label for="tls_enabled">HTTPS (TLS)</label>
+                            <div class="field-inline items-start gap-2">
+                                <input type="checkbox" id="tls_enabled" name="tls_enabled" class="form-checkbox" {{if .tls_enabled}}checked{{end}}>
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
+                                    Serve the UI over HTTPS using the certificate and key below (effective after restart).
+                                </span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="tls_cert">TLS Certificate Path</label>
+                            <input type="text" id="tls_cert" name="tls_cert" value="{{ .tls_cert }}" placeholder="C:\\path\\to\\cert.pem">
+                        </div>
+                        <div class="form-group">
+                            <label for="tls_key">TLS Private Key Path</label>
+                            <input type="text" id="tls_key" name="tls_key" value="{{ .tls_key }}" placeholder="C:\\path\\to\\key.pem">
+                        </div>
+                        {{ if .tls_generated }}
+                        <div class="alert alert-success" role="status" aria-live="polite">
+                            <div class="alert-icon" aria-hidden="true">
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </div>
+                            <div class="alert-content">
+                                <div class="alert-title">TLS certificate created</div>
+                                <div class="alert-message">Paths updated and HTTPS enabled. Restart SDSM to serve over HTTPS.</div>
+                            </div>
+                        </div>
+                        {{ end }}
+                        <div class="form-group">
+                            <div class="field-inline items-start gap-2">
+                                <button type="submit" name="generate_tls_self_signed" class="btn btn-secondary">
+                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path>
+                                        <path d="M19 11a7 7 0 1 0-14 0v2H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h0v-2Z"></path>
+                                    </svg>
+                                    Generate Self‑Signed Cert (localhost)
+                                </button>
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
+                                    Creates a localhost certificate and key under <code>certs/</code>, updates paths, and enables HTTPS.
+                                </span>
+                            </div>
+                        </div>
+                        <div class="form-group">
                             <label for="detached_servers">Detached Servers (keep running if SDSM exits)</label>
                             <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="detached_servers" name="detached_servers" class="form-checkbox" {{if .detached}}checked{{end}}>
                                 <span class="text-secondary text-sm flex-1" aria-live="polite">
                                     When enabled, servers are started in a separate process group and will continue running if SDSM is stopped.
+                                </span>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="tray_enabled">Windows Tray Icon</label>
+                            <div class="field-inline items-start gap-2">
+                                <input type="checkbox" id="tray_enabled" name="tray_enabled" class="form-checkbox" {{if .tray_enabled}}checked{{end}}>
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
+                                    When enabled (Windows only), SDSM runs with a system tray icon for quick access and background operation.
                                 </span>
                             </div>
                         </div>
@@ -1216,7 +1280,6 @@
                         {{/* Legacy conditional wrapper removed (was: if not .updating) */}}
                         <h3>Software Versions</h3>
                         <form action="/update" method="POST" id="updateForm">
-                            <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
                             <div class="table-container">
                                 <table>
                                     <thead>
@@ -1355,6 +1418,7 @@
                                                 <button type="submit" name="update_all" data-update-target="update_all" data-component="all" class="btn btn-primary update-trigger" {{if .updating}}disabled{{end}}>
                                                     Update All
                                                 </button>
+                                                <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -1385,7 +1449,7 @@
                                     <option value="operator" selected>Operator</option>
                                 </select>
                                 <button type="button" id="um_access_btn" class="btn btn-secondary min-w-120 nowrap" title="Choose servers for this operator">Servers ▾</button>
-                                <button type="button" id="um_add_btn" class="btn btn-primary">Add</button>
+                                <button type="button" id="um_add_btn" class="btn btn-primary">{{ template "icon_add" . }} <span class="ml-4">Add</span></button>
                             </div>
                             <div id="um_access_dropdown" class="glass-card dropdown-panel hidden w-340">
                                 <div class="row justify-between mb-2">
@@ -1414,6 +1478,31 @@
                             </thead>
                             <tbody id="um_table_body"></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card" id="manageLogsCard">
+                <div class="card-header">
+                    <h3 class="card-title m-0">Manage Logs</h3>
+                    <button type="button" id="manageLogsToggle" class="btn btn-secondary btn-min-sm" aria-expanded="true" aria-controls="manageLogsContent" title="Collapse">
+                        <svg id="manageLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <span id="manageLogsToggleLabel" class="ml-6">Hide</span>
+                    </button>
+                </div>
+                <div id="manageLogsContent" class="card-body" aria-hidden="false">
+                    <div class="control-actions mb-3">
+                        <div class="button-group">
+                            <button type="button" id="ml-refresh" class="btn btn-secondary">Refresh</button>
+                            <button type="button" id="ml-download" class="btn btn-secondary">Download</button>
+                            <button type="button" id="ml-clear" class="btn btn-danger">Clear</button>
+                        </div>
+                    </div>
+                    <div class="logs-grid">
+                        <div class="log-viewer" id="manager-log-viewer" aria-live="polite" aria-label="Manager log output" role="region"></div>
+                        <div class="log-tabs" id="manager-log-tabs" aria-label="Log files">
+                            <div class="empty-state" id="manager-log-tabs-empty">No log files found</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1447,16 +1536,7 @@
                             Stop All Servers
                         </button>
                     </form>
-                    <a class="btn btn-secondary" href="/logs/sdsm" target="_blank" rel="noopener">
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
-                        </svg>
-                        View Log
-                    </a>
+                    <!-- View Log button removed; replaced by Manage Logs card -->
                 </div>
             </div>
         </div>
@@ -1578,6 +1658,64 @@
         
         // Initialize theme
         setTheme(getStoredTheme());
+    </script>
+    <script>
+        // -------- Manage Logs (global manager logs) --------
+        (function(){
+            const tabs = document.getElementById('manager-log-tabs');
+            const empty = document.getElementById('manager-log-tabs-empty');
+            const viewer = document.getElementById('manager-log-viewer');
+            const toggle = document.getElementById('manageLogsToggle');
+            const content = document.getElementById('manageLogsContent');
+            const chevron = document.getElementById('manageLogsChevron');
+            const toggleLabel = document.getElementById('manageLogsToggleLabel');
+            const btnRefresh = document.getElementById('ml-refresh');
+            const btnDownload = document.getElementById('ml-download');
+            const btnClear = document.getElementById('ml-clear');
+            if (!tabs || !viewer) return;
+            let files = []; let selected=''; let tailOffset=-1; let tailTimer=null; let listTimer=null; let pausedByScroll=false;
+            const TAIL_BACK=8192, TAIL_MAX=65536;
+            function isAtBottom(t){ const tol = typeof t==='number'?t:4; return viewer && (viewer.scrollTop+viewer.clientHeight)>= (viewer.scrollHeight - tol); }
+            function scrollToBottom(){ if(viewer) viewer.scrollTop=viewer.scrollHeight; }
+            function renderTabs(){ if(!tabs) return; tabs.innerHTML=''; const has=Array.isArray(files)&&files.length>0; if(empty) empty.style.display=has?'none':''; if(!has) return; files.forEach((name,i)=>{ const btn=document.createElement('button'); btn.type='button'; btn.className='log-tab'; btn.setAttribute('role','tab'); btn.dataset.name=name; btn.setAttribute('aria-selected', selected===name?'true':'false'); const label=document.createElement('span'); label.className='filename'; label.textContent=name; btn.appendChild(label); btn.addEventListener('click',()=>{ if(selected===name) return; selected=name; tailOffset=-1; pausedByScroll=false; if(viewer) viewer.textContent=''; tabs.querySelectorAll('.log-tab').forEach(t=>t.setAttribute('aria-selected', t===btn?'true':'false')); fetchTail(); }); tabs.appendChild(btn); if(!selected && i===0){ selected=name; btn.setAttribute('aria-selected','true'); } }); }
+            function fetchList(){ fetch('/api/manager/logs',{headers:{'Accept':'application/json'},credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(data=>{ if(!data||!Array.isArray(data.files)) return; const prev=selected; files=data.files; renderTabs(); if(prev && !files.includes(prev)){ selected=files[0]||''; tailOffset=-1; if(viewer) viewer.textContent=''; } if(selected && !tailTimer){ fetchTail(); startTail(); } updateButtonsState(); }).catch(()=>{}); }
+            function fetchTail(){ if(!selected||!viewer) return; const params=new URLSearchParams({name:selected, offset:String(tailOffset), back:String(TAIL_BACK), max:String(TAIL_MAX)}); fetch('/api/manager/log/tail?'+params.toString(),{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(data=>{ if(!data) return; if(data.reset){ viewer.textContent=''; } const chunk=typeof data.data==='string'?data.data:''; if(chunk){ const stick=!pausedByScroll && isAtBottom(); viewer.textContent+=chunk; if(stick) scrollToBottom(); } if(typeof data.offset==='number') tailOffset=data.offset; updateButtonsState(); }).catch(()=>{}); }
+            function startTail(){ if(!tailTimer) tailTimer=setInterval(fetchTail,2000); }
+            function stopTail(){ if(tailTimer){ clearInterval(tailTimer); tailTimer=null; } }
+            function initScrollPause(){ if(!viewer) return; viewer.addEventListener('scroll',()=>{ if(isAtBottom()){ if(pausedByScroll){ pausedByScroll=false; startTail(); } } else { if(!pausedByScroll){ pausedByScroll=true; stopTail(); } } }); }
+            function initToggle(){
+                if(!toggle||!content) return;
+                const key = 'sdsm:manager:logs:expanded';
+                try {
+                    const saved = localStorage.getItem(key);
+                    const expanded = saved === null ? true : (saved === '1');
+                    content.classList.toggle('hidden', !expanded);
+                    content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    if(toggleLabel) toggleLabel.textContent = expanded ? 'Hide' : 'More';
+                    if(chevron) chevron.innerHTML = expanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>';
+                } catch(_) {}
+                toggle.addEventListener('click',()=>{
+                    const nowExpanded = content.classList.toggle('hidden') ? false : true;
+                    content.setAttribute('aria-hidden', nowExpanded?'false':'true');
+                    toggle.setAttribute('aria-expanded', nowExpanded?'true':'false');
+                    if(toggleLabel) toggleLabel.textContent = nowExpanded ? 'Hide' : 'More';
+                    if(chevron){ chevron.innerHTML = nowExpanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>'; }
+                    try { localStorage.setItem('sdsm:manager:logs:expanded', nowExpanded ? '1' : '0'); } catch(_) {}
+                });
+            }
+
+            function updateButtonsState(){ const hasSel = !!selected; if(btnRefresh) btnRefresh.disabled = !hasSel; if(btnDownload) btnDownload.disabled = !hasSel; if(btnClear) btnClear.disabled = !hasSel; }
+            function initButtons(){
+                if(btnRefresh) btnRefresh.addEventListener('click', ()=>{ if(selected){ tailOffset=-1; viewer.textContent=''; fetchTail(); } });
+                if(btnDownload) btnDownload.addEventListener('click', ()=>{ if(selected){ window.location = '/api/manager/log/download?name='+encodeURIComponent(selected); } });
+                if(btnClear) btnClear.addEventListener('click', ()=>{ if(!selected) return; btnClear.disabled=true; fetch('/api/manager/log/clear', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, credentials:'same-origin', body:'name='+encodeURIComponent(selected) })
+                    .then(r=>{ if(r.ok){ tailOffset=-1; viewer.textContent=''; fetchTail(); } return r.json().catch(()=>({})); })
+                    .finally(()=>{ btnClear.disabled=false; }); });
+                updateButtonsState();
+            }
+            initScrollPause(); initToggle(); initButtons(); fetchList(); if(!listTimer) listTimer=setInterval(fetchList,30000);
+        })();
     </script>
     
     

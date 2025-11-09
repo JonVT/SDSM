@@ -10,9 +10,22 @@
                 <span class="readonly-field">{{.serverPath}}</span>
             </div>
 
-            <div class="form-row form-row-full">
-                <label for="port">Port:</label>
-                <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
+            <div class="form-row grid-2 grid-items-center">
+                <div>
+                    <label>Game Version:</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="beta" value="false" {{if not .server.Beta}}checked{{end}}> Release
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="beta" value="true" {{if .server.Beta}}checked{{end}}> Beta
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label for="port">Port:</label>
+                    <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
+                </div>
             </div>
 
             <div class="form-row grid-2">
@@ -30,11 +43,14 @@
                 </div>
             </div>
 
-            <div class="form-row form-row-full">
-                <label for="difficulty">Difficulty:</label>
-                <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
-                    <option value="">Loading...</option>
-                </select>
+            <div class="form-row grid-2 grid-items-end">
+                <div>
+                    <label for="difficulty">Difficulty:</label>
+                    <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div></div>
             </div>
 
             <div class="form-row grid-2 grid-items-end">
@@ -59,10 +75,7 @@
                 </div>
             </div>
 
-            <div class="form-row form-row-full">
-                <label for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec):</label>
-                <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" value="{{.server.BepInExInitTimeoutSeconds}}" class="form-input-inline" min="5" max="120" placeholder="10" autocomplete="off" title="Maximum time to wait for initial BepInEx bootstrap on Windows.">
-            </div>
+            
 
             <div class="form-row form-row-full">
                 <label for="welcome_message">Welcome Message:</label>
@@ -95,21 +108,14 @@
                 </div>
             </div>
 
-            <div class="form-row grid-2 grid-items-center">
-                <div>
-                    <label>Game Version:</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="beta" value="false" {{if not .server.Beta}}checked{{end}}> Release
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="beta" value="true" {{if .server.Beta}}checked{{end}}> Beta
-                        </label>
-                    </div>
-                </div>
+            <div class="form-row grid-2 grid-items-end">
                 <div>
                     <label for="disconnect_timeout">Disconnect Timeout (ms):</label>
                     <input type="number" id="disconnect_timeout" name="disconnect_timeout" value="{{.server.DisconnectTimeout}}" class="form-input-inline" min="1000" max="600000" step="1000" placeholder="10000" autocomplete="off">
+                </div>
+                <div>
+                    <label for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec):</label>
+                    <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" value="{{.server.BepInExInitTimeoutSeconds}}" class="form-input-inline" min="5" max="120" placeholder="10" autocomplete="off" title="Maximum time to wait for initial BepInEx bootstrap on Windows.">
                 </div>
             </div>
 

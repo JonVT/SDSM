@@ -122,6 +122,12 @@ type Manager struct {
 	// servers running. Processes are started in their own process group to avoid
 	// receiving parent signals.
 	DetachedServers bool `json:"detached_servers"`
+	// TrayEnabled controls whether the Windows tray icon is started (Windows only).
+	TrayEnabled bool `json:"tray_enabled"`
+	// TLS settings for serving HTTPS. Effective at process start.
+	TLSEnabled  bool   `json:"tls_enabled"`
+	TLSCertPath string `json:"tls_cert"`
+	TLSKeyPath  string `json:"tls_key"`
 }
 
 type UpdateProgress struct {
@@ -194,6 +200,10 @@ func NewManager() *Manager {
 		StartupUpdate:  true,
 		progressByType: make(map[DeployType]*UpdateProgress),
 		serverProgress: make(map[int]*ServerCopyProgress),
+		TrayEnabled:    runtime.GOOS == "windows", // default true on Windows, false elsewhere
+		TLSEnabled:     false,
+		TLSCertPath:    "",
+		TLSKeyPath:     "",
 	}
 
 	for _, deployType := range progressOrder {
@@ -713,6 +723,11 @@ func (m *Manager) load() (bool, error) {
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
 	m.DetachedServers = temp.DetachedServers
+	m.DetachedServers = temp.DetachedServers
+	m.TLSEnabled = temp.TLSEnabled
+	m.TLSCertPath = strings.TrimSpace(temp.TLSCertPath)
+	m.TLSKeyPath = strings.TrimSpace(temp.TLSKeyPath)
+	m.TrayEnabled = temp.TrayEnabled
 	// Default false when missing (zero value already false). Propagate to servers.
 	for _, srv := range m.Servers {
 		if srv != nil {

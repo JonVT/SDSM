@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Logs - SDSM</title>
+    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
+    <style>
+        .logs-shell { display:flex; flex-direction:column; gap: var(--space-4); }
+        .tabs { display:flex; flex-wrap:wrap; gap: var(--space-2); }
+        .tab-btn { padding: var(--space-2) var(--space-3); border:1px solid var(--panel-border); background: var(--surface-subtle); cursor:pointer; border-radius: var(--radius-md); font-size: var(--text-sm); }
+        .tab-btn.active { background: var(--accent-600); color:#fff; border-color: var(--accent-600); }
+        .log-view { font-family: monospace; font-size: var(--text-sm); background: var(--bg-secondary); border:1px solid var(--panel-border); border-radius: var(--radius-md); padding: var(--space-3); max-height: 70vh; overflow:auto; white-space:pre; }
+        .log-meta { font-size: var(--text-xs); color: var(--text-tertiary); }
+        .actions { display:flex; gap: var(--space-2); align-items:center; }
+    </style>
+</head>
+<body class="page-shell">
+    <main class="container">
+        <div class="glass-card">
+            <h3>Logs</h3>
+            <div class="logs-shell" id="logsShell" data-files='{{.filesJSON}}'>
+                <div class="tabs" id="logTabs"></div>
+                <div class="actions">
+                    <button id="refreshBtn" class="btn btn-secondary" title="Reload current log">Refresh</button>
+                    <button id="downloadBtn" class="btn btn-secondary" title="Download current log">Download</button>
+                </div>
+                <div class="log-meta" id="logMeta"></div>
+                <div class="log-view" id="logContent" aria-live="polite" role="region">Select a log file.</div>
+            </div>
+        </div>
+    </main>
+    <script>
+    (function(){
+        const shell = document.getElementById('logsShell');
+        if(!shell) return;
+        let files=[];
+        try { files = JSON.parse(shell.getAttribute('data-files')||'[]'); } catch(_) {}
+        const tabs = document.getElementById('logTabs');
+        const content = document.getElementById('logContent');
+        const meta = document.getElementById('logMeta');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        let active = null;
+        function renderTabs(){
+            tabs.innerHTML='';
+            files.forEach(f=>{
+                const btn=document.createElement('button');
+                btn.type='button'; btn.className='tab-btn'+(f.name===active?' active':'');
+                btn.textContent=f.name; btn.addEventListener('click',()=>selectFile(f.name));
+                tabs.appendChild(btn);
+            });
+        }
+        function selectFile(name){ active=name; renderTabs(); loadFile(name); }
+        function loadFile(name){
+            if(!name){ content.textContent='Select a log file.'; return; }
+            content.textContent='Loading '+name+'...'; meta.textContent='';
+            fetch('/logs/view/'+encodeURIComponent(name),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(); return r.text(); })
+              .then(txt=>{ content.textContent=txt||'(empty)'; meta.textContent=name+' ('+txt.length+' bytes)'; })
+              .catch(()=>{ content.textContent='Unable to load '+name; });
+        }
+        refreshBtn.addEventListener('click',()=>{ if(active) loadFile(active); });
+        downloadBtn.addEventListener('click',()=>{ if(active) window.location='/logs/download/'+encodeURIComponent(active); });
+        renderTabs();
+        if(files.length) selectFile(files[0].name);
+    })();
+    </script>
+</body>
+</html>

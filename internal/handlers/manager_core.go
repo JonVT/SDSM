@@ -36,6 +36,224 @@ func NewManagerHandlersWithHub(mgr *manager.Manager, us *manager.UserStore, hub 
 	return &ManagerHandlers{manager: mgr, userStore: us, hub: hub}
 }
 
+// APIManagerLogsList returns a JSON array of available *.log files in the manager's logs directory.
+func (h *ManagerHandlers) APIManagerLogsList(c *gin.Context) {
+	// Admin only
+	if c.GetString("role") != "admin" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	logsDir := ""
+	if h.manager != nil && h.manager.Paths != nil {
+		logsDir = h.manager.Paths.LogsDir()
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusOK, gin.H{"files": []string{}})
+		return
+	}
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"files": []string{}})
+		return
+	}
+	files := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".log") {
+			files = append(files, name)
+		}
+	}
+	sort.Strings(files)
+	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// APIManagerLogTail mirrors APIServerLogTail but reads from the manager logs directory.
+// Query: name (required), offset (-1 for tail), back, max
+func (h *ManagerHandlers) APIManagerLogTail(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	name := filepath.Base(strings.TrimSpace(c.Query("name")))
+	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+	logsDir := ""
+	if h.manager != nil && h.manager.Paths != nil {
+		logsDir = h.manager.Paths.LogsDir()
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	logPath := filepath.Join(logsDir, name)
+	file, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, gin.H{"data": "", "offset": 0, "size": 0, "reset": false})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to open log"})
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to stat log"})
+		return
+	}
+	size := info.Size()
+	// Parse params
+	const defaultMax = 65536
+	const defaultBack = 8192
+	max := defaultMax
+	if m := strings.TrimSpace(c.Query("max")); m != "" {
+		if v, err := strconv.Atoi(m); err == nil && v > 0 && v <= 1_000_000 {
+			max = v
+		}
+	}
+	back := defaultBack
+	if b := strings.TrimSpace(c.Query("back")); b != "" {
+		if v, err := strconv.Atoi(b); err == nil && v >= 0 && v <= 1_000_000 {
+			back = v
+		}
+	}
+	var offset int64 = -1
+	if offStr := strings.TrimSpace(c.Query("offset")); offStr != "" {
+		if v, err := strconv.ParseInt(offStr, 10, 64); err == nil {
+			offset = v
+		}
+	}
+	var start, length int64
+	reset := false
+	switch {
+	case offset == -1:
+		if int64(back) >= size {
+			start = 0
+		} else {
+			start = size - int64(back)
+		}
+		length = size - start
+		if length > int64(max) {
+			start = size - int64(max)
+			length = int64(max)
+		}
+	case offset > size:
+		reset = true
+		if int64(back) >= size {
+			start = 0
+		} else {
+			start = size - int64(back)
+		}
+		length = size - start
+		if length > int64(max) {
+			start = size - int64(max)
+			length = int64(max)
+		}
+	default:
+		start = offset
+		rem := size - start
+		if rem <= 0 {
+			c.JSON(http.StatusOK, gin.H{"data": "", "offset": start, "size": size, "reset": false})
+			return
+		}
+		if rem > int64(max) {
+			length = int64(max)
+		} else {
+			length = rem
+		}
+	}
+	if length < 0 {
+		length = 0
+	}
+	if start < 0 {
+		start = 0
+	}
+	buf := make([]byte, length)
+	if length > 0 {
+		_, _ = file.ReadAt(buf, start)
+	}
+	next := start + length
+	c.JSON(http.StatusOK, gin.H{"data": string(buf), "offset": next, "size": size, "reset": reset})
+}
+
+// APIManagerLogClear truncates a manager log file (admin only).
+// JSON/Form params: name=<log filename>
+func (h *ManagerHandlers) APIManagerLogClear(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	name := c.PostForm("name")
+	if name == "" {
+		// allow JSON
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil && body.Name != "" {
+			name = body.Name
+		}
+	}
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+	logsDir := ""
+	if h.manager != nil && h.manager.Paths != nil {
+		logsDir = h.manager.Paths.LogsDir()
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	path := filepath.Join(logsDir, name)
+	// Truncate (create if missing)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to clear log"})
+		return
+	}
+	_ = f.Close()
+	ToastWarn(c, "Log Cleared", name+" truncated")
+	c.JSON(http.StatusOK, gin.H{"status": "cleared"})
+}
+
+// APIManagerLogDownload streams a manager log file as an attachment (admin only).
+func (h *ManagerHandlers) APIManagerLogDownload(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	name := filepath.Base(strings.TrimSpace(c.Query("name")))
+	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+	logsDir := ""
+	if h.manager != nil && h.manager.Paths != nil {
+		logsDir = h.manager.Paths.LogsDir()
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	path := filepath.Join(logsDir, name)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to access log"})
+		return
+	}
+	c.FileAttachment(path, name)
+}
+
 func (h *ManagerHandlers) buildWorldSelectionData() (map[string][]string, map[string]map[string]gin.H) {
 	worldLists := map[string][]string{
 		"release": h.manager.GetWorldsByVersion(false),
@@ -425,6 +643,12 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	if len(betaDiffs) == 0 {
 		warnings = append(warnings, "No difficulties found for Beta channel.")
 	}
+	// TLS configuration warnings
+	if h.manager.TLSEnabled {
+		if strings.TrimSpace(h.manager.TLSCertPath) == "" || strings.TrimSpace(h.manager.TLSKeyPath) == "" {
+			warnings = append(warnings, "TLS enabled but certificate or key path missing in configuration.")
+		}
+	}
 
 	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
 	data := gin.H{
@@ -442,7 +666,15 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"server_count_active": h.manager.ServerCountActive(),
 		"updating":            h.manager.IsUpdating(),
 		"detached":            h.manager.DetachedServers,
+		"tray_enabled":        h.manager.TrayEnabled,
+		"tls_enabled":         h.manager.TLSEnabled,
+		"tls_cert":            h.manager.TLSCertPath,
+		"tls_key":             h.manager.TLSKeyPath,
 		"game_data_warnings":  warnings,
+	}
+
+	if strings.EqualFold(strings.TrimSpace(c.Query("tls")), "generated") {
+		data["tls_generated"] = true
 	}
 	c.HTML(http.StatusOK, "manager.html", data)
 }

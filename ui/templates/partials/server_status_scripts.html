@@ -2813,6 +2813,33 @@
         startLogTail();
         startLogListRefresh();
 
+        // Collapsible Server Logs toggle (mirrors Manager/User Management behavior)
+        (function(){
+            try {
+                const toggle = document.getElementById('serverLogsToggle');
+                const content = document.getElementById('serverLogsContent');
+                const chevron = document.getElementById('serverLogsChevron');
+                const label = document.getElementById('serverLogsToggleLabel');
+                if (!toggle || !content) return;
+                const key = `sdsm:server:${rootEl.dataset.serverId}:logs:expanded`;
+                const saved = sessionStorage.getItem(key);
+                const initiallyExpanded = saved === null ? true : (saved === '1');
+                function setState(expanded){
+                    content.classList.toggle('hidden', !expanded);
+                    content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    if (label) label.textContent = expanded ? 'Hide' : 'More';
+                    if (chevron) chevron.innerHTML = expanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>';
+                    try { sessionStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
+                }
+                setState(!!initiallyExpanded);
+                toggle.addEventListener('click', function(){
+                    const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+                    setState(expanded);
+                });
+            } catch(_) { /* non-fatal */ }
+        })();
+
         function coreParamsChanged(){
             const worldEl = document.getElementById('world');
             const initWorldRef = (typeof initialWorldID !== 'undefined' ? initialWorldID : '');

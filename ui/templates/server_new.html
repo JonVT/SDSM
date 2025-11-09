@@ -116,6 +116,14 @@
                                 </select>
                             </div>
 
+                            <div class="form-group">
+                                <label class="form-label" for="beta">Game Version *</label>
+                                <select id="beta" name="beta" class="form-control" required>
+                                    <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
+                                    <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
+                                </select>
+                                <p class="help-text">Choose Release (stable) or Beta (experimental)</p>
+                            </div>
                             {{ $selectedDifficulty := index $form "difficulty" }}
                             <div class="form-group">
                                 <label class="form-label" for="difficulty">Difficulty *</label>
@@ -211,12 +219,17 @@
                                        value="{{ or (index $form "shutdown_delay_seconds") 2 }}" placeholder="2">
                                 <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
                             </div>
-
+                            <div class="form-group">
+                                <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
+                                <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
+                                       value="{{ or (index $form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
+                                <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
+                            </div>
                             <div class="form-group">
                                 <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
                                 <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120"
                                        value="{{ or (index $form "bepinex_init_timeout_seconds") 10 }}" placeholder="10">
-                                <p class="help-text">Maximum time to wait for initial BepInEx bootstrap (Windows). Default 10.</p>
+                                <p class="help-text">Max wait for initial BepInEx bootstrap (Windows). Default 10.</p>
                             </div>
                             
                             <div class="form-group">
@@ -225,15 +238,6 @@
                                        value="{{ index $form "auth_secret" }}"
                                        placeholder="Optional authentication secret">
                                 <p class="help-text">Steam authentication secret (optional)</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label" for="beta">Game Version *</label>
-                                <select id="beta" name="beta" class="form-control" required>
-                                    <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
-                                    <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
-                                </select>
-                                <p class="help-text">Which version to use</p>
                             </div>
                         </div>
                     </div>
