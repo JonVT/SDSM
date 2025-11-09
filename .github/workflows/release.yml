@@ -76,7 +76,7 @@ jobs:
           mkdir -p "$OUTDIR"
           go build -trimpath -ldflags "-s -w -X sdsm/internal/version.Version=${VERSION} -X sdsm/internal/version.Commit=${SHORT_SHA} -X sdsm/internal/version.Date=${BUILD_DATE} -X sdsm/internal/version.Dirty=clean" -o "${OUTDIR}/${BIN_NAME}${EXT}" ./cmd/sdsm
 
-      - name: Prepare artifact (raw binary)
+      - name: Prepare artifact (linux tar.gz, windows raw)
         shell: bash
         env:
           VERSION: ${{ steps.vars.outputs.version }}
@@ -85,10 +85,15 @@ jobs:
           OUTDIR="dist/${{ matrix.os }}_${{ matrix.arch }}"
           [[ "${{ matrix.os }}" == "windows" ]] && BIN="sdsm.exe" || BIN="sdsm"
           [[ -f "$OUTDIR/$BIN" ]] || { echo "Missing binary $BIN in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
-          # Copy binary to a predictable name with version for release assets
+          # Copy or package to a predictable name with version for release assets
           DESTDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
           mkdir -p "$DESTDIR"
-          cp "$OUTDIR/$BIN" "$DESTDIR/sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}${BIN##sdsm}"
+          if [[ "${{ matrix.os }}" == "linux" ]]; then
+            ARCHIVE="sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz"
+            tar -C "$OUTDIR" -czf "$DESTDIR/$ARCHIVE" "$BIN"
+          else
+            cp "$OUTDIR/$BIN" "$DESTDIR/sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}${BIN##sdsm}"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
