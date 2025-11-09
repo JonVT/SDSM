@@ -27,12 +27,8 @@ jobs:
         include:
           - os: linux
             arch: amd64
-          - os: linux
-            arch: arm64
           - os: windows
             arch: amd64
-          - os: windows
-            arch: arm64
     outputs:
       version: ${{ steps.vars.outputs.version }}
     steps:
@@ -80,35 +76,25 @@ jobs:
           mkdir -p "$OUTDIR"
           go build -trimpath -ldflags "-s -w -X sdsm/internal/version.Version=${VERSION} -X sdsm/internal/version.Commit=${SHORT_SHA} -X sdsm/internal/version.Date=${BUILD_DATE} -X sdsm/internal/version.Dirty=clean" -o "${OUTDIR}/${BIN_NAME}${EXT}" ./cmd/sdsm
 
-      - name: Package artifacts
+      - name: Prepare artifact (raw binary)
         shell: bash
         env:
           VERSION: ${{ steps.vars.outputs.version }}
         run: |
           set -euxo pipefail
           OUTDIR="dist/${{ matrix.os }}_${{ matrix.arch }}"
-          PKGDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
-          mkdir -p "$PKGDIR"
-          BASENAME="sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}"
-          echo "Listing OUTDIR before packaging:" && ls -la "$OUTDIR" || true
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            [[ -f "$OUTDIR/sdsm.exe" ]] || { echo "Missing sdsm.exe in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
-            if ! command -v zip >/dev/null 2>&1; then
-              sudo apt-get update -y && sudo apt-get install -y zip
-            fi
-            (cd "$OUTDIR" && zip -9 "../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.zip" sdsm.exe)
-          else
-            [[ -f "$OUTDIR/sdsm" ]] || { echo "Missing sdsm in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
-            (cd "$OUTDIR" && tar -czf "../pkg/${{ matrix.os }}_${{ matrix.arch }}/${BASENAME}.tar.gz" sdsm)
-          fi
+          [[ "${{ matrix.os }}" == "windows" ]] && BIN="sdsm.exe" || BIN="sdsm"
+          [[ -f "$OUTDIR/$BIN" ]] || { echo "Missing binary $BIN in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
+          # Copy binary to a predictable name with version for release assets
+          DESTDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
+          mkdir -p "$DESTDIR"
+          cp "$OUTDIR/$BIN" "$DESTDIR/sdsm_${VERSION}_${{ matrix.os }}_${{ matrix.arch }}${BIN##sdsm}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/*.tar.gz
-            dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/*.zip
+          path: dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/sdsm_*
 
   release:
     name: Create consolidated release
@@ -193,7 +179,7 @@ jobs:
           echo >> RELEASE_BODY.md
           echo "## Artifacts" >> RELEASE_BODY.md
           shopt -s globstar nullglob
-          files=( dist/upload/**/*.tar.gz dist/upload/**/*.zip )
+          files=( dist/upload/**/sdsm_* )
           for f in "${files[@]}"; do
             base=$(basename "$f")
             echo "- $base" >> RELEASE_BODY.md
@@ -216,7 +202,7 @@ jobs:
           set -euxo pipefail
           cd dist/upload
           shopt -s globstar nullglob
-          files=( **/*.tar.gz **/*.zip )
+          files=( **/sdsm_* )
           if (( ${#files[@]} )); then
             sha256sum "${files[@]}" > checksums.txt
           else
@@ -246,7 +232,7 @@ jobs:
           set -euxo pipefail
           VERSION="${{ steps.vars.outputs.version }}"
           shopt -s globstar nullglob
-          files=( dist/upload/**/*.tar.gz dist/upload/**/*.zip dist/upload/checksums.txt )
+          files=( dist/upload/**/sdsm_* dist/upload/checksums.txt )
           if (( ${#files[@]} )); then
             gh release upload "$VERSION" "${files[@]}" --clobber
           else
