@@ -25,6 +25,11 @@ import (
 	"time"
 	"unicode"
 
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+
 	"sdsm/internal/models"
 	"sdsm/internal/utils"
 	"sdsm/steam"
@@ -264,31 +269,58 @@ func NewManager() *Manager {
 	}
 
 	m.ConfigFile = config
-	wasActive, err := m.load()
+	_, err := m.load()
 	if err != nil {
 		m.safeLog(err.Error())
 		return m
 	}
 
 	// Start logs after paths are properly loaded
-	m.startLogs()
+	// Initialize logging once; avoid duplicate log start if already initialized.
+	if m.Log == nil || m.UpdateLog == nil {
+		m.startLogs()
+	}
 	m.initializeServers()
 
-	m.safeLog("Configuration loaded successfully")
+	m.safeLog("Configuration loaded")
 
 	// Check for missing components before attempting deploy
 	m.CheckMissingComponents()
 
-	// If components are outdated on first start, present the setup page as an option
-	// instead of auto-deploying silently. Only auto-deploy when explicitly enabled
-	// and no prompt is required.
-	if !wasActive && m.UpdatesAvailable() {
-		m.NeedsUploadPrompt = true
-	}
+	// Present setup prompt only when required components are missing (handled above in CheckMissingComponents).
+	// Do not block startup updates merely because updates are available on first start.
+	// This ensures StartupUpdate works consistently across runs.
 
-	if m.StartupUpdate && !wasActive && !m.NeedsUploadPrompt {
-		if err := m.Deploy(DeployTypeAll); err != nil {
-			m.safeLog(fmt.Sprintf("Initial deployment failed: %v", err))
+	// Perform selective startup updates on every process start (not just first activation)
+	// when enabled and no interactive prompt is needed. Previously gated by !wasActive;
+	// removed to ensure beta/release channels update each launch when behind.
+	if m.StartupUpdate && !m.NeedsUploadPrompt {
+		// Ensure we evaluate against fresh values by clearing short-lived caches first.
+		m.invalidateRocketStationVersionCache(false)
+		m.invalidateRocketStationVersionCache(true)
+		// Also refresh latest build IDs cache prior to evaluation.
+		_ = m.ReleaseLatest()
+		_ = m.BetaLatest()
+		// Prime deployed values as well.
+		_ = m.ReleaseDeployed()
+		_ = m.BetaDeployed()
+
+		// Diagnostic matrix of deployed vs latest at startup to help trace why updates may be skipped.
+		m.safeLog(fmt.Sprintf("Startup update diagnostic: Release deployed=%s latest=%s | Beta deployed=%s latest=%s | BepInEx deployed=%s latest=%s | LaunchPad deployed=%s latest=%s | SCON deployed=%s latest=%s",
+			strings.TrimSpace(m.ReleaseDeployed()), strings.TrimSpace(m.ReleaseLatest()),
+			strings.TrimSpace(m.BetaDeployed()), strings.TrimSpace(m.BetaLatest()),
+			strings.TrimSpace(m.BepInExDeployed()), strings.TrimSpace(m.BepInExLatest()),
+			strings.TrimSpace(m.LaunchPadDeployed()), strings.TrimSpace(m.LaunchPadLatest()),
+			strings.TrimSpace(m.SCONDeployed()), strings.TrimSpace(m.SCONLatest()),
+		))
+		types := m.ComponentsNeedingUpdate()
+		if len(types) == 0 {
+			m.safeLog("Startup update: all components are up-to-date; skipping deployment")
+		} else {
+			m.safeLog(fmt.Sprintf("Startup update: updating out-of-sync components: %v", types))
+			if err := m.DeployTypes(types); err != nil {
+				m.safeLog(fmt.Sprintf("Startup selective deployment failed: %v", err))
+			}
 		}
 	}
 
@@ -346,6 +378,171 @@ func (m *Manager) UpdatesAvailable() bool {
 
 	// SteamCMD has no stable external latest; skip
 	return false
+}
+
+// ComponentsNeedingUpdate returns the list of DeployType components that appear
+// out-of-date relative to their latest known versions. SteamCMD is excluded
+// (no stable external latest). Servers are included when any underlying
+// component requires an update so that copied plugin / data state remains
+// consistent.
+func (m *Manager) ComponentsNeedingUpdate() []DeployType {
+	var out []DeployType
+
+	// Optional verbose evaluation controlled by env var. When SDSM_VERBOSE_UPDATE is set
+	// each component's decision path is logged (deployed/latest values, sentinel classification, mismatch).
+	verbose := os.Getenv("SDSM_VERBOSE_UPDATE") != ""
+
+	// Helper predicates replicating UpdateAvailable logic while surfacing per-component types
+	isSentinel := func(v string) bool {
+		if v == "" {
+			return true
+		}
+		v = strings.TrimSpace(v)
+		switch v {
+		case "Missing", "Unknown", "Error":
+			return true
+		}
+		return false
+	}
+
+	logVerbose := func(format string, args ...interface{}) {
+		if verbose {
+			m.safeLog("UpdateEval: " + fmt.Sprintf(format, args...))
+		}
+	}
+
+	// Treat "Missing" for Release/Beta channels as an actionable update (install) instead of skipping.
+	// This allows startup updates to bootstrap absent installations automatically.
+	shouldInstallIfMissing := func(v string) bool {
+		return strings.TrimSpace(v) == "Missing"
+	}
+
+	// Release
+	if dep := strings.TrimSpace(m.ReleaseDeployed()); shouldInstallIfMissing(dep) {
+		logVerbose("Release channel missing; scheduling install")
+		out = append(out, DeployTypeRelease)
+	} else if !isSentinel(dep) {
+		latest := strings.TrimSpace(m.ReleaseLatest())
+		if latest != "" && latest != "Unknown" && latest != dep {
+			logVerbose("Release mismatch: deployed=%s latest=%s", dep, latest)
+			out = append(out, DeployTypeRelease)
+		} else {
+			logVerbose("Release up-to-date: deployed=%s latest=%s", dep, latest)
+		}
+	} else {
+		logVerbose("Release sentinel value '%s' detected; skipping (not actionable)", dep)
+	}
+	// Beta
+	if dep := strings.TrimSpace(m.BetaDeployed()); shouldInstallIfMissing(dep) {
+		logVerbose("Beta channel missing; scheduling install")
+		out = append(out, DeployTypeBeta)
+	} else if !isSentinel(dep) {
+		latest := strings.TrimSpace(m.BetaLatest())
+		if latest != "" && latest != "Unknown" && latest != dep {
+			logVerbose("Beta mismatch: deployed=%s latest=%s", dep, latest)
+			out = append(out, DeployTypeBeta)
+		} else {
+			logVerbose("Beta up-to-date: deployed=%s latest=%s", dep, latest)
+		}
+	} else {
+		logVerbose("Beta sentinel value '%s' detected; skipping (not actionable)", dep)
+	}
+	// BepInEx: compare prefix to handle deployed having 4-part version while latest often 3-part
+	if dep := strings.TrimSpace(m.BepInExDeployed()); dep != "" && dep != "Missing" && dep != "Error" && dep != "Installed" && dep != "Unknown" {
+		latest := strings.TrimSpace(m.BepInExLatest())
+		if latest != "" && latest != "Unknown" && !strings.HasPrefix(dep, latest) {
+			logVerbose("BepInEx mismatch: deployed=%s latest=%s", dep, latest)
+			out = append(out, DeployTypeBepInEx)
+		} else {
+			logVerbose("BepInEx up-to-date or sentinel: deployed=%s latest=%s", dep, latest)
+		}
+	}
+	// LaunchPad: skip when Installed/Missing/Error/Unknown; deployed may be 'Installed' when metadata missing
+	if dep := strings.TrimSpace(m.LaunchPadDeployed()); dep != "" && dep != "Missing" && dep != "Error" && dep != "Installed" && dep != "Unknown" {
+		latest := strings.TrimSpace(m.LaunchPadLatest())
+		if latest != "" && latest != "Unknown" {
+			dl := strings.ToLower(dep)
+			ll := strings.ToLower(latest)
+			if dl != ll && !strings.HasPrefix(dl, ll) {
+				logVerbose("LaunchPad mismatch: deployed=%s latest=%s", dep, latest)
+				out = append(out, DeployTypeLaunchPad)
+			} else {
+				logVerbose("LaunchPad up-to-date: deployed=%s latest=%s", dep, latest)
+			}
+		} else {
+			logVerbose("LaunchPad latest sentinel '%s' for deployed=%s", latest, dep)
+		}
+	} else if verbose {
+		logVerbose("LaunchPad sentinel or empty deployed value '%s'", strings.TrimSpace(m.LaunchPadDeployed()))
+	}
+	// SCON: deployed may be tag (with/without leading v) or Installed/Missing/Error
+	if dep := strings.TrimSpace(m.SCONDeployed()); dep != "" && dep != "Missing" && dep != "Error" && dep != "Installed" && dep != "Unknown" {
+		latest := strings.TrimSpace(m.SCONLatest())
+		if latest != "" && latest != "Unknown" {
+			dl := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(dep, "v"), "V"))
+			ll := strings.ToLower(strings.TrimPrefix(strings.TrimPrefix(latest, "v"), "V"))
+			if dl != ll {
+				logVerbose("SCON mismatch: deployed=%s latest=%s (normalized deployed=%s latest=%s)", dep, latest, dl, ll)
+				out = append(out, DeployTypeSCON)
+			} else {
+				logVerbose("SCON up-to-date: deployed=%s latest=%s", dep, latest)
+			}
+		} else {
+			logVerbose("SCON latest sentinel '%s' for deployed=%s", latest, dep)
+		}
+	} else if verbose {
+		logVerbose("SCON sentinel or empty deployed value '%s'", strings.TrimSpace(m.SCONDeployed()))
+	}
+
+	// Include Servers deployment when any component needs update so server copies reflect updated binaries/plugins.
+	if len(out) > 0 {
+		out = append(out, DeployTypeServers)
+		logVerbose("Servers added due to component updates: %v", out)
+	}
+	return out
+}
+
+// DeployTypes performs sequential deployment of the specified component types under
+// a single deployment lock, aggregating errors. Progress reporting for each
+// component is preserved via the existing runDeploy logic.
+func (m *Manager) DeployTypes(types []DeployType) error {
+	if len(types) == 0 {
+		return nil
+	}
+	if err := m.beginDeploy(); err != nil {
+		m.Log.Write(err.Error())
+		return err
+	}
+	defer m.finishDeploy()
+
+	start := time.Now()
+	m.Log.Write(fmt.Sprintf("Selective deployment started (%v)", types))
+
+	var aggErrs []string
+	for _, dt := range types {
+		if err := m.runDeploy(dt); err != nil {
+			// runDeploy already logs component-specific errors; collect summary
+			aggErrs = append(aggErrs, fmt.Sprintf("%s: %v", dt, err))
+		}
+	}
+
+	// Aggregate errors for GetDeployErrors consumers.
+	m.deployMu.Lock()
+	if len(aggErrs) > 0 {
+		m.DeployErrors = append([]string(nil), aggErrs...)
+	} else {
+		m.DeployErrors = nil
+	}
+	m.deployMu.Unlock()
+
+	dur := time.Since(start)
+	if len(aggErrs) > 0 {
+		combined := errors.New(strings.Join(aggErrs, "; "))
+		m.Log.Write(fmt.Sprintf("Selective deployment completed with errors in %s", dur))
+		return combined
+	}
+	m.Log.Write(fmt.Sprintf("Selective deployment completed successfully in %s", dur))
+	return nil
 }
 
 func (m *Manager) progressEntry(dt DeployType) *UpdateProgress {
@@ -599,7 +796,8 @@ func (m *Manager) safeLog(message string) {
 		m.Log.Write(message)
 		return
 	}
-	fmt.Println(message)
+	// Fallback: write directly to default SDSM log location when manager logger not initialized
+	utils.NewLogger("").Write(message)
 }
 
 func (m *Manager) startLogs() {
@@ -608,7 +806,7 @@ func (m *Manager) startLogs() {
 		m.Paths = utils.NewPaths("/tmp/sdsm")
 	}
 	if err := os.MkdirAll(m.Paths.LogsDir(), 0o755); err != nil {
-		fmt.Printf("Unable to create logs directory %s: %v\n", m.Paths.LogsDir(), err)
+		m.safeLog(fmt.Sprintf("Unable to create logs directory %s: %v", m.Paths.LogsDir(), err))
 	}
 	if m.Log != nil {
 		m.Log.Close()
@@ -767,6 +965,229 @@ func (m *Manager) Save() {
 
 	m.Log.Write("Configuration saved successfully")
 	m.Active = true
+}
+
+// InstallTLSFromSources copies provided certificate/key sources into a
+// managed relative directory under the SDSM root ("certs/") and returns the
+// relative paths to be persisted in configuration. Empty inputs are ignored
+// and return empty outputs respectively. On error, no best-effort partial
+// state is persisted by this method; callers should decide how to proceed.
+func (m *Manager) InstallTLSFromSources(certSrc, keySrc string) (string, string, error) {
+	// Validate provided sources before copying; collect errors but attempt both so user sees aggregated issues.
+	validateCert := func(path string) error {
+		if strings.TrimSpace(path) == "" {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("cannot read certificate: %w", err)
+		}
+		block, _ := pem.Decode(data)
+		if block == nil || block.Type != "CERTIFICATE" {
+			return fmt.Errorf("invalid PEM certificate (expected CERTIFICATE block)")
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return fmt.Errorf("failed to parse certificate: %w", err)
+		}
+		// Basic freshness checks
+		now := time.Now()
+		if now.Before(cert.NotBefore) {
+			return fmt.Errorf("certificate not yet valid (starts %s)", cert.NotBefore.Format(time.RFC3339))
+		}
+		if now.After(cert.NotAfter) {
+			return fmt.Errorf("certificate expired %s", cert.NotAfter.Format(time.RFC3339))
+		}
+		return nil
+	}
+	validateKey := func(path string) (any, error) {
+		if strings.TrimSpace(path) == "" {
+			return nil, nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read key: %w", err)
+		}
+		block, _ := pem.Decode(data)
+		if block == nil {
+			return nil, fmt.Errorf("invalid PEM key (no block found)")
+		}
+		var key any
+		switch block.Type {
+		case "RSA PRIVATE KEY":
+			k, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse RSA key: %w", err)
+			}
+			if k.N.BitLen() < 2048 {
+				return nil, fmt.Errorf("RSA key too small (<2048 bits)")
+			}
+			key = k
+		case "EC PRIVATE KEY":
+			k, err := x509.ParseECPrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse EC key: %w", err)
+			}
+			key = k
+		case "PRIVATE KEY":
+			k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse PKCS8 key: %w", err)
+			}
+			key = k
+		default:
+			return nil, fmt.Errorf("unsupported private key type: %s", block.Type)
+		}
+		return key, nil
+	}
+
+	var preErrs []string
+	if err := validateCert(certSrc); err != nil {
+		preErrs = append(preErrs, err.Error())
+	}
+	privKey, keyErr := validateKey(keySrc)
+	if keyErr != nil {
+		preErrs = append(preErrs, keyErr.Error())
+	}
+	// If both parsed, perform public key match check (best-effort)
+	if privKey != nil && certSrc != "" && keySrc != "" && len(preErrs) == 0 {
+		// Re-read cert to obtain parsed object (already parsed earlier)
+		// We need the cert's public key to compare types; size already verified for RSA.
+		certData, _ := os.ReadFile(certSrc)
+		block, _ := pem.Decode(certData)
+		if block != nil && block.Type == "CERTIFICATE" {
+			cert, _ := x509.ParseCertificate(block.Bytes)
+			if cert != nil {
+				pub := cert.PublicKey
+				match := false
+				switch pk := privKey.(type) {
+				case *rsa.PrivateKey:
+					if rsaPub, ok := pub.(*rsa.PublicKey); ok && rsaPub.N.Cmp(pk.N) == 0 {
+						match = true
+					}
+				case *ecdsa.PrivateKey:
+					if ecPub, ok := pub.(*ecdsa.PublicKey); ok && pk.X.Cmp(ecPub.X) == 0 && pk.Y.Cmp(ecPub.Y) == 0 {
+						match = true
+					}
+				default:
+					// Unsupported key type for match; do not fail.
+					match = true
+				}
+				if !match {
+					preErrs = append(preErrs, "certificate public key does not match private key")
+				}
+			}
+		}
+	}
+	if len(preErrs) > 0 {
+		return "", "", errors.New(strings.Join(preErrs, "; "))
+	}
+	if m.Paths == nil {
+		m.Paths = utils.NewPaths("/tmp/sdsm")
+	}
+	// Normalize inputs
+	certSrc = strings.TrimSpace(certSrc)
+	keySrc = strings.TrimSpace(keySrc)
+
+	// Ensure destination directory
+	certDir := filepath.Join(m.Paths.RootPath, "certs")
+	if err := os.MkdirAll(certDir, 0o755); err != nil {
+		return "", "", fmt.Errorf("failed to ensure certs directory: %w", err)
+	}
+
+	copyOne := func(src string, base string) (string, error) {
+		if src == "" {
+			return "", nil
+		}
+		// Validate source exists and is a regular file
+		info, err := os.Stat(src)
+		if err != nil {
+			return "", fmt.Errorf("source not accessible: %w", err)
+		}
+		if info.IsDir() {
+			return "", fmt.Errorf("source is a directory: %s", src)
+		}
+		// Destination path under root/certs
+		destAbs := filepath.Join(certDir, base)
+		// If already at destination, return relative path directly
+		if samePath(src, destAbs) {
+			return filepath.ToSlash(filepath.Join("certs", base)), nil
+		}
+		// Copy file contents
+		in, err := os.Open(src)
+		if err != nil {
+			return "", fmt.Errorf("failed to open source: %w", err)
+		}
+		defer in.Close()
+
+		// Write to temp then atomically replace to avoid partial writes
+		tmp, err := os.CreateTemp(certDir, base+".*.tmp")
+		if err != nil {
+			return "", fmt.Errorf("failed to create temp file: %w", err)
+		}
+		tmpPath := tmp.Name()
+		_, cpErr := io.Copy(tmp, in)
+		closeErr := tmp.Close()
+		if cpErr != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("copy failed: %w", cpErr)
+		}
+		if closeErr != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("failed to finalize temp file: %w", closeErr)
+		}
+		// Set conservative permissions: certificate world-readable, key restricted (non-Windows)
+		perm := 0o644
+		if base == "sdsm.key" && runtime.GOOS != "windows" {
+			perm = 0o600
+		}
+		_ = os.Chmod(tmpPath, fs.FileMode(perm))
+		if err := os.Rename(tmpPath, destAbs); err != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("failed to move into place: %w", err)
+		}
+		// Ensure final permissions as well
+		_ = os.Chmod(destAbs, fs.FileMode(perm))
+		return filepath.ToSlash(filepath.Join("certs", base)), nil
+	}
+
+	var certRel, keyRel string
+	var errs []string
+	if rel, err := copyOne(certSrc, "sdsm.crt"); err != nil {
+		errs = append(errs, fmt.Sprintf("cert: %v", err))
+	} else {
+		certRel = rel
+	}
+	if rel, err := copyOne(keySrc, "sdsm.key"); err != nil {
+		errs = append(errs, fmt.Sprintf("key: %v", err))
+	} else {
+		keyRel = rel
+	}
+	if len(errs) > 0 {
+		return certRel, keyRel, errors.New(strings.Join(errs, "; "))
+	}
+	return certRel, keyRel, nil
+}
+
+// samePath returns true if two paths refer to the same location after evaluation.
+func samePath(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ar, _ := filepath.EvalSymlinks(a)
+	br, _ := filepath.EvalSymlinks(b)
+	if ar == "" {
+		ar = a
+	}
+	if br == "" {
+		br = b
+	}
+	// Normalize case on Windows
+	if runtime.GOOS == "windows" {
+		ar = strings.ToLower(ar)
+		br = strings.ToLower(br)
+	}
+	return ar == br
 }
 
 func (m *Manager) UpdateConfig(steamID, rootPath string, port int, updateTime time.Time, startupUpdate bool) {
@@ -1123,7 +1544,7 @@ func (m *Manager) Restart() {
 		}
 		file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 		if err != nil {
-			fmt.Printf("Unable to truncate log file %s: %v\n", path, err)
+			m.safeLog(fmt.Sprintf("Unable to truncate log file %s: %v", path, err))
 			return
 		}
 		file.Close()
