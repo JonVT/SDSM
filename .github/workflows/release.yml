@@ -3,34 +3,17 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version tag to release (e.g. v0.4.1). Leave empty to use current tag."
-        required: false
+      - "v*"
 
 permissions:
   contents: write
 
-env:
-  GO111MODULE: on
-  CGO_ENABLED: 0
-
 jobs:
-  build:
-    name: Build binaries
+  build-and-release:
+    name: Build and Release
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-          - os: windows
-            arch: amd64
-    outputs:
-      version: ${{ steps.vars.outputs.version }}
+    env:
+      CGO_ENABLED: 0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,210 +21,56 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
 
-      - name: Determine version and commit
-        id: vars
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
-            if [[ -z "$VERSION" ]]; then
-              echo "::error::No version provided and not a tag push. Provide inputs.version (e.g., v0.4.1)"
-              exit 1
-            fi
-          SHORT_SHA="${GITHUB_SHA::7}"
-          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+      - name: Print tag
+        run: echo "Tag is $GITHUB_REF_NAME"
 
-      - name: Build
-        shell: bash
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          VERSION: ${{ steps.vars.outputs.version }}
-          SHORT_SHA: ${{ steps.vars.outputs.short_sha }}
-          BUILD_DATE: ${{ steps.vars.outputs.build_date }}
-        run: |
-          set -euxo pipefail
-          BIN_NAME="sdsm"
-          EXT=""
-          if [[ "$GOOS" == "windows" ]]; then EXT=".exe"; fi
-          OUTDIR="dist/${GOOS}_${GOARCH}"
-          mkdir -p "$OUTDIR"
-          go build -trimpath -ldflags "-s -w -X sdsm/internal/version.Version=${VERSION} -X sdsm/internal/version.Commit=${SHORT_SHA} -X sdsm/internal/version.Date=${BUILD_DATE} -X sdsm/internal/version.Dirty=clean" -o "${OUTDIR}/${BIN_NAME}${EXT}" ./cmd/sdsm
-
-      - name: Prepare artifact (linux tar.gz, windows raw)
-        shell: bash
-        env:
-          VERSION: ${{ steps.vars.outputs.version }}
-        run: |
-          set -euxo pipefail
-          OUTDIR="dist/${{ matrix.os }}_${{ matrix.arch }}"
-          [[ "${{ matrix.os }}" == "windows" ]] && BIN="sdsm.exe" || BIN="sdsm"
-          [[ -f "$OUTDIR/$BIN" ]] || { echo "Missing binary $BIN in $OUTDIR" >&2; ls -la "$OUTDIR"; exit 1; }
-          # Copy or package to a predictable name with version for release assets
-          DESTDIR="dist/pkg/${{ matrix.os }}_${{ matrix.arch }}"
-          mkdir -p "$DESTDIR"
-          if [[ "${{ matrix.os }}" == "linux" ]]; then
-            ARCHIVE="SDSM.tar.gz"
-            tar -C "$OUTDIR" -czf "$DESTDIR/$ARCHIVE" "$BIN"
-          else
-            cp "$OUTDIR/$BIN" "$DESTDIR/SDSM.exe"
-          fi
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: pkg-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/pkg/${{ matrix.os }}_${{ matrix.arch }}/SDSM.*
-
-  release:
-    name: Create consolidated release
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Determine version
-        id: vars
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == v* ]]; then
-            VERSION="${GITHUB_REF_NAME}"
-          else
-            VERSION="${{ github.event.inputs.version }}"
-          fi
-          if [[ -z "$VERSION" ]]; then
-            echo "::error::No version provided and not a tag push. Provide inputs.version (e.g., v0.4.1)"
-            exit 1
-          fi
-          SHORT_SHA="${GITHUB_SHA::7}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/upload
-
-      - name: Generate release body
-        id: body
+      - name: Build cross-platform
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ steps.vars.outputs.version }}"
-          SHORT_SHA="${{ steps.vars.outputs.short_sha }}"
-          DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          TAG="$GITHUB_REF_NAME"
+          echo "Building for tag: ${TAG}"
+          mkdir -p release
+          declare -a TARGETS=(
+            "linux amd64"
+            "linux arm64"
+            "windows amd64"
+            "darwin amd64"
+            "darwin arm64"
+          )
 
-          # Find previous tag (by semver sort) excluding current
-          git fetch --tags --force >/dev/null 2>&1 || true
-          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | grep -v "^${VERSION}$" | head -n1 || true)
-          if [[ -n "$PREV_TAG" ]]; then
-            AUTHORS=$(git log --format='%aN' "$PREV_TAG".."$VERSION" | sort -u)
-            RANGE="$PREV_TAG..$VERSION"
-          else
-            AUTHORS=$(git log --format='%aN' "$VERSION" | sort -u)
-            RANGE="$VERSION"
-          fi
-          # Extract PR numbers referenced in commit messages (#123 pattern)
-          PR_NUMBERS=$(git log --pretty=format:'%s%n%b' $RANGE | grep -o '#[0-9]\+' | sort -u || true)
-
-          printf -- "# %s\n\n" "$VERSION" > RELEASE_BODY.md
-          printf -- "- Commit: %s\n" "$SHORT_SHA" >> RELEASE_BODY.md
-          printf -- "- Date: %s\n" "$DATE" >> RELEASE_BODY.md
-
-          echo >> RELEASE_BODY.md
-          echo "## Authors" >> RELEASE_BODY.md
-          if [[ -n "$AUTHORS" ]]; then
-            while IFS= read -r a; do
-              [[ -z "$a" ]] && continue
-              echo "- $a" >> RELEASE_BODY.md
-            done <<< "$AUTHORS"
-          else
-            echo "- N/A" >> RELEASE_BODY.md
-          fi
-
-          echo >> RELEASE_BODY.md
-          echo "## Pull Requests" >> RELEASE_BODY.md
-          if [[ -n "$PR_NUMBERS" ]]; then
-            for pr in $PR_NUMBERS; do
-              num=${pr#"#"}
-              echo "- $pr https://github.com/${GITHUB_REPOSITORY}/pull/$num" >> RELEASE_BODY.md
-            done
-          else
-            echo "- None" >> RELEASE_BODY.md
-          fi
-
-          echo >> RELEASE_BODY.md
-          echo "## Artifacts" >> RELEASE_BODY.md
-          shopt -s globstar nullglob
-          files=( dist/upload/**/SDSM.* )
-          for f in "${files[@]}"; do
-            base=$(basename "$f")
-            echo "- $base" >> RELEASE_BODY.md
+          for t in "${TARGETS[@]}"; do
+            read -r GOOS GOARCH <<<"$t"
+            EXT=""
+            if [[ "$GOOS" == "windows" ]]; then EXT=".exe"; fi
+            echo "\n==> Building ${GOOS}/${GOARCH}"
+            GOOS="$GOOS" GOARCH="$GOARCH" ./build.sh
+            BIN="dist/sdsm${EXT}"
+            # Sanity check
+            test -f "$BIN"
+            OUTBASE="sdsm_${TAG}_${GOOS}_${GOARCH}"
+            if [[ "$GOOS" == "windows" ]]; then
+              zip -j "release/${OUTBASE}.zip" "$BIN" LICENSE README.md || zip -j "release/${OUTBASE}.zip" "$BIN" LICENSE || zip -j "release/${OUTBASE}.zip" "$BIN"
+            else
+              tar -czf "release/${OUTBASE}.tar.gz" -C dist "sdsm${EXT}" || tar -czf "release/${OUTBASE}.tar.gz" -C dist sdsm
+            fi
           done
-          echo "- checksums.txt" >> RELEASE_BODY.md
-
-          echo >> RELEASE_BODY.md
-          echo "## Changes" >> RELEASE_BODY.md
-          if [[ -n "$PREV_TAG" ]]; then
-            echo "Comparing $PREV_TAG..$VERSION" >> RELEASE_BODY.md
-            echo >> RELEASE_BODY.md
-            git log --pretty=format:'- %s (%h)' "$PREV_TAG".."$VERSION" >> RELEASE_BODY.md || echo "- No commits found" >> RELEASE_BODY.md
-          else
-            echo "Initial release for this tag." >> RELEASE_BODY.md
-          fi
 
       - name: Generate checksums
-        shell: bash
+        working-directory: release
         run: |
-          set -euxo pipefail
-          cd dist/upload
-          shopt -s globstar nullglob
-          files=( **/SDSM.* )
-          if (( ${#files[@]} )); then
-            sha256sum "${files[@]}" > checksums.txt
-          else
-            echo "No packaged files found." >&2
-            exit 1
-          fi
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
-      - name: Create or update release metadata (published)
-        shell: bash
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            release/*
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.vars.outputs.version }}"
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            # Ensure the release is published (not a draft) and not marked prerelease
-            gh release edit "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md --draft=false --prerelease=false
-          else
-            # Create empty release first; assets uploaded next
-            gh release create "$VERSION" --title "$VERSION" --notes-file RELEASE_BODY.md --draft=false --prerelease=false
-          fi
-
-      - name: Upload assets with overwrite
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euxo pipefail
-          VERSION="${{ steps.vars.outputs.version }}"
-          shopt -s globstar nullglob
-          files=( dist/upload/**/SDSM.* dist/upload/checksums.txt CHANGELOG.md )
-          if (( ${#files[@]} )); then
-            gh release upload "$VERSION" "${files[@]}" --clobber
-          else
-            echo "No files to upload" >&2
-            exit 1
-          fi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
