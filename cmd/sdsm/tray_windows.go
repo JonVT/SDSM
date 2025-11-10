@@ -162,6 +162,9 @@ func encodeICO(buf *bytes.Buffer, img image.Image) error {
 	return ico.Encode(buf, img)
 }
 
+// trayQuit triggers systray.Quit on Windows.
+func trayQuit() { systray.Quit() }
+
 func launchBrowser(url string) error {
 	if runtime.GOOS != "windows" {
 		return nil

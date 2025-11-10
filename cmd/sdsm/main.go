@@ -22,7 +22,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getlantern/systray"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 )
@@ -227,7 +226,7 @@ func main() {
 		go func() { // forward OS signals to tray exit
 			<-quit
 			logStuff("Shutdown signal received")
-			systray.Quit()
+			trayQuit()
 		}()
 		// run tray on main thread (blocks until tray exit)
 		startTray(app, srv, trayDone)
