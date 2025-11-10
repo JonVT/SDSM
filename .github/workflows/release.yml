@@ -26,7 +26,7 @@ jobs:
       - name: Print tag
         run: echo "Tag is $GITHUB_REF_NAME"
 
-      - name: Build cross-platform
+      - name: Build and package assets
         shell: bash
         run: |
           set -euo pipefail
@@ -40,25 +40,26 @@ jobs:
 
           for t in "${TARGETS[@]}"; do
             read -r GOOS GOARCH <<<"$t"
-            EXT=""
-            if [[ "$GOOS" == "windows" ]]; then EXT=".exe"; fi
             echo "\n==> Building ${GOOS}/${GOARCH}"
             GOOS="$GOOS" GOARCH="$GOARCH" ./build.sh
-            BIN="dist/sdsm${EXT}"
-            # Sanity check
-            test -f "$BIN"
-            OUTBASE="sdsm_${TAG}_${GOOS}_${GOARCH}"
+            SRC="dist/sdsm"  # build.sh outputs this filename for all targets
+            test -f "$SRC"
             if [[ "$GOOS" == "windows" ]]; then
-              zip -j "release/${OUTBASE}.zip" "$BIN" LICENSE README.md || zip -j "release/${OUTBASE}.zip" "$BIN" LICENSE || zip -j "release/${OUTBASE}.zip" "$BIN"
+              # Windows: raw executable named SDSM.exe (no zip)
+              cp "$SRC" "release/SDSM.exe"
             else
-              tar -czf "release/${OUTBASE}.tar.gz" -C dist "sdsm${EXT}" || tar -czf "release/${OUTBASE}.tar.gz" -C dist sdsm
+              # Linux: binary named SDSM, zipped as SDSM.zip
+              cp "$SRC" "release/SDSM"
+              (cd release && zip -q -9 SDSM.zip SDSM && rm -f SDSM)
             fi
           done
 
       - name: Generate checksums
         working-directory: release
         run: |
-          sha256sum * > SHA256SUMS.txt
+          set -euo pipefail
+          # Hash produced assets only
+          sha256sum SDSM.exe SDSM.zip > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -68,6 +69,9 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            release/*
+            release/SDSM.zip
+            release/SDSM.exe
+            release/SHA256SUMS.txt
+            CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
