@@ -74,7 +74,31 @@ Backend consistency and UI cleanup refinements landed recently. Highlights:
 	- Included on pages via `{{ template "modal_templates" . }}` and `{{ template "modal_scripts" . }}`; removes fragile inline onclick handlers and page-specific modals.
 	- Server Status now uses these for Rename, Save As, Delete, Load Save, Param-change confirmation, Token Help, and Log popup.
 - Language handling
+	API-only UI (enforced)
+
+	- Legacy HTML POST endpoints have been removed. All state-changing interactions now go through JSON APIs under `/api/*`.
+	- A POST guard middleware blocks non-API POSTs except for a small allowlist (login, setup, update, shutdown). This prevents accidental reintroduction of HTML form posts.
+	- The UI templates keep forms for progressive enhancement/semantics but submission is intercepted in JavaScript to call the corresponding API.
+	- If JavaScript is disabled, non-API POSTs will be rejected as designed.
+
 	- Language selection is handled via a dedicated endpoint and is no longer treated as a startup parameter change.
+
+### API-Only UI (New Enforcement Layer)
+
+All interactive operations now flow strictly through JSON API endpoints under `/api/*`:
+
+- Legacy HTML form POST handlers for profile password change, user management, server actions, server creation, and server settings have been removed (they now return HTTP 410 Gone).
+- A security middleware guard blocks any POST to a non-API path (except a small allowlist: `/login`, setup/update/shutdown endpoints, and the deprecated `/profile` POST which returns 410). This prevents accidental reintroduction of direct template form posts.
+- Templates retain forms only for progressive enhancement; JavaScript intercepts submissions and issues `fetch` calls to API endpoints, reading toast headers for feedback.
+- Toast headers (`X-Toast-Type`, `X-Toast-Title`, `X-Toast-Message`) are set consistently for both JSON and HTML responses so UI code can surface notifications without parsing bodies.
+
+Benefits:
+- Consistent validation and error handling via unified API handlers.
+- Easier auditing (all mutations live under `/api`).
+- Cleaner separation of concerns (presentation vs. state change).
+- Future external integrations can reuse the same API used by the built-in UI.
+
+Upgrade Note: If you had automation calling deprecated HTML endpoints, update them to use the corresponding `/api` routes. Deprecated endpoints now respond with 410 and an explanatory JSON error.
 
 New/updated files of note
 
@@ -186,10 +210,20 @@ SDSM_USE_TLS=true SDSM_TLS_CERT=/etc/ssl/mycert.pem SDSM_TLS_KEY=/etc/ssl/mykey.
 	- Server: `ServerN/logs/ServerN_admin.log`, `ServerN/logs/ServerN_output.log`, `ServerN/logs/players.log`
 
 - Quick health checks (no auth needed):
-	- `GET /healthz` – app up check
+	- `GET /healthz` – liveness (process responding)
+	- `GET /readyz` – readiness (200 only when manager active and all required components detected; 503 with JSON list of missing components otherwise)
 	- `GET /version` – build metadata
 
 Tip: If the binary isn’t executable, run `chmod +x ./sdsm` before starting it.
+
+### Tray Behavior (Windows vs. Linux)
+
+SDSM includes an optional Windows system tray integration (`TrayEnabled` in config). Behavior:
+
+- Windows: When tray enabled, the app may spawn a detached background instance so the launching console returns immediately, then show a tray icon. Quitting the tray or sending SIGINT/SIGTERM triggers graceful shutdown.
+- Non-Windows (Linux/macOS): Tray is automatically disabled; no systray dependencies are required and the process runs normally in foreground/background. Absence of the tray never causes early exit.
+
+The readiness endpoint `/readyz` is unaffected by tray state—it reports readiness based on manager activation and missing component detection.
 
 ### Firewall Ports
 

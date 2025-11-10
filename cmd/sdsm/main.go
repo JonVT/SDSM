@@ -359,6 +359,10 @@ func setupRouter() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// Readiness probe: reports when the manager is active and critical components
+	// are initialized. Returns 200 when ready; 503 with a reason otherwise.
+	r.GET("/readyz", readyHandler)
+
 	// Public version endpoint with build metadata
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -434,31 +438,11 @@ func setupRouter() *gin.Engine {
 	// API routes (require token authentication)
 	api := r.Group("/api")
 	api.Use(app.authService.RequireAPIAuth())
-	api.Use(func(c *gin.Context) {
-		// Attach role for API requests, with the same safety net as UI routes
-		usernameVal, _ := c.Get("username")
-		role := "user"
-		if uname, ok := usernameVal.(string); ok {
-			if u, ok := app.userStore.Get(uname); ok {
-				if string(u.Role) != "" {
-					role = string(u.Role)
-				}
-			}
-			// Safety net: if there are zero admin users but a user named "admin" exists,
-			// promote them to admin to prevent lockout (and persist the change).
-			if app.userStore.AdminCount() == 0 && strings.EqualFold(uname, "admin") {
-				if err := app.userStore.SetRole("admin", manager.RoleAdmin); err == nil {
-					role = "admin"
-					if app.manager != nil && app.manager.Log != nil {
-						app.manager.Log.Write("No admin found; auto-promoted 'admin' to admin role (API context).")
-					}
-				}
-			}
-		}
-		c.Set("role", role)
-		c.Next()
-	})
+	// Attach role and perform admin safety net via shared middleware
+	api.Use(middleware.EnsureRoleContext(app.userStore, app.manager.Log, "API"))
 	{
+		// Profile self-service password change (JSON only)
+		api.POST("/profile/password", profileHandlers.APIProfileChangePassword)
 		// Simple refresh endpoint used by UI header buttons to trigger htmx 'refresh' events.
 		api.GET("/refresh", func(c *gin.Context) {
 			// Return minimal JSON; htmx button uses hx-swap="none" so body is ignored.
@@ -600,30 +584,8 @@ func setupRouter() *gin.Engine {
 	// Protected web routes
 	protected := r.Group("/")
 	protected.Use(app.authService.RequireAuth())
-	// Attach user role to context for downstream checks
-	protected.Use(func(c *gin.Context) {
-		usernameVal, _ := c.Get("username")
-		role := "user"
-		if uname, ok := usernameVal.(string); ok {
-			if u, ok := app.userStore.Get(uname); ok {
-				if string(u.Role) != "" {
-					role = string(u.Role)
-				}
-			}
-			// Safety net: if there are zero admin users but a user named "admin" exists,
-			// promote them to admin to prevent lockout (and persist the change).
-			if app.userStore.AdminCount() == 0 && strings.EqualFold(uname, "admin") {
-				if err := app.userStore.SetRole("admin", manager.RoleAdmin); err == nil {
-					role = "admin"
-					if app.manager != nil && app.manager.Log != nil {
-						app.manager.Log.Write("No admin found; auto-promoted 'admin' to admin role.")
-					}
-				}
-			}
-		}
-		c.Set("role", role)
-		c.Next()
-	})
+	// Attach user role to context for downstream checks via shared middleware
+	protected.Use(middleware.EnsureRoleContext(app.userStore, app.manager.Log, "UI"))
 	{
 		// Setup pages (admin only)
 		protected.GET("/setup", func(c *gin.Context) {
@@ -682,7 +644,6 @@ func setupRouter() *gin.Engine {
 		})
 		// Profile page for self-service password change
 		protected.GET("/profile", profileHandlers.ProfileGET)
-		protected.POST("/profile", profileHandlers.ProfilePOST)
 		// Debug endpoint to verify identity and role
 		protected.GET("/whoami", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
@@ -698,13 +659,7 @@ func setupRouter() *gin.Engine {
 			}
 			userHandlers.UsersGET(c)
 		})
-		protected.POST("/users", func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
-				return
-			}
-			userHandlers.UsersPOST(c)
-		})
+		// Users POST removed; UI uses /api endpoints.
 		protected.POST("/update", managerHandlers.UpdatePOST)
 		// Graceful shutdown with optional server stop based on detached mode
 		protected.POST("/shutdown", func(c *gin.Context) {
@@ -729,18 +684,12 @@ func setupRouter() *gin.Engine {
 			}
 			managerHandlers.NewServerGET(c)
 		})
-		protected.POST("/server/new", func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
-				return
-			}
-			managerHandlers.NewServerPOST(c)
-		})
+		// /server/new POST removed; creation flows moved to /api/servers
 		protected.GET("/server/:server_id/status.json", managerHandlers.APIServerStatus)
 		protected.GET("/server/:server_id/clients", managerHandlers.ServerClientsGET)
 		protected.GET("/server/:server_id/log", managerHandlers.APIServerLog)
 		protected.GET("/server/:server_id", managerHandlers.ServerGET)
-		protected.POST("/server/:server_id", managerHandlers.ServerPOST)
+		// /server/:server_id POST removed; actions use /api/servers/:id/*
 		protected.GET("/server/:server_id/progress", managerHandlers.ServerProgressGET)
 		protected.GET("/server/:server_id/world-image", managerHandlers.ServerWorldImage)
 	}
@@ -754,3 +703,24 @@ func setupRouter() *gin.Engine {
 // startTray provides a Windows system tray icon allowing quick access and exit.
 // On non-Windows platforms it returns immediately.
 // startTray is implemented in platform-specific files.
+
+// readyHandler is registered at /readyz. Split into a function to avoid bizarre
+// issues where inlined handlers might be optimized away in rare build setups.
+func readyHandler(c *gin.Context) {
+	ready := app != nil && app.manager != nil && app.manager.IsActive()
+	missing := []string{}
+	if ready {
+		if len(app.manager.MissingComponents) > 0 {
+			ready = false
+			missing = append(missing, app.manager.MissingComponents...)
+		}
+	}
+	status := http.StatusOK
+	if !ready {
+		status = http.StatusServiceUnavailable
+	}
+	c.JSON(status, gin.H{
+		"ready":   ready,
+		"missing": missing,
+	})
+}

@@ -49,7 +49,8 @@
                 {{ if .error }}
                 <div class="alert alert-error" role="alert">{{ .error }}</div>
                 {{ end }}
-                <form method="POST" action="/server/new" id="serverForm" enctype="multipart/form-data">
+                <!-- API-only: neutralize legacy action; JS submit handler calls /api endpoints -->
+                <form method="POST" action="#" id="serverForm" enctype="multipart/form-data" data-api-only="true">
                     <div class="form-section">
                         <h3 class="section-title">Create From Save (optional)</h3>
                         <div id="saveDropzone" class="dropzone border border-dashed rounded-md p-4 bg-surface-secondary flex items-center gap-3">

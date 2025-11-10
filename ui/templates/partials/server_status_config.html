@@ -2,7 +2,8 @@
     <div class="card-header">
         <h2 class="card-title">Configuration</h2>
     </div>
-    <form method="POST" id="startup-params-form">
+    <!-- API-only: remove legacy POST target. JS intercepts submit and calls /api/servers/:id/settings -->
+    <form id="startup-params-form" data-api-only="true">
         <input type="hidden" name="confirm_reset_saves" id="confirm-reset-saves-flag" value="0" />
         <div class="form-grid-compact">
             <div class="form-row form-row-full">
@@ -148,7 +149,7 @@
             </div>
         </div>
         <div class="control-actions mt-3">
-            <button type="submit" name="update" value="true" class="btn btn-primary btn-min-lg" title="Apply the startup parameter changes for this server">
+            <button type="submit" name="update" value="true" id="btn-update-params" class="btn btn-primary btn-min-lg" title="Apply the startup parameter changes for this server">
                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a 2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>

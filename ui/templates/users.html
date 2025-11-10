@@ -39,25 +39,26 @@
 
     <section class="card p-4 mb-4">
       <h2 class="h4 mb-3">Create User</h2>
-      <form method="POST" action="/users" class="users-create-grid">
+      <!-- API-only: neutralize legacy POST action; JS intercepts submit and calls /api/users -->
+      <form method="POST" action="#" class="users-create-grid" id="form-create-user" data-api-only="true">
         <input type="hidden" name="create" value="1" />
         <div>
           <label class="form-label">Username</label>
-          <input name="new_username" class="form-input" placeholder="username" required />
+          <input name="new_username" id="new_username" class="form-input" placeholder="username" required />
         </div>
         <div>
           <label class="form-label">Password</label>
-          <input name="new_password" type="password" class="form-input" placeholder="password" required />
+          <input name="new_password" id="new_password" type="password" class="form-input" placeholder="password" required />
         </div>
         <div>
           <label class="form-label">Role</label>
-          <select name="new_role" class="form-input">
+          <select name="new_role" id="new_role" class="form-input">
             <option value="admin">Admin</option>
             <option value="operator" selected>Operator</option>
           </select>
         </div>
         <div>
-          <button type="submit" class="btn btn-primary">Add</button>
+          <button type="submit" id="btn-create-user" class="btn btn-primary">Add</button>
         </div>
       </form>
     </section>
@@ -81,7 +82,8 @@
               <td>{{ .Role }}</td>
               <td>{{ .CreatedAt }}</td>
               <td>
-                <form method="POST" action="/users" class="inline-flex gap-2 items-center">
+                <!-- API-only: neutral form, JS intercepts -->
+                <form method="POST" action="#" class="inline-flex gap-2 items-center form-set-role" data-username="{{ .Username }}" data-api-only="true">
                   <input type="hidden" name="set_role_user" value="{{ .Username }}" />
                   <select name="set_role_value" class="form-input w-160">
                     <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
@@ -89,12 +91,14 @@
                   </select>
                   <button type="submit" class="btn btn-secondary">Update Role</button>
                 </form>
-                <form method="POST" action="/users" class="inline-flex gap-2 items-center ml-2">
+                <!-- API-only: neutral form, JS intercepts -->
+                <form method="POST" action="#" class="inline-flex gap-2 items-center ml-2 form-reset-pass" data-username="{{ .Username }}" data-api-only="true">
                   <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
                   <input name="reset_password_value" type="password" class="form-input w-160" placeholder="new password" />
                   <button type="submit" class="btn btn-secondary">Set Password</button>
                 </form>
-                <form method="POST" action="/users" class="inline ml-2" data-delete-user="{{ .Username }}">
+                <!-- API-only: neutral form, JS intercepts -->
+                <form method="POST" action="#" class="inline ml-2 form-delete-user" data-username="{{ .Username }}" data-api-only="true">
                   <button name="delete" value="{{ .Username }}" type="submit" class="btn btn-danger">Delete</button>
                 </form>
               </td>
@@ -112,19 +116,134 @@
   {{ template "footer" . }}
 
   <script>
-    // Attach modal-based confirmation to delete forms
+    // API-only interactions for user management
     (function(){
       function askConfirm(options, fallbackMessage) {
         try { if (window.openConfirm) return window.openConfirm(options); } catch(_) {}
         return Promise.resolve(window.confirm(fallbackMessage));
       }
+      function showToast(type, title, message) {
+        try { if (window.showToast) window.showToast({ type:type, title:title, message:message }); } catch(_) {}
+      }
+      function disable(btn, on){ if (!btn) return; btn.disabled = !!on; if(on) btn.setAttribute('aria-busy','true'); else btn.removeAttribute('aria-busy'); }
+
       document.addEventListener('DOMContentLoaded', function(){
-        document.querySelectorAll('form[data-delete-user]').forEach(function(form){
+        const createForm = document.getElementById('form-create-user');
+        const createBtn = document.getElementById('btn-create-user');
+        if (createForm) {
+          createForm.addEventListener('submit', function(e){
+            e.preventDefault();
+            const username = (document.getElementById('new_username')||{}).value || '';
+            const password = (document.getElementById('new_password')||{}).value || '';
+            const role = (document.getElementById('new_role')||{}).value || 'operator';
+            if (username.length < 3 || password.length < 8) {
+              showToast('error','Invalid Input','Username >=3 and password >=8 required.');
+              return;
+            }
+            disable(createBtn, true);
+            fetch('/api/users', {
+              method:'POST',
+              headers:{'Content-Type':'application/json','Accept':'application/json'},
+              credentials:'same-origin',
+              body: JSON.stringify({ username, password, role })
+            }).then(async res => {
+              if (!res.ok) {
+                let msg='Create failed';
+                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
+                showToast('error','Create Failed',msg);
+              } else {
+                showToast('success','User Created','User '+username+' added.');
+                // Reload user list (simplest approach: full reload)
+                setTimeout(()=>window.location.reload(), 400);
+              }
+            }).catch(()=>{ showToast('error','Network Error','Failed to contact server.'); })
+            .finally(()=>disable(createBtn,false));
+          });
+        }
+
+        // Role update forms
+        document.querySelectorAll('form.form-set-role').forEach(function(form){
           form.addEventListener('submit', function(e){
             e.preventDefault();
-            var username = form.getAttribute('data-delete-user') || (form.querySelector('button[name="delete"]') || {}).value || '';
+            const username = form.getAttribute('data-username') || '';
+            const select = form.querySelector('select[name="set_role_value"]');
+            const role = select ? select.value : '';
+            const btn = form.querySelector('button[type="submit"]');
+            if (!username) return;
+            disable(btn,true);
+            fetch('/api/users/'+encodeURIComponent(username)+'/role', {
+              method:'PATCH',
+              headers:{'Content-Type':'application/json','Accept':'application/json'},
+              credentials:'same-origin',
+              body: JSON.stringify({ role })
+            }).then(async res => {
+              if (!res.ok) {
+                let msg='Update failed';
+                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
+                showToast('error','Role Update Failed',msg);
+              } else {
+                showToast('success','Role Updated','Role set to '+role+' for '+username+'.');
+              }
+            }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
+            .finally(()=> disable(btn,false));
+          });
+        });
+
+        // Password reset forms
+        document.querySelectorAll('form.form-reset-pass').forEach(function(form){
+          form.addEventListener('submit', function(e){
+            e.preventDefault();
+            const username = form.getAttribute('data-username') || '';
+            const input = form.querySelector('input[name="reset_password_value"]');
+            const password = input ? input.value : '';
+            const btn = form.querySelector('button[type="submit"]');
+            if (password.length < 8) { showToast('error','Invalid Password','Password must be at least 8 characters.'); return; }
+            disable(btn,true);
+            fetch('/api/users/'+encodeURIComponent(username)+'/reset-password', {
+              method:'POST',
+              headers:{'Content-Type':'application/json','Accept':'application/json'},
+              credentials:'same-origin',
+              body: JSON.stringify({ password })
+            }).then(async res => {
+              if (!res.ok) {
+                let msg='Reset failed';
+                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
+                showToast('error','Password Reset Failed',msg);
+              } else {
+                showToast('success','Password Reset','Password updated for '+username+'.');
+                if (input) input.value='';
+              }
+            }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
+            .finally(()=> disable(btn,false));
+          });
+        });
+
+        // Delete user forms
+        document.querySelectorAll('form.form-delete-user').forEach(function(form){
+          form.addEventListener('submit', function(e){
+            e.preventDefault();
+            const username = form.getAttribute('data-username') || '';
+            const btn = form.querySelector('button[type="submit"]');
             askConfirm({ title:'Delete User', message:'Delete user '+username+'?', confirmText:'Delete', cancelText:'Cancel', danger:true }, 'Delete user '+username+'?')
-              .then(function(ok){ if (ok) form.submit(); });
+              .then(function(ok){
+                if (!ok) return;
+                disable(btn,true);
+                fetch('/api/users/'+encodeURIComponent(username), {
+                  method:'DELETE',
+                  headers:{'Accept':'application/json'},
+                  credentials:'same-origin'
+                }).then(async res => {
+                  if (!res.ok) {
+                    let msg='Delete failed';
+                    try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
+                    showToast('error','Delete Failed',msg);
+                  } else {
+                    showToast('success','User Deleted','User '+username+' removed.');
+                    setTimeout(()=>window.location.reload(),400);
+                  }
+                }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
+                .finally(()=> disable(btn,false));
+              });
           });
         });
       });

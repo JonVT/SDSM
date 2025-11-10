@@ -47,7 +47,8 @@
                         <td>{{.SteamID}}</td>
                         <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                         <td>
-                            <form method="POST" class="inline-form">
+                            <!-- API-only: neutral form; JS handles via /api -->
+                            <form class="inline-form" onsubmit="return false" data-api-only="true">
                                 <button type="submit" name="kick" value="{{.Name}}" class="btn btn-warning btn-icon" aria-label="Kick player" title="Kick player">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
@@ -57,7 +58,8 @@
                             </form>
                         </td>
                         <td>
-                            <form method="POST" class="inline-form">
+                            <!-- API-only: neutral form; JS handles via /api -->
+                            <form class="inline-form" onsubmit="return false" data-api-only="true">
                                 <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
@@ -98,7 +100,8 @@
                         <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
                         <td>{{.SessionDurationString}}</td>
                         <td>
-                            <form method="POST" class="inline-form">
+                            <!-- API-only: neutral form; JS handles via /api -->
+                            <form class="inline-form" onsubmit="return false" data-api-only="true">
                                 <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                         <circle cx="12" cy="12" r="9"></circle>
@@ -131,7 +134,8 @@
                             </td>
                             <td>{{.SteamID}}</td>
                             <td>
-                                <form method="POST" class="inline-form">
+                                <!-- API-only: neutral form; JS handles via /api -->
+                                <form class="inline-form" onsubmit="return false" data-api-only="true">
                                     <button type="submit" name="unban" value="{{.SteamID}}" class="btn btn-success btn-icon" aria-label="Unban player" title="Unban Steam ID">
                                         <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                             <circle cx="12" cy="12" r="9"></circle>
@@ -147,7 +151,8 @@
             </table>
             <div class="empty-state {{if and $banned (gt (len $banned) 0)}}hidden{{end}}" id="players-banned-empty">No banned players</div>
 
-            <form method="POST" id="banned-add-form" class="form-inline mt-3">
+            <!-- API-only: neutral form; JS intercepts submit -->
+            <form id="banned-add-form" class="form-inline mt-3" data-api-only="true">
                 <label for="ban_steam_id" class="sr-only">Steam ID</label>
                 <input type="text" id="ban_steam_id" name="ban_steam_id" placeholder="Enter Steam ID" class="form-input-inline input-wide" autocomplete="off">
                 <button type="submit" name="add_ban" value="true" class="btn btn-primary btn-min-sm" title="Ban the entered Steam ID">

@@ -76,7 +76,7 @@
           </div>
         </div>
       {{ end }}
-      <form action="/profile" method="POST">
+      <form id="profile-form" action="javascript:void(0)" method="dialog">
         <div class="form-group">
           <label>Username</label>
           <input type="text" value="{{ .username }}" disabled>
@@ -102,7 +102,7 @@
           <div id="password-hint" class="hint" aria-live="polite"></div>
         </div>
         <div class="form-row form-row-one">
-          <button type="submit" class="btn btn-primary">Update Password</button>
+          <button id="btn-update-password" type="button" class="btn btn-primary">Update Password</button>
         </div>
       </form>
     </div>
@@ -123,6 +123,8 @@
       const cp = document.getElementById('confirm_password');
       const hint = document.getElementById('password-hint');
       const flags = document.getElementById('profile-flags');
+      const form = document.getElementById('profile-form');
+      const btn = document.getElementById('btn-update-password');
 
       function updateHint(){
         if (!np || !cp || !hint) return;
@@ -169,6 +171,64 @@
           }
         }
       } catch(_) {}
+
+      // Intercept submit and call JSON API instead of HTML POST
+      function submitPasswordChange(ev){
+        if (ev) ev.preventDefault();
+        const current = (document.getElementById('current_password') || {}).value || '';
+        const n1 = (np || {}).value || '';
+        const n2 = (cp || {}).value || '';
+        // Basic client-side validation
+        if (!current || !n1 || !n2) {
+          if (window.showToast) window.showToast({ type:'error', title:'Missing fields', message:'Please fill in all fields.' });
+          return;
+        }
+        if (n1.length < 8) {
+          if (window.showToast) window.showToast({ type:'error', title:'Weak password', message:'New password must be at least 8 characters.' });
+          return;
+        }
+        if (n1 !== n2) {
+          if (window.showToast) window.showToast({ type:'error', title:'Mismatch', message:'Passwords do not match.' });
+          return;
+        }
+        // Disable button while submitting
+        if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); }
+        fetch('/api/profile/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ current_password: current, new_password: n1, confirm_password: n2 })
+        }).then(async (res) => {
+          // Surface toast headers if provided
+          try {
+            if (typeof window.showToast === 'function') {
+              const type = res.headers.get('X-Toast-Type');
+              const title = res.headers.get('X-Toast-Title');
+              const message = res.headers.get('X-Toast-Message');
+              if (message) window.showToast({ type: type || (res.ok ? 'success' : 'error'), title: title || (res.ok ? 'Profile Updated' : 'Update Failed'), message });
+            }
+          } catch(_) {}
+          if (res.ok) {
+            // Clear fields on success
+            try { (document.getElementById('current_password')||{}).value = ''; } catch(_) {}
+            if (np) np.value = '';
+            if (cp) cp.value = '';
+            updateHint();
+          } else {
+            // Optionally read error to show inline alert fallback
+            try {
+              const data = await res.json();
+              if (data && data.error && !window.showToast) alert('Update failed: ' + data.error);
+            } catch(_) {}
+          }
+        }).catch(() => {
+          if (window.showToast) window.showToast({ type:'error', title:'Network Error', message:'Failed to contact server.' });
+        }).finally(() => {
+          if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
+        });
+      }
+      if (form) form.addEventListener('submit', submitPasswordChange);
+      if (btn) btn.addEventListener('click', submitPasswordChange);
     });
   </script>
 

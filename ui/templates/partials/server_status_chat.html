@@ -16,7 +16,8 @@
             {{end}}
         </div>
         <div class="empty-state {{if gt (len .server.Chat) 0}}hidden{{end}}" id="chat-empty">No chat messages</div>
-        <form method="POST" class="chat-input-form" id="chat-send-form">
+        <!-- API-only: neutral form; JS intercepts and posts to /api/servers/:id/chat -->
+        <form class="chat-input-form" id="chat-send-form" data-api-only="true">
             <label for="chat-input" class="sr-only">Chat message</label>
             <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
             <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button" title="Send chat message to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>

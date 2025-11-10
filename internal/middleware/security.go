@@ -90,6 +90,29 @@ func (rl *RateLimiter) Stop() {
 // Security headers middleware
 func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Enforce API-only mutation: block POSTs to non-API paths except explicit allowlist.
+		// This is a security hardening layer; legacy HTML form endpoints have been disabled,
+		// but this prevents accidental reintroduction or template drift.
+		if c.Request.Method == http.MethodPost {
+			path := c.Request.URL.Path
+			// Allowlist: API endpoints, authentication, setup, update, shutdown
+			allowed := false
+			if strings.HasPrefix(path, "/api/") || path == "/api/login" {
+				allowed = true
+			} else {
+				switch path {
+				case "/login", "/admin/setup", "/setup/skip", "/setup/install", "/setup/update", "/shutdown", "/update", "/profile":
+					// /profile POST currently returns 410 Gone but permit request to reach handler for backward compatibility message.
+					allowed = true
+				default:
+					// Disallow any other POST to non-API path
+				}
+			}
+			if !allowed {
+				c.AbortWithStatusJSON(http.StatusMethodNotAllowed, gin.H{"error": "POST not allowed on non-API path", "path": path})
+				return
+			}
+		}
 		// Prevent XSS attacks
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-XSS-Protection", "1; mode=block")
@@ -127,7 +150,8 @@ func CORS() gin.HandlerFunc {
 		} else {
 			c.Header("Access-Control-Allow-Origin", "*")
 		}
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		// Allow standard verbs + PATCH (role updates) without duplicate header assignment
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		c.Header("Access-Control-Allow-Credentials", "true")
 

@@ -27,8 +27,7 @@
         if (el) el.classList.remove('active');
     }
 
-    // Close popup when clicking outside
-    // Legacy logPopup element removed; no click handler necessary
+    // Close popup when clicking outside: no handler needed (no logPopup element present)
 
     function getStoredTheme() {
         return localStorage.getItem('theme') || 'dark';
@@ -2048,7 +2047,7 @@
                     if (welcomeTokenBtn) welcomeTokenBtn.addEventListener('click', openTokenHelp);
                 })();
         const updateParamsBtn = document.getElementById('btn-update-params');
-        // Legacy param change modal elements removed; now handled by openConfirm helper
+        // Param change modal elements removed; now handled by openConfirm helper
         const modal = null;
         const modalConfirm = null;
         const modalCancel = null;
@@ -2138,11 +2137,12 @@
                         const val = (input && input.value || '').trim();
                         if (!val || val === current) { cleanup(); return; }
                         renameBtn.disabled = true;
-                        fetch('/server/' + serverId, {
+                        // API-only rename via settings endpoint
+                        fetch(`/api/servers/${serverId}/settings`, {
                             method: 'POST',
                             credentials: 'same-origin',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-                            body: new URLSearchParams({ update: 'true', name: val })
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ name: val })
                         }).then(res => {
                             try {
                                 const typeH = res.headers.get('X-Toast-Type');
@@ -2347,52 +2347,56 @@
         }
 
         const serverId = Number(rootEl.dataset.serverId || '0');
+        // Helper to submit startup params via API
+        function submitStartupParamsAPI(form){
+            if (!form || connectionLost) return;
+            const fd = new FormData(form);
+            // Signal update action explicitly
+            fd.set('update', '1');
+            const body = new URLSearchParams();
+            for (const [k, v] of fd.entries()) {
+                body.append(k, String(v));
+            }
+            // Disable the submit button(s) during request
+            let submitBtns = Array.prototype.slice.call(form.querySelectorAll('button[name="update"]'));
+            submitBtns.forEach(b => { b.disabled = true; b.setAttribute('aria-disabled', 'true'); });
+            return fetch(`/api/servers/${serverId}/settings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                body: body.toString()
+            }).then((res) => {
+                try {
+                    if (typeof window.showToast === 'function') {
+                        const type = res.headers.get('X-Toast-Type');
+                        const title = res.headers.get('X-Toast-Title');
+                        const message = res.headers.get('X-Toast-Message');
+                        if (message) window.showToast({ type: type || 'info', title: title || '', message });
+                    }
+                } catch(_) {}
+                // Even on error, try to parse JSON for potential details
+                return res.json().catch(() => ({}));
+            }).then(() => {
+                // Refresh status snapshot in case something changed
+                fetchStatus();
+            }).catch(() => {
+                // No-op; toast already displayed via headers
+            }).finally(() => {
+                submitBtns.forEach(b => { b.disabled = false; b.removeAttribute('aria-disabled'); });
+            });
+        }
         // Intercept Startup Parameters form submit for async update + toast
         (function(){
             const form = document.getElementById('startup-params-form');
             if (!form) return;
             form.addEventListener('submit', function(e){
-                // Only async when JS-enabled; let default submit work if connection lost
-                if (connectionLost) return;
+                if (connectionLost) return; // let default if offline (though form is API-only)
                 e.preventDefault();
-                const fd = new FormData(form);
-                // Signal update action explicitly
-                fd.set('update', '1');
-                const body = new URLSearchParams();
-                for (const [k, v] of fd.entries()) {
-                    body.append(k, String(v));
-                }
-                // Disable the submit button(s) during request
-                let submitBtns = Array.prototype.slice.call(form.querySelectorAll('button[name="update"]'));
-                submitBtns.forEach(b => { b.disabled = true; b.setAttribute('aria-disabled', 'true'); });
-                fetch(`/api/servers/${serverId}/settings`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin',
-                    body: body.toString()
-                }).then((res) => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            const type = res.headers.get('X-Toast-Type');
-                            const title = res.headers.get('X-Toast-Title');
-                            const message = res.headers.get('X-Toast-Message');
-                            if (message) window.showToast({ type: type || 'info', title: title || '', message });
-                        }
-                    } catch(_) {}
-                    // Even on error, try to parse JSON for potential details
-                    return res.json().catch(() => ({}));
-                }).then(() => {
-                    // Refresh status snapshot in case something changed
-                    fetchStatus();
-                }).catch(() => {
-                    // No-op; toast already displayed via headers
-                }).finally(() => {
-                    submitBtns.forEach(b => { b.disabled = false; b.removeAttribute('aria-disabled'); });
-                });
+                submitStartupParamsAPI(form);
             });
         })();
         // Support multiple 'Update Server Files' buttons across cards
@@ -2943,12 +2947,12 @@
             return (currWorld !== initWorldRef) || (currLoc !== initLocRef) || (currCond !== initCondRef);
         }
 
-        // Legacy param change modal removed; confirmation handled by openConfirm/native confirm only.
+        // Param change modal removed; confirmation handled by openConfirm/native confirm only.
 
         // Intercept Startup Parameters Update submit with blocking confirm when core params changed
         if (paramsForm && updateParamsBtn) {
             paramsForm.addEventListener('submit', function(e){
-                if (window.__sdsmPendingSubmit) return; // allow the second submit after confirm
+                if (window.__sdsmPendingSubmit) return;
                 const valid = updateParamsValidity();
                 if (!valid) {
                     e.preventDefault();
@@ -2956,27 +2960,40 @@
                     return;
                 }
                 const changed = coreParamsChanged();
-                if (!changed) {
-                    return; // allow submit
+                const apiOnly = paramsForm.getAttribute('data-api-only') === 'true';
+                if (!apiOnly) {
+                    // Not API-only: allow default behavior if unchanged; otherwise confirm then submit
+                    if (!changed) return; // allow submit
+                    e.preventDefault();
+                    const proceedSubmit = () => {
+                        let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
+                        if (!hiddenUpdate) {
+                            hiddenUpdate = document.createElement('input');
+                            hiddenUpdate.type = 'hidden';
+                            hiddenUpdate.name = 'update';
+                            hiddenUpdate.value = 'true';
+                            paramsForm.appendChild(hiddenUpdate);
+                        } else {
+                            hiddenUpdate.value = 'true';
+                        }
+                        try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {}
+                        window.__sdsmPendingSubmit = true;
+                        paramsForm.submit();
+                    };
+                    askConfirm({
+                        title: 'Reset Saves Required',
+                        body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
+                        confirmText: 'Continue',
+                        cancelText: 'Cancel',
+                        danger: true,
+                        icon: '⚠'
+                    }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceedSubmit(); });
+                    return;
                 }
+                // API-only path: never perform normal form submit; call API instead (with confirm if needed)
                 e.preventDefault();
-                const proceed = () => {
-                    // Ensure server gets the expected 'update=true' field
-                    let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
-                    if (!hiddenUpdate) {
-                        hiddenUpdate = document.createElement('input');
-                        hiddenUpdate.type = 'hidden';
-                        hiddenUpdate.name = 'update';
-                        hiddenUpdate.value = 'true';
-                        paramsForm.appendChild(hiddenUpdate);
-                    } else {
-                        hiddenUpdate.value = 'true';
-                    }
-                    try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {}
-                    window.__sdsmPendingSubmit = true;
-                    paramsForm.submit();
-                };
-                const canceled = () => {};
+                const proceedAPI = () => { try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {} submitStartupParamsAPI(paramsForm); };
+                if (!changed) { proceedAPI(); return; }
                 askConfirm({
                     title: 'Reset Saves Required',
                     body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
@@ -2984,10 +3001,10 @@
                     cancelText: 'Cancel',
                     danger: true,
                     icon: '⚠'
-                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceed(); });
+                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceedAPI(); });
             });
 
-            // Also intercept direct button clicks (some browsers may bypass submit listener in edge cases)
+            // Also intercept direct button clicks
             updateParamsBtn.addEventListener('click', function(e){
                 if (window.__sdsmPendingSubmit) return;
                 if (!updateParamsValidity()) {
@@ -2996,37 +3013,53 @@
                     return;
                 }
                 const changed = coreParamsChanged();
-                if (!changed) {
-                    // No confirmation needed; submit the form with update=true
-                    let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
-                    if (!hiddenUpdate) {
-                        hiddenUpdate = document.createElement('input');
-                        hiddenUpdate.type = 'hidden';
-                        hiddenUpdate.name = 'update';
-                        hiddenUpdate.value = 'true';
-                        paramsForm.appendChild(hiddenUpdate);
-                    } else {
-                        hiddenUpdate.value = 'true';
+                const apiOnly = paramsForm.getAttribute('data-api-only') === 'true';
+                if (!apiOnly) {
+                    if (!changed) {
+                        // No confirmation needed; submit
+                        let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
+                        if (!hiddenUpdate) {
+                            hiddenUpdate = document.createElement('input');
+                            hiddenUpdate.type = 'hidden';
+                            hiddenUpdate.name = 'update';
+                            hiddenUpdate.value = 'true';
+                            paramsForm.appendChild(hiddenUpdate);
+                        } else {
+                            hiddenUpdate.value = 'true';
+                        }
+                        paramsForm.submit();
+                        return;
                     }
-                    paramsForm.submit();
+                    e.preventDefault();
+                    const proceedSubmit = () => {
+                        let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
+                        if (!hiddenUpdate) {
+                            hiddenUpdate = document.createElement('input');
+                            hiddenUpdate.type = 'hidden';
+                            hiddenUpdate.name = 'update';
+                            hiddenUpdate.value = 'true';
+                            paramsForm.appendChild(hiddenUpdate);
+                        } else {
+                            hiddenUpdate.value = 'true';
+                        }
+                        try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {}
+                        window.__sdsmPendingSubmit = true;
+                        paramsForm.submit();
+                    };
+                    askConfirm({
+                        title: 'Reset Saves Required',
+                        body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
+                        confirmText: 'Continue',
+                        cancelText: 'Cancel',
+                        danger: true,
+                        icon: '⚠'
+                    }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceedSubmit(); });
                     return;
                 }
+                // API-only
                 e.preventDefault();
-                const proceed = () => {
-                    let hiddenUpdate = paramsForm.querySelector('input[type="hidden"][name="update"]');
-                    if (!hiddenUpdate) {
-                        hiddenUpdate = document.createElement('input');
-                        hiddenUpdate.type = 'hidden';
-                        hiddenUpdate.name = 'update';
-                        hiddenUpdate.value = 'true';
-                        paramsForm.appendChild(hiddenUpdate);
-                    } else {
-                        hiddenUpdate.value = 'true';
-                    }
-                    try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {}
-                    window.__sdsmPendingSubmit = true;
-                    paramsForm.submit();
-                };
+                const proceedAPI = () => { try { if (confirmFlag) confirmFlag.value = '1'; } catch(_) {} submitStartupParamsAPI(paramsForm); };
+                if (!changed) { proceedAPI(); return; }
                 askConfirm({
                     title: 'Reset Saves Required',
                     body: 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?',
@@ -3034,7 +3067,7 @@
                     cancelText: 'Cancel',
                     danger: true,
                     icon: '⚠'
-                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceed(); });
+                }, 'Changing World, Start Location, or Start Condition will reset (purge) existing saves on next start. Continue?').then(ok => { if (ok) proceedAPI(); });
             });
         }
 
@@ -3310,7 +3343,7 @@
 
             if (saveMenuBtn) saveMenuBtn.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn.disabled) return; toggleSaveMenu(); });
 
-            // Save As… flow using shared prompt modal (fallback to legacy modal if helpers unavailable)
+            // Save As… flow using shared prompt modal (fallback to simple modal if helpers unavailable)
             (function(){
                 const legacy = {
                     modal: document.getElementById('saveAsModal'),
@@ -3364,7 +3397,7 @@
                         });
                         return;
                     }
-                    // Legacy fallback to existing modal if present
+                    // Fallback to existing modal if present
                     const m = legacy.modal;
                     const input = legacy.input;
                     const btnConfirm = legacy.confirm;
