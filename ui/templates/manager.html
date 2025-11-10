@@ -72,6 +72,9 @@
         .table-container { width: 100%; overflow-x: visible; }
         .table-container table { width: 100%; table-layout: auto; border-collapse: collapse; }
         .table-container th, .table-container td { vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
+        /* Add vertical breathing room between Software Versions rows */
+        .table-container tbody tr td { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+        .table-container tbody tr + tr td { border-top: 1px solid var(--panel-border); }
         /* Allow Action column to wrap controls on small screens instead of forcing horizontal scroll */
         .table-container th:nth-child(4),
         .table-container td:nth-child(4) { width: auto; white-space: normal; }
@@ -137,6 +140,9 @@
             gap: var(--space-2); /* tighter label-to-field spacing */
             min-width: 0;
         }
+        /* Top-aligned variant for rows with multi-line descriptions or stacked controls */
+        .config-form .form-group.top-align { align-items: start; }
+        .config-form .form-group.top-align label { padding-top: 2px; }
 
         .config-form .form-group label {
             margin: 0;
@@ -540,10 +546,111 @@
 
             // Async submit for Configuration form with inline spinner
             if (configForm && configBtn) {
-                configForm.addEventListener('submit', (event) => {
+                configForm.addEventListener('submit', async (event) => {
                     event.preventDefault();
-                    if (configBtn.disabled) return;
+                    const submitter = event.submitter;
+                    // Special-case: Generate self-signed certificate should ONLY send its own flag
+                    if (submitter && submitter.name === 'generate_tls_self_signed') {
+                        const genBtn = submitter;
+                        if (genBtn.disabled) return;
+                        // If TLS already enabled, confirm regeneration (rotation)
+                        if (genBtn.getAttribute('data-tls-enabled') === 'true') {
+                            // Synchronous confirm path falls back if modal system absent
+                            const regenMsg = 'Replace existing certificate with a new self-signed one? Current HTTPS clients will need to trust the new cert again.';
+                            const proceed = window.openConfirm ? await window.openConfirm({ title:'Regenerate Certificate', message: regenMsg, confirmText:'Regenerate', cancelText:'Cancel', danger:true }) : window.confirm(regenMsg);
+                            if (!proceed) { return; }
+                        }
+                        genBtn.disabled = true;
+                        showButtonSpinner(genBtn, true);
+                        showMessage('Generating TLS certificate…', false);
+                        const params = new URLSearchParams();
+                        params.append('generate_tls_self_signed', '1');
+                        fetch('/update', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: params.toString()
+                        })
+                        .then((res) => { showToastFromHeaders(res); if (!res.ok) { return res.json().then((data) => Promise.reject(data)); } return res.json().catch(() => ({})); })
+                        .then(() => {
+                            // Backend persists TLSEnabled=true and relative cert/key paths.
+                            showMessage('TLS certificate created. HTTPS requires a restart to take effect.', false);
+                            try { sessionStorage.setItem('sdsm:pending-https','1'); } catch(_) {}
+                            // Offer restart prompt
+                            askConfirm({ title:'Restart Required', message:'Restart SDSM now to apply HTTPS and switch to a secure connection?', confirmText:'Restart Now', cancelText:'Later', danger:true }, 'Restart SDSM now to apply HTTPS?')
+                              .then((ok) => {
+                                  if (!ok) { return; }
+                                  // Issue restart request
+                                  showMessage('Restarting to apply HTTPS…', false);
+                                  const rParams = new URLSearchParams(); rParams.append('restart','1');
+                                  fetch('/update', {
+                                      method:'POST',
+                                      headers:{
+                                          'Content-Type':'application/x-www-form-urlencoded',
+                                          'X-Requested-With':'XMLHttpRequest',
+                                          'Accept':'application/json'
+                                      },
+                                      credentials:'same-origin',
+                                      body: rParams.toString()
+                                  })
+                                  .then(r => { showToastFromHeaders(r); /* ignore body parse errors */ return r.json().catch(()=>({})); })
+                                  .then(()=>{
+                                      showMessage('Restart initiated. Waiting for HTTPS availability…', false);
+                                      // Attempt automatic HTTPS switch with polling.
+                                      attemptHttpsRedirect();
+                                  })
+                                  .catch(()=>{ showMessage('Restart request failed. Please restart manually.', true); });
+                              });
+                            // Helper: poll HTTPS health until reachable then redirect.
+                            function attemptHttpsRedirect(){
+                                const target = location.href.replace(/^http:/,'https:');
+                                const healthUrl = 'https://' + location.host + '/healthz';
+                                const start = Date.now();
+                                let tries = 0;
+                                const maxMs = 60000; // 1 minute ceiling
+                                const interval = 2500;
+                                // Hard fallback: navigate even if health check cannot succeed (e.g., self-signed cert interstitial)
+                                const hardFallbackTimer = setTimeout(() => {
+                                    try { console.warn('[SDSM][TLS] Navigating to HTTPS without health confirmation.'); } catch(_) {}
+                                    window.location.href = target;
+                                }, 12000);
+                                function tryFetch(){
+                                    tries++;
+                                    fetch(healthUrl, { cache:'no-store' })
+                                      .then(r => { if (r.ok) { showMessage('HTTPS available. Switching…', false); setTimeout(()=>{ window.location.href = target; }, 400); return; }
+                                          throw new Error('bad status'); })
+                                      .catch(()=>{
+                                          if (Date.now() - start > maxMs) {
+                                              showMessage('HTTPS not reachable yet. You may need to manually reload via '+healthUrl, true);
+                                              if (window.showToast) window.showToast({ type:'warning', title:'Manual Step', message:'Open '+target+' after restart (trust the certificate if prompted).' });
+                                              return;
+                                          }
+                                          setTimeout(tryFetch, interval);
+                                      });
+                                }
+                                // Initial delay to allow process shutdown/start
+                                setTimeout(tryFetch, 3000);
+                                try { console.warn('[SDSM][TLS] Polling for HTTPS availability…'); } catch(_) {}
+                            }
+                        })
+                        .catch((err) => {
+                            const errorText = err && err.error ? err.error : 'Unable to generate certificate. Please try again.';
+                            showMessage(errorText, true);
+                            if (window.showToast) window.showToast({ type: 'error', title: 'Generation Failed', message: errorText });
+                        })
+                        .finally(() => {
+                            showButtonSpinner(genBtn, false);
+                            genBtn.disabled = false; // In case reload doesn’t happen
+                        });
+                        return;
+                    }
 
+                    // Default path: Update Config
+                    if (configBtn.disabled) return;
                     const fd = new FormData(configForm);
                     const params = new URLSearchParams();
                     for (const [key, value] of fd.entries()) {
@@ -755,40 +862,24 @@
                 });
             }
 
-            // User Management collapsible toggle
-            (function(){
-                const toggle = document.getElementById('userMgmtToggle');
-                const content = document.getElementById('userMgmtContent');
-                const chevron = document.getElementById('userMgmtChevron');
-                const label = document.getElementById('userMgmtToggleLabel');
-                if (!toggle || !content || !chevron) {
-                    // Card may not be present in some builds
-                } else {
-                    const storageKey = 'sdsm:manager:user-mgmt:expanded';
-                    const setExpanded = (expanded) => {
-                        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                        content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
-                        content.classList.toggle('hidden', !expanded);
-                        chevron.innerHTML = expanded
-                            ? '<polyline points="18 15 12 9 6 15"></polyline>' // up
-                            : '<polyline points="6 9 12 15 18 9"></polyline>'; // down
-                        if (label) label.textContent = expanded ? 'Less' : 'More';
-                        toggle.title = expanded ? 'Collapse' : 'Expand';
-                        try { sessionStorage.setItem(storageKey, expanded ? '1' : '0'); } catch(_) {}
-                    };
-                    let initial = '0';
-                    try { initial = sessionStorage.getItem(storageKey) || '0'; } catch(_) {}
-                    setExpanded(initial === '1');
-                    toggle.addEventListener('click', () => {
-                        const isExpanded = toggle.getAttribute('aria-expanded') === 'true';
-                        setExpanded(!isExpanded);
-                    });
-                }
-            })();
+            // (Removed duplicate User Management collapsible toggle to avoid conflicts)
 
             // User Management logic
             (function(){
+                // Guard: if another bootstrapper already initialized, skip this one
+                try {
+                    var __card = document.getElementById('userMgmtCard');
+                    if (!__card) return;
+                    if (__card.dataset.umInit === '1') {
+                        try { console.debug('[SDSM][UM] Skipping primary bootstrap (already initialized)'); } catch(_) {}
+                        return;
+                    }
+                    __card.dataset.umInit = '1';
+                } catch(_) {}
                 const tbody = document.getElementById('um_table_body');
+                const userCount = document.getElementById('userMgmtCount');
+                const userToggleBtn = document.getElementById('userMgmtToggle');
+                const userContent = document.getElementById('userMgmtContent');
                 const addBtn = document.getElementById('um_add_btn');
                 const newUser = document.getElementById('um_new_username');
                 const newPass = document.getElementById('um_new_password');
@@ -808,12 +899,37 @@
                 let newAssignAll = false;
                 let newAssignServers = new Set();
 
+                // Inline SVG icon constants (avoid template injection inside JS literals)
+                const ICON_KEY = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="7" cy="12" r="3"/><path d="M10 12h11l-2 2 2 2-2 2"/></svg>';
+                const ICON_TRASH = '<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>';
+
                 function ensureServersCache(){
-                    if (serversCache) return Promise.resolve(serversCache);
+                    if (serversCache) {
+                        try { console.debug('[SDSM][UM] serversCache reused (len='+serversCache.length+")", serversCache); } catch(_) {}
+                        return Promise.resolve(serversCache);
+                    }
+                    const t0 = performance.now();
                     return fetch('/api/servers', {headers:{'Accept':'application/json'}, credentials:'same-origin'})
-                        .then(r => r.ok ? r.json() : Promise.reject())
-                        .then(data => { serversCache = Array.isArray(data.servers) ? data.servers : []; return serversCache; })
-                        .catch(()=>{ serversCache = []; return serversCache; });
+                        .then(r => {
+                            if (!r.ok) {
+                                try { console.error('[SDSM][UM] /api/servers status', r.status); } catch(_) {}
+                                return Promise.reject(new Error('status '+r.status));
+                            }
+                            return r.json().catch(err=>{ try { console.error('[SDSM][UM] /api/servers JSON parse failed', err); } catch(_) {}; throw err; });
+                        })
+                        .then(data => {
+                            serversCache = Array.isArray(data.servers) ? data.servers : [];
+                            try {
+                                console.debug('[SDSM][UM] /api/servers fetched '+serversCache.length+' servers in '+(performance.now()-t0).toFixed(1)+'ms', serversCache);
+                                window.__sdsmServersCache = serversCache;
+                            } catch(_) {}
+                            return serversCache;
+                        })
+                        .catch(err => {
+                            serversCache = [];
+                            try { console.error('[SDSM][UM] /api/servers failed; dropdown will show empty state', err); } catch(_) {}
+                            return serversCache;
+                        });
                 }
 
                 function openAssignPanel(username){
@@ -881,7 +997,12 @@
                     panel.style.visibility = 'hidden';
                     panel.style.display = 'block';
                     const rect = anchor.getBoundingClientRect();
-                    const menuWidth = panel.offsetWidth;
+                    // If width cannot be measured yet, fall back to declared width or a sane default
+                    let menuWidth = panel.offsetWidth;
+                    if (!menuWidth || menuWidth === 0) {
+                        const declared = parseInt(getComputedStyle(panel).width || '0', 10);
+                        menuWidth = declared > 0 ? declared : 320;
+                    }
                     const padding = 6;
                     // Align to the right edge of the button
                     let left = Math.round(rect.right - menuWidth);
@@ -889,24 +1010,42 @@
                     const vw = window.innerWidth; const vh = window.innerHeight;
                     if (left + menuWidth > vw - 8) left = Math.max(8, vw - menuWidth - 8);
                     if (left < 8) left = 8;
-                    if (top > vh - 8) top = Math.max(8, rect.top - panel.offsetHeight - padding);
+                    const menuHeight = panel.offsetHeight || 0;
+                    if (top > vh - 8) top = Math.max(8, rect.top - (menuHeight || 0) - padding);
                     panel.style.left = left + 'px';
                     panel.style.top = top + 'px';
-                    panel.style.visibility = '';
+                    panel.style.visibility = 'visible';
+                    try { console.debug('[SDSM][UM] Dropdown positioned', { left, top, menuWidth, menuHeight, vw, vh }); } catch(_) {}
                 }
 
                 function openAccessDropdown(){
                     if (!accessDrop) return;
+                    // Ensure overlay is not constrained by any parent stacking contexts
+                    try {
+                        if (accessDrop.parentElement !== document.body) {
+                            document.body.appendChild(accessDrop);
+                        }
+                        accessDrop.style.position = 'fixed';
+                    } catch(_) {}
                     ensureServersCache().then(() => {
                         accessList.innerHTML = '';
-                        serversCache.forEach(s => {
-                            const lbl = document.createElement('label'); lbl.className='assign-chip';
-                            const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.checked = newAssignServers.has(Number(s.id)); cb.disabled = newAssignAll; cb.className='um-new-assign-cb';
-                            cb.addEventListener('change', ()=>{ const id = Number(cb.value); if (cb.checked) newAssignServers.add(id); else newAssignServers.delete(id); });
-                            const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
-                            lbl.appendChild(cb); lbl.appendChild(span);
-                            accessList.appendChild(lbl);
-                        });
+                        if (!serversCache || serversCache.length === 0) {
+                            const msg = document.createElement('div');
+                            msg.className = 'text-tertiary text-sm';
+                            msg.textContent = 'No servers available '+ (newAssignAll ? '(all selected by default).' : '(create a server first).');
+                            accessList.appendChild(msg);
+                            try { console.warn('[SDSM][UM] No servers returned for access dropdown'); } catch(_) {}
+                        } else {
+                            serversCache.forEach(s => {
+                                const lbl = document.createElement('label'); lbl.className='assign-chip';
+                                const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(s.id); cb.checked = newAssignServers.has(Number(s.id)); cb.disabled = newAssignAll; cb.className='um-new-assign-cb';
+                                cb.addEventListener('change', ()=>{ const id = Number(cb.value); if (cb.checked) newAssignServers.add(id); else newAssignServers.delete(id); });
+                                const span = document.createElement('span'); span.textContent = s.name + ' (#'+s.id+')';
+                                lbl.appendChild(cb); lbl.appendChild(span);
+                                accessList.appendChild(lbl);
+                            });
+                            try { console.debug('[SDSM][UM] Populated access dropdown with '+serversCache.length+' servers'); } catch(_) {}
+                        }
                         if (accessAll) {
                             accessAll.checked = newAssignAll;
                             accessAll.onchange = () => {
@@ -915,6 +1054,7 @@
                             };
                         }
                         accessDrop.classList.remove('hidden');
+                        try { accessBtn.setAttribute('aria-expanded','true'); } catch(_) {}
                         positionDropdown(accessBtn, accessDrop);
                         function onDocClick(evt){
                             if (!accessDrop.contains(evt.target) && evt.target !== accessBtn && !accessBtn.contains(evt.target)) {
@@ -931,7 +1071,7 @@
                     });
                 }
 
-                function closeAccessDropdown(){ if (accessDrop) accessDrop.classList.add('hidden'); }
+                function closeAccessDropdown(){ if (accessDrop) { accessDrop.classList.add('hidden'); try { accessBtn.setAttribute('aria-expanded','false'); } catch(_) {} } }
 
                 if (accessBtn) accessBtn.addEventListener('click', () => { if (!accessDrop.classList.contains('hidden')) closeAccessDropdown(); else openAccessDropdown(); });
                 if (accessClose) accessClose.addEventListener('click', closeAccessDropdown);
@@ -948,6 +1088,21 @@
                     return copy;
                 }
 
+                function setCountBadge(n){ if (userCount) userCount.textContent = String(n); }
+
+                function ensureVisibleOnFirstLoad(users){
+                    if (!userToggleBtn || !userContent) return;
+                    let hasPref = false; let pref = null;
+                    try { pref = sessionStorage.getItem('sdsm:manager:user-mgmt:expanded'); hasPref = pref !== null; } catch(_) {}
+                    if (!hasPref && Array.isArray(users) && users.length > 0) {
+                        // Expand by default on first visit when we have data
+                        userToggleBtn.setAttribute('aria-expanded','true');
+                        userContent.classList.remove('hidden');
+                        userContent.setAttribute('aria-hidden','false');
+                        try { sessionStorage.setItem('sdsm:manager:user-mgmt:expanded','1'); } catch(_) {}
+                    }
+                }
+
                 function renderUsers(users){
                     tbody.innerHTML = '';
                     if(!Array.isArray(users) || users.length === 0){
@@ -955,8 +1110,11 @@
                         const td = document.createElement('td');
                         td.colSpan = 4;
                         td.textContent = 'No users found.';
-                        tr.appendChild(td); tbody.appendChild(tr); return;
+                        tr.appendChild(td); tbody.appendChild(tr);
+                        setCountBadge(0);
+                        return;
                     }
+                    setCountBadge(users.length);
                     sortUsers(users).forEach(u => {
                         const tr = document.createElement('tr');
                         const tdU = document.createElement('td'); tdU.textContent = u.username; tr.appendChild(tdU);
@@ -972,7 +1130,7 @@
                         const tdA = document.createElement('td');
                         // Reset password button
                         const btnPw = document.createElement('button'); btnPw.className='btn btn-secondary';
-                        btnPw.innerHTML='{{ template "icon_key" . }} <span class="ml-4">Set Password</span>';
+                        btnPw.innerHTML = ICON_KEY + ' <span class="ml-4">Set Password</span>';
                         btnPw.addEventListener('click', () => {
                             const p = prompt('Enter new password for '+u.username+':');
                             if(p && p.length>=8){ resetPassword(u.username, p); }
@@ -981,7 +1139,7 @@
                         tdA.appendChild(btnPw);
                         // Delete button
                         const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2';
-                        btnDel.innerHTML='{{ template "icon_trash" . }} <span class="ml-4">Delete</span>';
+                        btnDel.innerHTML = ICON_TRASH + ' <span class="ml-4">Delete</span>';
                                                 btnDel.addEventListener('click', () => {
                                                         askConfirm({ title: 'Delete User', message: 'Delete user '+u.username+'?', confirmText: 'Delete', cancelText: 'Cancel', danger: true }, 'Delete user '+u.username+'?')
                                                             .then((ok) => { if (ok) deleteUser(u.username); });
@@ -1002,10 +1160,28 @@
                 function fetchUsers(){
                     if(listBusy) return; listBusy = true;
                     const url = '/api/users';
+                    if (tbody) {
+                        tbody.innerHTML = '';
+                        const tr = document.createElement('tr');
+                        const td = document.createElement('td');
+                        td.colSpan = 4; td.textContent = 'Loading…';
+                        tr.appendChild(td); tbody.appendChild(tr);
+                    }
                     fetch(url, {headers:{'Accept':'application/json'}, credentials:'same-origin'})
-                        .then(r => r.ok ? r.json() : Promise.reject())
-                        .then(data => { usersData = Array.isArray(data.users)? data.users : []; renderUsers(usersData); })
-                        .catch(()=>{})
+                        .then(r => r.ok ? r.json() : r.json().catch(()=>({error:'Request failed'})).then((d)=>Promise.reject(d)))
+                        .then(data => { usersData = Array.isArray(data.users)? data.users : []; ensureVisibleOnFirstLoad(usersData); renderUsers(usersData); })
+                        .catch((err)=>{
+                            try { console.error('[SDSM] Failed to load users', err); } catch(_) {}
+                            if (tbody) {
+                                tbody.innerHTML = '';
+                                const tr = document.createElement('tr');
+                                const td = document.createElement('td');
+                                td.colSpan = 4; td.textContent = 'Failed to load users.';
+                                tr.appendChild(td); tbody.appendChild(tr);
+                            }
+                            if (window.showToast) window.showToast({ type:'error', title:'Load Failed', message: (err && err.error) || 'Unable to load users' });
+                            setCountBadge(0);
+                        })
                         .finally(()=>{ listBusy=false; });
                 }
 
@@ -1034,8 +1210,10 @@
                       .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Delete Failed', message: (err&&err.error)||'Unable to delete user'}); fetchUsers(); });
                 }
 
-                if(addBtn && newUser && newPass && newRole){
-                    addBtn.addEventListener('click', () => {
+                const addForm = document.getElementById('um_add_form');
+                if(addForm && addBtn && newUser && newPass && newRole){
+                    const handleSubmit = (evt) => {
+                        evt.preventDefault();
                         const u = newUser.value.trim(); const p = newPass.value; const r = newRole.value;
                         if(u.length < 3){ if(window.showToast) window.showToast({type:'error', title:'Invalid', message:'Username must be at least 3 characters.'}); return; }
                         if(p.length < 8){ if(window.showToast) window.showToast({type:'error', title:'Invalid', message:'Password must be at least 8 characters.'}); return; }
@@ -1057,7 +1235,10 @@
                           })
                           .catch(err=>{ if(window.showToast) window.showToast({type:'error', title:'Add Failed', message: (err&&err.error)||'Unable to add user'}); })
                           .finally(()=>{ addBtn.disabled = false; });
-                    });
+                    };
+                    addForm.addEventListener('submit', handleSubmit);
+                    // Fallback: retain click handler if someone triggers button programmatically
+                    addBtn.addEventListener('click', (e)=>{ if(addBtn.type !== 'submit'){ handleSubmit(e); } });
                 }
                 // Toggle server access control visibility by role (optional UX)
                 if (newRole && accessBtn) {
@@ -1080,6 +1261,12 @@
                     });
                 });
                 // Initial load
+                if (tbody && !tbody.innerHTML.trim()) {
+                    const tr = document.createElement('tr');
+                    const td = document.createElement('td');
+                    td.colSpan = 4; td.textContent = 'Loading…';
+                    tr.appendChild(td); tbody.appendChild(tr);
+                }
                 fetchUsers();
             })();
 
@@ -1186,7 +1373,7 @@
                             <label for="auto_update">Auto Update Time</label>
                             <input type="text" id="auto_update" name="auto_update" value="{{ .auto_update }}" required>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group top-align">
                             <label for="start_update">Update at Start</label>
                             <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="start_update" name="start_update" class="form-checkbox" {{if .start_update}}checked{{end}}>
@@ -1195,22 +1382,47 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group top-align">
                             <label for="tls_enabled">HTTPS (TLS)</label>
                             <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="tls_enabled" name="tls_enabled" class="form-checkbox" {{if .tls_enabled}}checked{{end}}>
                                 <span class="text-secondary text-sm flex-1" aria-live="polite">
-                                    Serve the UI over HTTPS using the certificate and key below (effective after restart).
+                                    Enable HTTPS using managed certificate assets under <code>certs/</code> (restart required).
                                 </span>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="tls_cert">TLS Certificate Path</label>
-                            <input type="text" id="tls_cert" name="tls_cert" value="{{ .tls_cert }}" placeholder="C:\\path\\to\\cert.pem">
+                        <div class="form-group top-align">
+                            <label>HTTPS Status</label>
+                            <div class="field-inline items-start gap-2">
+                                <span class="status-pill status-{{if .tls_enabled}}success{{else}}secondary{{end}}"><span class="dot" aria-hidden="true"></span>{{if .tls_enabled}}Enabled{{else}}Disabled{{end}}</span>
+                                {{ if .tls_enabled }}
+                                <span class="text-secondary text-sm" aria-live="polite">Using <code>certs/sdsm.crt</code> and <code>certs/sdsm.key</code></span>
+                                {{ else }}
+                                <span class="text-secondary text-sm" aria-live="polite">Provide certificate + key sources below and check Enable to activate.</span>
+                                {{ end }}
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="tls_key">TLS Private Key Path</label>
-                            <input type="text" id="tls_key" name="tls_key" value="{{ .tls_key }}" placeholder="C:\\path\\to\\key.pem">
+                        <div class="form-group top-align">
+                            <label for="generate_tls_self_signed">Advanced TLS</label>
+                            <div class="flex-col gap-3">
+                                <button id="generate_tls_self_signed" type="submit" name="generate_tls_self_signed" class="btn btn-secondary mb-2" data-tls-enabled="{{if .tls_enabled}}true{{else}}false{{end}}" title="{{if .tls_enabled}}Regenerate and replace the existing certificate{{else}}Generate a new self-signed certificate{{end}}">
+                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path>
+                                        <path d="M19 11a7 7 0 1 0-14 0v2H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h0v-2Z"></path>
+                                    </svg>
+                                    {{if .tls_enabled}}Regenerate Cert{{else}}Generate Cert{{end}}
+                                </button>
+                                <details class="w-full">
+                                    <summary class="cursor-pointer text-secondary">Source Paths</summary>
+                                    <div class="mt-2">
+                                        <label for="tls_cert" class="text-secondary text-sm">Certificate Source</label>
+                                        <input type="text" id="tls_cert" name="tls_cert" value="{{ .tls_cert }}" placeholder="C:\\path\\to\\cert.pem" class="mt-1 mb-3">
+                                        <label for="tls_key" class="text-secondary text-sm">Private Key Source</label>
+                                        <input type="text" id="tls_key" name="tls_key" value="{{ .tls_key }}" placeholder="C:\\path\\to\\key.pem" class="mt-1">
+                                        <p class="text-secondary text-xs mt-3">Paths are treated as sources and copied into <code>certs/</code> as <code>sdsm.crt</code> / <code>sdsm.key</code>. Files must be valid PEM.</p>
+                                    </div>
+                                </details>
+                            </div>
                         </div>
                         {{ if .tls_generated }}
                         <div class="alert alert-success" role="status" aria-live="polite">
@@ -1225,21 +1437,7 @@
                             </div>
                         </div>
                         {{ end }}
-                        <div class="form-group">
-                            <div class="field-inline items-start gap-2">
-                                <button type="submit" name="generate_tls_self_signed" class="btn btn-secondary">
-                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                        <path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path>
-                                        <path d="M19 11a7 7 0 1 0-14 0v2H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h0v-2Z"></path>
-                                    </svg>
-                                    Generate Self‑Signed Cert (localhost)
-                                </button>
-                                <span class="text-secondary text-sm flex-1" aria-live="polite">
-                                    Creates a localhost certificate and key under <code>certs/</code>, updates paths, and enables HTTPS.
-                                </span>
-                            </div>
-                        </div>
-                        <div class="form-group">
+                        <div class="form-group top-align">
                             <label for="detached_servers">Detached Servers (keep running if SDSM exits)</label>
                             <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="detached_servers" name="detached_servers" class="form-checkbox" {{if .detached}}checked{{end}}>
@@ -1248,7 +1446,7 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group top-align">
                             <label for="tray_enabled">Windows Tray Icon</label>
                             <div class="field-inline items-start gap-2">
                                 <input type="checkbox" id="tray_enabled" name="tray_enabled" class="form-checkbox" {{if .tray_enabled}}checked{{end}}>
@@ -1432,6 +1630,9 @@
             <div class="glass-card" id="userMgmtCard">
                 <div class="card-header">
                     <h3 class="card-title m-0">User Management</h3>
+                    <div class="status-badges">
+                        <span class="pill" title="Total users">Users: <span id="userMgmtCount">--</span></span>
+                    </div>
                     <button type="button" id="userMgmtToggle" class="btn btn-secondary btn-min-sm" aria-expanded="false" aria-controls="userMgmtContent" title="Expand">
                         <svg id="userMgmtChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         <span id="userMgmtToggleLabel" class="ml-6">More</span>
@@ -1441,16 +1642,16 @@
                     <div class="form-grid-compact mb-3">
                         <div class="form-group">
                             <label>Add User</label>
-                            <div class="inline-controls">
-                                <input id="um_new_username" type="text" class="form-input-inline" placeholder="username" minlength="3" required />
-                                <input id="um_new_password" type="password" class="form-input-inline" placeholder="password (min 8)" minlength="8" required />
-                                <select id="um_new_role" class="form-input-inline w-120 min-w-120">
+                            <form id="um_add_form" class="inline-controls" autocomplete="on">
+                                <input id="um_new_username" name="username" type="text" class="form-input-inline" placeholder="username" minlength="3" required autocomplete="username" />
+                                <input id="um_new_password" name="password" type="password" class="form-input-inline" placeholder="password (min 8)" minlength="8" required autocomplete="new-password" />
+                                <select id="um_new_role" name="role" class="form-input-inline w-120 min-w-120">
                                     <option value="admin">Admin</option>
                                     <option value="operator" selected>Operator</option>
                                 </select>
                                 <button type="button" id="um_access_btn" class="btn btn-secondary min-w-120 nowrap" title="Choose servers for this operator">Servers ▾</button>
-                                <button type="button" id="um_add_btn" class="btn btn-primary">{{ template "icon_add" . }} <span class="ml-4">Add</span></button>
-                            </div>
+                                <button type="submit" id="um_add_btn" class="btn btn-primary">{{ template "icon_add" . }} <span class="ml-4">Add</span></button>
+                            </form>
                             <div id="um_access_dropdown" class="glass-card dropdown-panel hidden w-340">
                                 <div class="row justify-between mb-2">
                                     <strong>Server Access</strong>
@@ -1481,13 +1682,40 @@
                     </div>
                 </div>
             </div>
+            <script>
+                // Robust, localized toggle for User Management card
+                (function(){
+                    try {
+                        const btn = document.getElementById('userMgmtToggle');
+                        const body = document.getElementById('userMgmtContent');
+                        const chevron = document.getElementById('userMgmtChevron');
+                        const label = document.getElementById('userMgmtToggleLabel');
+                        if (!btn || !body) return;
+                        const setState = (expanded) => {
+                            btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                            body.classList.toggle('hidden', !expanded);
+                            body.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+                            if (label) label.textContent = expanded ? 'Less' : 'More';
+                            if (chevron) chevron.innerHTML = expanded ? '<polyline points="6 15 12 9 18 15"></polyline>' : '<polyline points="6 9 12 15 18 9"></polyline>';
+                            try { sessionStorage.setItem('sdsm:manager:user-mgmt:expanded', expanded ? '1' : '0'); } catch(_) {}
+                        };
+                        let initial = '1'; // default to expanded on first visit
+                        try { const stored = sessionStorage.getItem('sdsm:manager:user-mgmt:expanded'); if (stored !== null) initial = stored; } catch(_) {}
+                        setState(initial === '1');
+                        btn.addEventListener('click', function(){
+                            const expanded = btn.getAttribute('aria-expanded') === 'true';
+                            setState(!expanded);
+                        });
+                    } catch(_) {}
+                })();
+            </script>
 
             <div class="glass-card" id="manageLogsCard">
                 <div class="card-header">
                     <h3 class="card-title m-0">Manage Logs</h3>
                     <button type="button" id="manageLogsToggle" class="btn btn-secondary btn-min-sm" aria-expanded="true" aria-controls="manageLogsContent" title="Collapse">
-                        <svg id="manageLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                        <span id="manageLogsToggleLabel" class="ml-6">Hide</span>
+                        <svg id="manageLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
+                        <span id="manageLogsToggleLabel" class="ml-6">Less</span>
                     </button>
                 </div>
                 <div id="manageLogsContent" class="card-body" aria-hidden="false">
@@ -1571,6 +1799,8 @@
             }
 
             function scheduleNext(delay) {
+                // Query locally; avoid relying on other script scopes
+                const stopAllBtn = document.getElementById('stopAllBtn');
                 if (stopAllBtn) {
                     // Initialize disabled state based on current running count
                     try {
@@ -1600,7 +1830,12 @@
                         if (connectionLost) {
                             connectionLost = false;
                             // With zero running, keep button disabled post-success
-                            stopAllBtn.disabled = true;
+                            const btn = document.getElementById('stopAllBtn');
+                            if (btn) {
+                                const rcEl = document.getElementById('server-count-running');
+                                const rc = rcEl ? parseInt(rcEl.textContent || '0', 10) : 0;
+                                btn.disabled = (rc === 0);
+                            }
                             setBanner(true, 'Connection restored. Reloading...');
                             setTimeout(() => {
                                 setBanner(false);
@@ -1609,9 +1844,10 @@
                             return;
                         }
                             // If still servers running, re-enable; otherwise remains disabled
+                            const stopAllBtn = document.getElementById('stopAllBtn');
                             const rcEl2 = document.getElementById('server-count-running');
                             const rc2 = rcEl2 ? parseInt(rcEl2.textContent || '0', 10) : 0;
-                            stopAllBtn.disabled = (rc2 === 0);
+                            if (stopAllBtn) stopAllBtn.disabled = (rc2 === 0);
                     })
                     .catch(() => {
                         clearTimeout(timeoutId);
@@ -1674,13 +1910,43 @@
             const btnClear = document.getElementById('ml-clear');
             if (!tabs || !viewer) return;
             let files = []; let selected=''; let tailOffset=-1; let tailTimer=null; let listTimer=null; let pausedByScroll=false;
+            let tailIntervalMs = 2000; let rateLimitedUntil = 0; let rateLimited = false; let resumeTimer = null;
             const TAIL_BACK=8192, TAIL_MAX=65536;
             function isAtBottom(t){ const tol = typeof t==='number'?t:4; return viewer && (viewer.scrollTop+viewer.clientHeight)>= (viewer.scrollHeight - tol); }
             function scrollToBottom(){ if(viewer) viewer.scrollTop=viewer.scrollHeight; }
             function renderTabs(){ if(!tabs) return; tabs.innerHTML=''; const has=Array.isArray(files)&&files.length>0; if(empty) empty.style.display=has?'none':''; if(!has) return; files.forEach((name,i)=>{ const btn=document.createElement('button'); btn.type='button'; btn.className='log-tab'; btn.setAttribute('role','tab'); btn.dataset.name=name; btn.setAttribute('aria-selected', selected===name?'true':'false'); const label=document.createElement('span'); label.className='filename'; label.textContent=name; btn.appendChild(label); btn.addEventListener('click',()=>{ if(selected===name) return; selected=name; tailOffset=-1; pausedByScroll=false; if(viewer) viewer.textContent=''; tabs.querySelectorAll('.log-tab').forEach(t=>t.setAttribute('aria-selected', t===btn?'true':'false')); fetchTail(); }); tabs.appendChild(btn); if(!selected && i===0){ selected=name; btn.setAttribute('aria-selected','true'); } }); }
             function fetchList(){ fetch('/api/manager/logs',{headers:{'Accept':'application/json'},credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(data=>{ if(!data||!Array.isArray(data.files)) return; const prev=selected; files=data.files; renderTabs(); if(prev && !files.includes(prev)){ selected=files[0]||''; tailOffset=-1; if(viewer) viewer.textContent=''; } if(selected && !tailTimer){ fetchTail(); startTail(); } updateButtonsState(); }).catch(()=>{}); }
-            function fetchTail(){ if(!selected||!viewer) return; const params=new URLSearchParams({name:selected, offset:String(tailOffset), back:String(TAIL_BACK), max:String(TAIL_MAX)}); fetch('/api/manager/log/tail?'+params.toString(),{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(data=>{ if(!data) return; if(data.reset){ viewer.textContent=''; } const chunk=typeof data.data==='string'?data.data:''; if(chunk){ const stick=!pausedByScroll && isAtBottom(); viewer.textContent+=chunk; if(stick) scrollToBottom(); } if(typeof data.offset==='number') tailOffset=data.offset; updateButtonsState(); }).catch(()=>{}); }
-            function startTail(){ if(!tailTimer) tailTimer=setInterval(fetchTail,2000); }
+            function fetchTail(){
+                if(!selected||!viewer) return;
+                // Respect rate limit cooldown
+                const now = Date.now();
+                if (rateLimited && now < rateLimitedUntil) return;
+                const params=new URLSearchParams({name:selected, offset:String(tailOffset), back:String(TAIL_BACK), max:String(TAIL_MAX)});
+                fetch('/api/manager/log/tail?'+params.toString(),{credentials:'same-origin'})
+                  .then(r=>{
+                      if (r.status === 429) {
+                          try { console.warn('[SDSM][Logs] Rate limited on tail; backing off.'); } catch(_) {}
+                          rateLimited = true;
+                          const prev = tailIntervalMs;
+                          tailIntervalMs = Math.min(prev * 2, 30000);
+                          rateLimitedUntil = Date.now() + tailIntervalMs;
+                          stopTail();
+                          if (resumeTimer) clearTimeout(resumeTimer);
+                          resumeTimer = setTimeout(()=>{ rateLimited=false; startTail(); }, tailIntervalMs);
+                          return null;
+                      }
+                      return r.ok ? r.json() : null;
+                  })
+                  .then(data=>{
+                      if(!data) return;
+                      if(data.reset){ viewer.textContent=''; }
+                      const chunk=typeof data.data==='string'?data.data:'';
+                      if(chunk){ const stick=!pausedByScroll && isAtBottom(); viewer.textContent+=chunk; if(stick) scrollToBottom(); }
+                      if(typeof data.offset==='number') tailOffset=data.offset; updateButtonsState();
+                  })
+                  .catch(()=>{});
+            }
+            function startTail(){ if(!tailTimer) tailTimer=setInterval(fetchTail, tailIntervalMs); }
             function stopTail(){ if(tailTimer){ clearInterval(tailTimer); tailTimer=null; } }
             function initScrollPause(){ if(!viewer) return; viewer.addEventListener('scroll',()=>{ if(isAtBottom()){ if(pausedByScroll){ pausedByScroll=false; startTail(); } } else { if(!pausedByScroll){ pausedByScroll=true; stopTail(); } } }); }
             function initToggle(){
@@ -1692,15 +1958,15 @@
                     content.classList.toggle('hidden', !expanded);
                     content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
                     toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                    if(toggleLabel) toggleLabel.textContent = expanded ? 'Hide' : 'More';
-                    if(chevron) chevron.innerHTML = expanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>';
+                    if(toggleLabel) toggleLabel.textContent = expanded ? 'Less' : 'More';
+                    if(chevron) chevron.innerHTML = expanded ? '<polyline points="6 15 12 9 18 15"></polyline>' : '<polyline points="6 9 12 15 18 9"></polyline>';
                 } catch(_) {}
                 toggle.addEventListener('click',()=>{
                     const nowExpanded = content.classList.toggle('hidden') ? false : true;
                     content.setAttribute('aria-hidden', nowExpanded?'false':'true');
                     toggle.setAttribute('aria-expanded', nowExpanded?'true':'false');
-                    if(toggleLabel) toggleLabel.textContent = nowExpanded ? 'Hide' : 'More';
-                    if(chevron){ chevron.innerHTML = nowExpanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>'; }
+                    if(toggleLabel) toggleLabel.textContent = nowExpanded ? 'Less' : 'More';
+                    if(chevron){ chevron.innerHTML = nowExpanded ? '<polyline points="6 15 12 9 18 15"></polyline>' : '<polyline points="6 9 12 15 18 9"></polyline>'; }
                     try { localStorage.setItem('sdsm:manager:logs:expanded', nowExpanded ? '1' : '0'); } catch(_) {}
                 });
             }
@@ -1785,15 +2051,16 @@
                     catch(e){ console.error('[SDSM] Fallback parse error', e); markUnavailable(); }
                 } else {
                     if (tries < 3) {
-                        try { console.warn('[SDSM] Fallback versions fetch retry', tries+1); } catch(_) {}
-                        setTimeout(function(){ load(tries+1); }, 500*(tries+1));
+                        try { console.warn('[SDSM] Fallback versions fetch retry', tries+1, '(status', xhr.status, ')'); } catch(_) {}
+                        var base = (xhr.status === 429) ? 3000 : 500;
+                        setTimeout(function(){ load(tries+1); }, base*(tries+1));
                     } else {
                         markUnavailable();
                     }
                 }
             };
             xhr.onerror = function(){
-                if (tries < 3) { setTimeout(function(){ load(tries+1); }, 500*(tries+1)); }
+                if (tries < 3) { setTimeout(function(){ load(tries+1); }, 800*(tries+1)); }
                 else { markUnavailable(); }
             };
             xhr.send();

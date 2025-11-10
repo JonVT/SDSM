@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
@@ -111,5 +110,6 @@ func (h *Hub) logf(format string, args ...interface{}) {
 		h.logger.Write(msg)
 		return
 	}
-	log.Println(msg)
+	// Fallback: write to default SDSM log instead of stdout
+	utils.NewLogger("").Write(msg)
 }

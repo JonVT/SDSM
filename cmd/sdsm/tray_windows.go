@@ -25,10 +25,17 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 	iconICO, _ := ui.Assets.ReadFile("static/sdsm.ico")
 	iconPNG, _ := ui.Assets.ReadFile("static/sdsm.png")
 
+	if app.manager != nil && app.manager.Log != nil {
+		app.manager.Log.Write("Tray: initialization starting")
+	}
+
 	onReady := func() {
 		// Try .ico directly
 		if len(iconICO) > 0 {
 			systray.SetIcon(iconICO)
+			if app.manager != nil && app.manager.Log != nil {
+				app.manager.Log.Write("Tray: icon set from embedded ICO")
+			}
 		} else if len(iconPNG) > 0 {
 			// Convert PNG -> ICO bytes
 			if img, err := png.Decode(bytes.NewReader(iconPNG)); err == nil {
@@ -36,6 +43,9 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 				var buf bytes.Buffer
 				if err := encodeICO(&buf, img); err == nil {
 					systray.SetIcon(buf.Bytes())
+					if app.manager != nil && app.manager.Log != nil {
+						app.manager.Log.Write("Tray: icon converted from PNG")
+					}
 				}
 			}
 		}
@@ -48,6 +58,10 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 		mRestart := systray.AddMenuItem("Restart SDSM", "Restart the manager process")
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Quit", "Stop SDSM server")
+
+		if app.manager != nil && app.manager.Log != nil {
+			app.manager.Log.Write("Tray: menu items created")
+		}
 
 		go func() {
 			var confirmStopAll bool
@@ -134,6 +148,9 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 	}
 
 	onExit := func() {
+		if app.manager != nil && app.manager.Log != nil {
+			app.manager.Log.Write("Tray: exit invoked")
+		}
 		close(done)
 	}
 

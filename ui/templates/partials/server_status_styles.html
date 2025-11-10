@@ -69,6 +69,8 @@
     /* Keep only outer corners rounded to match pill buttons */
     .split-button > .btn:first-child { border-top-left-radius: var(--radius-full) !important; border-bottom-left-radius: var(--radius-full) !important; border-right: 0; padding-right: calc(var(--space-4) + 38px); /* leave room for caret overlay */ }
     .split-button > .btn:last-of-type { border-top-right-radius: var(--radius-full) !important; border-bottom-right-radius: var(--radius-full) !important; }
+    /* When caret half is disabled/hidden by state, round the main button's right edge too */
+    #save-split.is-disabled > .btn:first-child { border-top-right-radius: var(--radius-full) !important; border-bottom-right-radius: var(--radius-full) !important; }
     /* Position caret overlayed on the right, not increasing overall width */
     .split-button > .btn.btn-split-caret {
         position: absolute; right: 0; top: 0; bottom: 0; z-index: 2;
@@ -86,7 +88,8 @@
     /* Keep button gradient styling; rely on :disabled opacity. Only the dropdown panel swaps to neutral when disabled. */
     /* Ensure caret half visually dims even if disabled state is controlled at the group level */
     #save-split.is-disabled > .btn.btn-split-caret { opacity: 0.55; pointer-events: none; }
-    .split-button > .btn[disabled] + .btn { opacity: .9; }
+    /* When main half is disabled via attribute, keep caret in sync for visual parity */
+    #save-split > .btn[disabled] ~ .btn.btn-split-caret { opacity: 0.55; pointer-events: none; }
 
     /* Dropdown animation & interaction improvements (applies to language/save menus) */
     .lang-dropdown { transition: opacity 120ms ease, transform 120ms ease; opacity: 0; transform: translateY(-6px); pointer-events: none; }
@@ -114,6 +117,8 @@
         color: var(--text-secondary);
         border-color: var(--border-color);
     }
+    /* Also dim the main half for consistent disabled appearance */
+    #save-split.is-disabled > .btn.btn-control { opacity: 0.65; }
     #save-split #save-menu .dropdown-item {
         display: block;
         width: 100%;

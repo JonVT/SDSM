@@ -846,6 +846,22 @@ input[type="email"]:focus {
     color: var(--text-tertiary);
 }
 
+/* Click-to-copy token styles */
+code.token-ref {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    transition: background-color .15s ease, color .15s ease;
+}
+code.token-ref:hover {
+    background: rgba(59,130,246,0.12);
+    color: var(--text-primary);
+}
+code.token-ref.copied {
+    background: rgba(34,197,94,0.18);
+    color: var(--success-600);
+}
+
 /* Removed unused .table-card styles */
 
 .connection-banner {
@@ -1367,6 +1383,7 @@ input[type="email"]:focus {
 .row { display: flex; align-items: center; gap: var(--space-2); }
 .flex-col { display: flex; flex-direction: column; }
 .items-end { align-items: flex-end; }
+.items-start { align-items: flex-start; }
 .justify-between { justify-content: space-between; }
 .relative { position: relative; }
 .w-full { width: 100%; }
@@ -1399,7 +1416,19 @@ input[type="email"]:focus {
 .nowrap { white-space: nowrap; }
 .justify-center { justify-content: center; }
 /* Dropdown panel (floating assignment chooser) */
-.dropdown-panel { position: fixed; z-index: 5000; padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); backdrop-filter: blur(8px); }
+.dropdown-panel {
+    position: fixed;
+    /* Ensure it floats above all app chrome including banners */
+    z-index: 11000;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    /* Give it its own background and elevation so it’s clearly visible */
+    background: var(--panel-gradient);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(8px);
+}
 /* User assignment list container */
 .assign-list { display:flex; flex-wrap:wrap; gap: var(--space-2); max-height:240px; overflow:auto; padding: var(--space-1); border:1px dashed var(--border-color); border-radius: var(--radius-md); }
 /* User assignment chip */

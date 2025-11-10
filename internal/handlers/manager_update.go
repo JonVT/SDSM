@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -63,9 +64,94 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		// Only meaningful on Windows; allow user to toggle off to disable tray next start.
 		h.manager.TrayEnabled = trayEnabled
 		// TLS is cross-platform; effective after restart
+		// Treat provided TLS paths as sources ONLY when absolute; copy into root/certs and persist relative paths.
 		h.manager.TLSEnabled = tlsEnabled
-		h.manager.TLSCertPath = tlsCert
-		h.manager.TLSKeyPath = tlsKey
+		if tlsEnabled {
+			certSrc := tlsCert
+			keySrc := tlsKey
+			if certSrc != "" && !filepath.IsAbs(certSrc) {
+				certSrc = ""
+			}
+			if keySrc != "" && !filepath.IsAbs(keySrc) {
+				keySrc = ""
+			}
+			certRel, keyRel, copyErr := h.manager.InstallTLSFromSources(certSrc, keySrc)
+			if copyErr != nil {
+				// Disable TLS on failure to avoid broken startup and surface error
+				h.manager.TLSEnabled = false
+				h.manager.Log.Write("TLS asset installation failed: " + copyErr.Error())
+				if isAsync {
+					ToastError(c, "TLS Setup Failed", copyErr.Error())
+				}
+			} else {
+				if strings.TrimSpace(certRel) != "" {
+					h.manager.TLSCertPath = certRel
+				}
+				if strings.TrimSpace(keyRel) != "" {
+					h.manager.TLSKeyPath = keyRel
+				}
+				// Validate existing/managed assets before leaving TLS enabled
+				if h.manager.TLSEnabled {
+					// Resolve paths: prefer relative under root/certs
+					certPath := strings.TrimSpace(h.manager.TLSCertPath)
+					keyPath := strings.TrimSpace(h.manager.TLSKeyPath)
+					if certPath != "" && !filepath.IsAbs(certPath) {
+						certPath = filepath.Join(h.manager.Paths.RootPath, certPath)
+					}
+					if keyPath != "" && !filepath.IsAbs(keyPath) {
+						keyPath = filepath.Join(h.manager.Paths.RootPath, keyPath)
+					}
+					// Read and parse PEM
+					if certPath == "" || keyPath == "" {
+						h.manager.TLSEnabled = false
+						if isAsync {
+							ToastError(c, "TLS Invalid", "Certificate or key path missing.")
+						}
+					} else {
+						cerr := validatePEMCertificate(certPath)
+						kobj, kerr := validatePEMKey(keyPath)
+						if cerr != nil || kerr != nil || !keysMatch(certPath, kobj) {
+							h.manager.TLSEnabled = false
+							msg := ""
+							if cerr != nil {
+								msg = cerr.Error()
+							}
+							if kerr != nil {
+								if msg != "" {
+									msg += "; "
+								}
+								msg += kerr.Error()
+							}
+							if msg == "" {
+								msg = "certificate and key do not match"
+							}
+							if isAsync {
+								ToastError(c, "TLS Invalid", msg)
+							}
+						}
+					}
+				}
+			}
+		} else {
+			// When disabling TLS, still allow updating stored paths from provided sources (optional)
+			certSrc := tlsCert
+			keySrc := tlsKey
+			if certSrc != "" && !filepath.IsAbs(certSrc) {
+				certSrc = ""
+			}
+			if keySrc != "" && !filepath.IsAbs(keySrc) {
+				keySrc = ""
+			}
+			if strings.TrimSpace(certSrc) != "" || strings.TrimSpace(keySrc) != "" {
+				certRel, keyRel, _ := h.manager.InstallTLSFromSources(certSrc, keySrc)
+				if strings.TrimSpace(certRel) != "" {
+					h.manager.TLSCertPath = certRel
+				}
+				if strings.TrimSpace(keyRel) != "" {
+					h.manager.TLSKeyPath = keyRel
+				}
+			}
+		}
 		h.manager.Save()
 		if language != "" {
 			h.manager.Language = language
@@ -123,8 +209,9 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			c.HTML(http.StatusInternalServerError, "manager.html", gin.H{"error": err.Error()})
 			return
 		}
-		h.manager.TLSCertPath = certPath
-		h.manager.TLSKeyPath = keyPath
+		// Persist relative managed paths for consistency
+		h.manager.TLSCertPath = filepath.ToSlash(filepath.Join("certs", "sdsm.crt"))
+		h.manager.TLSKeyPath = filepath.ToSlash(filepath.Join("certs", "sdsm.key"))
 		h.manager.TLSEnabled = true
 		h.manager.Save()
 		if isAsync {
@@ -206,7 +293,14 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 	if ip := net.ParseIP("127.0.0.1"); ip != nil {
 		tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
 	}
+	if ip6 := net.ParseIP("::1"); ip6 != nil {
+		tmpl.IPAddresses = append(tmpl.IPAddresses, ip6)
+	}
 	tmpl.DNSNames = append(tmpl.DNSNames, "localhost")
+	// Best-effort: include local hostname if available (helps when accessing via machine name)
+	if hn, _ := os.Hostname(); strings.TrimSpace(hn) != "" {
+		tmpl.DNSNames = append(tmpl.DNSNames, hn)
+	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
 	if err != nil {
@@ -296,6 +390,93 @@ func (h *ManagerHandlers) UpdateLogGET(c *gin.Context) {
 
 	c.Header("Content-Type", "text/plain; charset=utf-8")
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+}
+
+// --- TLS PEM validation helpers (UI-side double check) ---
+func validatePEMCertificate(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return errors.New("invalid PEM certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if now.Before(cert.NotBefore) {
+		return errors.New("certificate not yet valid")
+	}
+	if now.After(cert.NotAfter) {
+		return errors.New("certificate expired")
+	}
+	return nil
+}
+
+func validatePEMKey(path string) (any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("invalid PEM key")
+	}
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		k, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return k, nil
+	case "EC PRIVATE KEY":
+		k, err := x509.ParseECPrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return k, nil
+	case "PRIVATE KEY":
+		k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return k, nil
+	default:
+		return nil, errors.New("unsupported private key type")
+	}
+}
+
+func keysMatch(certPath string, priv any) bool {
+	data, err := os.ReadFile(certPath)
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(data)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return false
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return false
+	}
+	pub := cert.PublicKey
+	switch pk := priv.(type) {
+	case *rsa.PrivateKey:
+		if rsaPub, ok := pub.(*rsa.PublicKey); ok {
+			return rsaPub.N.Cmp(pk.N) == 0
+		}
+	case *ecdsa.PrivateKey:
+		if ecPub, ok := pub.(*ecdsa.PublicKey); ok {
+			return ecPub.X.Cmp(pk.X) == 0 && ecPub.Y.Cmp(pk.Y) == 0
+		}
+	default:
+		// Unsupported; assume OK
+		return true
+	}
+	return false
 }
 
 func (h *ManagerHandlers) ManagerLogGET(c *gin.Context) {

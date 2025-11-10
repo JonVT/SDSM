@@ -462,6 +462,16 @@ func (s *Server) blacklistPath() string {
 	return filepath.Join(s.Paths.ServerGameDir(s.ID), "Blacklist.txt")
 }
 
+// adminListPath returns the canonical path to the server's AdminList.txt in the deployed game/bin directory.
+// Stationeers servers can optionally maintain an AdminList.txt containing Steam IDs with elevated privileges.
+// This mirrors Blacklist.txt behavior for ease of management in the codebase.
+func (s *Server) adminListPath() string {
+	if s.Paths == nil {
+		return ""
+	}
+	return filepath.Join(s.Paths.ServerGameDir(s.ID), "AdminList.txt")
+}
+
 // ReadBlacklistIDs reads a comma-separated list of Steam IDs from Blacklist.txt and returns a unique, trimmed list.
 // ReadBlacklistIDs reads the server's Blacklist.txt and returns unique Steam IDs.
 func (s *Server) ReadBlacklistIDs() []string {
@@ -492,6 +502,51 @@ func (s *Server) ReadBlacklistIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// ReadAdminListIDs returns a unique trimmed list of Steam IDs from AdminList.txt.
+// Missing file returns an empty slice. Supports commas/newlines as separators for flexibility.
+func (s *Server) ReadAdminListIDs() []string {
+	path := s.adminListPath()
+	if path == "" {
+		return []string{}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{}
+	}
+	raw := string(data)
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	raw = strings.ReplaceAll(raw, "\r", ",")
+	parts := strings.Split(raw, ",")
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, p := range parts {
+		id := strings.TrimSpace(p)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// IsSteamIDAdmin returns true if the provided Steam ID appears in AdminList.txt.
+func (s *Server) IsSteamIDAdmin(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" || s == nil {
+		return false
+	}
+	for _, adminID := range s.ReadAdminListIDs() {
+		if strings.EqualFold(adminID, id) {
+			return true
+		}
+	}
+	return false
 }
 
 // WriteBlacklistIDs writes the provided IDs back to Blacklist.txt as a single comma-separated line.

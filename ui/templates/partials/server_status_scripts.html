@@ -1956,6 +1956,10 @@
         const langBtn = document.getElementById('btn-language');
         const langMenu = document.getElementById('language-menu');
         const currLangLabel = document.getElementById('current-language');
+        const viewLogBtn = document.getElementById('btn-view-log');
+        const serverLogsCard = document.getElementById('server-logs-card');
+        const serverLogsToggle = document.getElementById('serverLogsToggle');
+        const serverLogsContent = document.getElementById('serverLogsContent');
             const renameBtn = document.getElementById('btn-rename-server');
         const versionRadios = document.querySelectorAll('input[name="beta"]');
         const paramsForm = document.getElementById('startup-params-form');
@@ -1977,17 +1981,61 @@
                     const welcomeTokenBtn = document.getElementById('welcome-token-help');
                     function buildBody(){
                         const wrap = document.createElement('div');
-                        wrap.innerHTML = '<p>You can include these tokens in chat messages and the Welcome Message. They will be replaced automatically before sending to the server.</p>'+
-                            '<ul class="pl-5">'
-                            + '<li><code>[ServerName]</code>: The server name</li>'
-                            + '<li><code>[WorldName]</code>: The world name</li>'
-                            + '<li><code>[WorldID]</code>: The world ID</li>'
-                            + '<li><code>[StartLocation]</code>: Start location</li>'
-                            + '<li><code>[StartCondition]</code>: Start condition</li>'
-                            + '<li><code>[Date]</code>: Current date (YYYY-MM-DD)</li>'
-                            + '<li><code>[Time]</code>: Current time (HH:MM:SS)</li>'
-                            + '<li><code>[LastPlayer]</code>: Name of the last player to connect</li>'
+                        wrap.innerHTML = '<p>You can include these tokens in chat messages and the Welcome Message. They will be replaced automatically before sending to the server. Click any token to copy it.</p>'+
+                            '<ul class="pl-5 token-list">'
+                            + '<li><code class="token-ref" data-token="[ServerName]" title="Click to copy">[ServerName]</code>: The server name</li>'
+                            + '<li><code class="token-ref" data-token="[WorldName]" title="Click to copy">[WorldName]</code>: The world name</li>'
+                            + '<li><code class="token-ref" data-token="[WorldID]" title="Click to copy">[WorldID]</code>: The world ID</li>'
+                            + '<li><code class="token-ref" data-token="[StartLocation]" title="Click to copy">[StartLocation]</code>: Start location</li>'
+                            + '<li><code class="token-ref" data-token="[StartCondition]" title="Click to copy">[StartCondition]</code>: Start condition</li>'
+                            + '<li><code class="token-ref" data-token="[Date]" title="Click to copy">[Date]</code>: Current date (YYYY-MM-DD)</li>'
+                            + '<li><code class="token-ref" data-token="[Time]" title="Click to copy">[Time]</code>: Current time (HH:MM:SS)</li>'
+                            + '<li><code class="token-ref" data-token="[LastPlayer]" title="Click to copy">[LastPlayer]</code>: Name of the last player to connect</li>'
                             + '</ul>';
+                        // Event delegation for copying tokens
+                        wrap.addEventListener('click', async (ev) => {
+                            const codeEl = ev.target.closest('code.token-ref');
+                            if (!codeEl) return;
+                            const token = codeEl.getAttribute('data-token') || (codeEl.textContent || '').trim();
+                            if (!token) return;
+                            let copied = false;
+                            try {
+                                if (navigator.clipboard && navigator.clipboard.writeText) {
+                                    await navigator.clipboard.writeText(token);
+                                    copied = true;
+                                }
+                            } catch(_) {}
+                            if (!copied) {
+                                try {
+                                    const ta = document.createElement('textarea');
+                                    ta.value = token;
+                                    ta.style.position = 'fixed';
+                                    ta.style.top = '-2000px';
+                                    document.body.appendChild(ta);
+                                    ta.focus(); ta.select();
+                                    document.execCommand && document.execCommand('copy');
+                                    ta.remove();
+                                    copied = true;
+                                } catch(_) {}
+                            }
+                            if (copied) {
+                                codeEl.classList.add('copied');
+                                const msg = token + ' copied';
+                                if (typeof window.showToast === 'function') {
+                                    window.showToast({ type: 'info', title: 'Token Copied', message: msg });
+                                } else {
+                                    // Fallback inline feedback
+                                    const fb = document.createElement('span');
+                                    fb.textContent = 'Copied';
+                                    fb.style.marginLeft = '8px';
+                                    fb.style.fontSize = '0.7rem';
+                                    fb.style.opacity = '0.85';
+                                    codeEl.parentElement.appendChild(fb);
+                                    setTimeout(()=>{ try { fb.remove(); } catch(_){} }, 1500);
+                                }
+                                setTimeout(()=>{ codeEl.classList.remove('copied'); }, 1200);
+                            }
+                        });
                         return wrap;
                     }
                     function openTokenHelp(e){
@@ -2813,6 +2861,48 @@
         startLogTail();
         startLogListRefresh();
 
+        // Enhanced View Log button behavior: expand logs card, select primary/output log, scroll into view
+        (function(){
+            if (!viewLogBtn) return;
+            viewLogBtn.addEventListener('click', function(e){
+                e.preventDefault();
+                try {
+                    // Expand logs card if collapsed
+                    if (serverLogsToggle && serverLogsToggle.getAttribute('aria-expanded') === 'false') {
+                        serverLogsToggle.click();
+                    }
+                    // Prefer a log file containing 'output' or 'server' in its name
+                    if (Array.isArray(logFiles) && logFiles.length) {
+                        let desired = logFiles.find(n => /output/i.test(n)) || logFiles.find(n => /server/i.test(n)) || logFiles[0];
+                        if (desired && desired !== selectedLog) {
+                            selectedLog = desired;
+                            logTailOffset = -1;
+                            logPausedByScroll = false;
+                            if (logViewer) logViewer.textContent = '';
+                            // Re-render tabs to reflect selection
+                            renderLogTabs(logFiles);
+                            fetchLogTail();
+                            startLogTail();
+                        } else if (desired) {
+                            // Already selected: ensure tailing resumed and scrolled
+                            logPausedByScroll = false;
+                            startLogTail();
+                            scrollViewerToBottom();
+                        }
+                    }
+                    // Scroll card into view smoothly
+                    if (serverLogsCard) {
+                        serverLogsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    // Focus the viewer for accessibility
+                    if (logViewer) {
+                        logViewer.setAttribute('tabindex','-1');
+                        logViewer.focus({ preventScroll: true });
+                    }
+                } catch(_) { /* non-fatal */ }
+            });
+        })();
+
         // Collapsible Server Logs toggle (mirrors Manager/User Management behavior)
         (function(){
             try {
@@ -2828,8 +2918,8 @@
                     content.classList.toggle('hidden', !expanded);
                     content.setAttribute('aria-hidden', expanded ? 'false' : 'true');
                     toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-                    if (label) label.textContent = expanded ? 'Hide' : 'More';
-                    if (chevron) chevron.innerHTML = expanded ? '<polyline points="6 9 12 15 18 9"></polyline>' : '<polyline points="6 15 12 9 18 15"></polyline>';
+                    if (label) label.textContent = expanded ? 'Less' : 'More';
+                    if (chevron) chevron.innerHTML = expanded ? '<polyline points="6 15 12 9 18 15"></polyline>' : '<polyline points="6 9 12 15 18 9"></polyline>';
                     try { sessionStorage.setItem(key, expanded ? '1' : '0'); } catch(_) {}
                 }
                 setState(!!initiallyExpanded);

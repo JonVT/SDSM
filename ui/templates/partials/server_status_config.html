@@ -1,6 +1,6 @@
 <div class="card card-config">
     <div class="card-header">
-        <h2 class="card-title">Server Configuration</h2>
+        <h2 class="card-title">Configuration</h2>
     </div>
     <form method="POST" id="startup-params-form">
         <input type="hidden" name="confirm_reset_saves" id="confirm-reset-saves-flag" value="0" />
@@ -53,14 +53,14 @@
                 <div></div>
             </div>
 
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="max_clients">Max Players:</label>
-                    <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-input-inline" placeholder="8" autocomplete="off">
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label" for="max_clients">Max Players</label>
+                    <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-control" placeholder="8" autocomplete="off">
                 </div>
-                <div>
-                    <label for="save_interval">Save Interval (sec):</label>
-                    <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-input-inline" placeholder="300" autocomplete="off">
+                <div class="form-group">
+                    <label class="form-label" for="save_interval">Save Interval (sec)</label>
+                    <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-control" placeholder="300" autocomplete="off">
                 </div>
             </div>
 
@@ -123,14 +123,14 @@
 
             
 
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="max_auto_saves">Max Auto Saves:</label>
-                    <input type="number" id="max_auto_saves" name="max_auto_saves" value="{{.server.MaxAutoSaves}}" class="form-input-inline" min="1" max="1000" placeholder="5" autocomplete="off">
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
+                    <input type="number" id="max_auto_saves" name="max_auto_saves" value="{{.server.MaxAutoSaves}}" class="form-control" min="1" max="1000" placeholder="5" autocomplete="off" title="Maximum number of autosaves to retain on disk (default 5)">
                 </div>
-                <div>
-                    <label for="max_quick_saves">Max Quick Saves:</label>
-                    <input type="number" id="max_quick_saves" name="max_quick_saves" value="{{.server.MaxQuickSaves}}" class="form-input-inline" min="1" max="1000" placeholder="5" autocomplete="off">
+                <div class="form-group">
+                    <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
+                    <input type="number" id="max_quick_saves" name="max_quick_saves" value="{{.server.MaxQuickSaves}}" class="form-control" min="1" max="1000" placeholder="5" autocomplete="off" title="Maximum number of quicksaves to retain on disk (default 5)">
                 </div>
             </div>
 

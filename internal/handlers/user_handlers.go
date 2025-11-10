@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
+	"sdsm/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,19 +16,44 @@ import (
 type UserHandlers struct {
 	users       *manager.UserStore
 	authService *middleware.AuthService
+	logger      *utils.Logger
 }
 
-func NewUserHandlers(store *manager.UserStore, auth *middleware.AuthService) *UserHandlers {
-	return &UserHandlers{users: store, authService: auth}
+// NewUserHandlers constructs handlers with optional logger (nil-safe).
+func NewUserHandlers(store *manager.UserStore, auth *middleware.AuthService, logger *utils.Logger) *UserHandlers {
+	return &UserHandlers{users: store, authService: auth, logger: logger}
 }
 
 func (h *UserHandlers) UsersGET(c *gin.Context) {
 	if c.GetString("role") != string(manager.RoleAdmin) {
+		if h.logger != nil {
+			uname := strings.TrimSpace(c.GetString("username"))
+			h.logger.Write(fmt.Sprintf("UsersGET: forbidden for user '%s' (role=%s)", uname, c.GetString("role")))
+		}
 		c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
 		return
 	}
+	// Best-effort refresh from disk in case users.json was edited externally
+	_ = h.users.Load()
 	// Snapshot of users
 	list := h.users.Users()
+	// Fallback: if store is empty but current authenticated user is 'admin', synthesize an admin record.
+	if len(list) == 0 {
+		uname := strings.TrimSpace(c.GetString("username"))
+		if strings.EqualFold(uname, "admin") && h.users.AdminCount() == 0 {
+			list = append(list, manager.User{Username: "admin", Role: manager.RoleAdmin, CreatedAt: time.Now()})
+			if h.logger != nil {
+				h.logger.Write("UsersGET: synthetic admin fallback applied (empty store)")
+			}
+		}
+	}
+	if h.logger != nil {
+		usernames := make([]string, 0, len(list))
+		for _, u := range list {
+			usernames = append(usernames, u.Username+":"+string(u.Role))
+		}
+		h.logger.Write(fmt.Sprintf("UsersGET: returning %d user(s): %s", len(list), strings.Join(usernames, ",")))
+	}
 	c.HTML(http.StatusOK, "users.html", gin.H{
 		"users":    list,
 		"username": c.GetString("username"),
@@ -155,9 +182,15 @@ func (h *UserHandlers) UsersPOST(c *gin.Context) {
 // APIUsersList returns users, optionally filtered by ?q=
 func (h *UserHandlers) APIUsersList(c *gin.Context) {
 	if c.GetString("role") != string(manager.RoleAdmin) {
+		if h.logger != nil {
+			uname := strings.TrimSpace(c.GetString("username"))
+			h.logger.Write(fmt.Sprintf("APIUsersList: forbidden for user '%s' (role=%s)", uname, c.GetString("role")))
+		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
 		return
 	}
+	// Best-effort refresh from disk to reflect any external changes
+	_ = h.users.Load()
 	q := strings.ToLower(strings.TrimSpace(c.Query("q")))
 	users := h.users.Users()
 	out := make([]gin.H, 0, len(users))
@@ -172,6 +205,37 @@ func (h *UserHandlers) APIUsersList(c *gin.Context) {
 			"role":       u.Role,
 			"created_at": u.CreatedAt,
 		})
+	}
+	// Fallback synthetic admin if store empty but authenticated user is 'admin'
+	if len(out) == 0 {
+		uname := strings.TrimSpace(c.GetString("username"))
+		if strings.EqualFold(uname, "admin") && h.users.AdminCount() == 0 {
+			out = append(out, gin.H{
+				"username":   "admin",
+				"role":       manager.RoleAdmin,
+				"created_at": time.Now(),
+			})
+			if h.logger != nil {
+				h.logger.Write("APIUsersList: synthetic admin fallback applied (empty store)")
+			}
+		}
+	}
+	if h.logger != nil {
+		usernames := make([]string, 0, len(out))
+		for _, obj := range out {
+			if name, ok := obj["username"].(string); ok {
+				if role, ok2 := obj["role"].(manager.Role); ok2 {
+					usernames = append(usernames, name+":"+string(role))
+				} else if roleStr, ok3 := obj["role"].(string); ok3 {
+					usernames = append(usernames, name+":"+roleStr)
+				}
+			}
+		}
+		if q != "" {
+			h.logger.Write(fmt.Sprintf("APIUsersList: query='%s' matched %d user(s): %s", q, len(out), strings.Join(usernames, ",")))
+		} else {
+			h.logger.Write(fmt.Sprintf("APIUsersList: returning %d user(s): %s", len(out), strings.Join(usernames, ",")))
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"users": out})
 }

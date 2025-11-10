@@ -136,9 +136,25 @@ var (
 					Name:            name,
 					ConnectDatetime: t,
 				}
+				// Mark admin immediately if SteamID appears in AdminList.txt so UI reflects status without waiting
+				// for an admin command to be executed.
+				if steamID != "" && s.IsSteamIDAdmin(steamID) {
+					client.IsAdmin = true
+				}
 				if s.recordClientSession(client) {
 					s.appendPlayerLog(client)
+				} else if client.IsAdmin {
+					// Backfill: if session merged and admin flag newly discovered, ensure existing session(s) updated.
+					for _, c := range s.Clients {
+						if c != nil && c.SteamID == steamID && !c.IsAdmin {
+							c.IsAdmin = true
+							// Mark log dirty so admin flag persisted; rewrite promptly.
+							s.markPlayersLogDirty()
+						}
+					}
+					s.flushPlayersLogIfDirty()
 				}
+				// If admin flag added to a pre-existing session via backfill, flush handled above.
 
 				// Player Saves automation: on player connect, if enabled and not excluded,
 				// issue a FILE saveas <ddmmyy_hhmmss_steamid> (the game appends .save in manualsave),

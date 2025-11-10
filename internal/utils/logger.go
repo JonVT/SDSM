@@ -79,7 +79,8 @@ func (l *Logger) Write(message string) {
 		l.writeFile.WriteString(logMessage)
 		l.writeFile.Sync()
 	} else {
-		fmt.Print(logMessage)
+		// No open file: write to default SDSM log instead of stdout
+		writeToDefaultLog(message)
 	}
 }
 

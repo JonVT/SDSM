@@ -93,6 +93,13 @@
                                        value="{{ index $form "name" }}"
                                        placeholder="Enter server name">
                                 <p class="help-text">The name that will appear in the server list</p>
+                                <div class="row items-center gap-2 mt-2">
+                                    <label class="checkbox-label mb-0">
+                                        <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
+                                        <span>Server Visible</span>
+                                    </label>
+                                    <p class="help-text mb-0">Visible in public server browser</p>
+                                </div>
                             </div>
 
                             <div class="form-group" id="basicWorldGroup">
@@ -163,14 +170,6 @@
                                     value="{{ index $form "password" }}"
                                     placeholder="Leave empty for no password">
                                 <p class="help-text">Optional password to join the server</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
-                                    <span>Server Visible</span>
-                                </label>
-                                <p class="help-text">Make server visible in server browser</p>
                             </div>
                         </div>
                     </div>
@@ -342,8 +341,14 @@
                     
                     
                     <div class="update-button-container">
-                        <a href="/dashboard" class="btn btn-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary btn-min-lg">Create Server</button>
+                        <a href="/dashboard" class="btn btn-secondary">
+                            {{ template "icon_dashboard" . }}
+                            <span class="ml-4">Cancel</span>
+                        </a>
+                        <button type="submit" class="btn btn-primary btn-min-lg">
+                            {{ template "icon_add" . }}
+                            <span class="ml-4">Create Server</span>
+                        </button>
                     </div>
                 </form>
             </div>
@@ -905,7 +910,10 @@
                             }
                         } catch(_) {}
                         if (!res.ok) return res.json().catch(() => ({})).then((d) => Promise.reject(d));
-                        return res.json().catch(() => ({}));
+                        // Some proxies or servers may return text/plain; attempt robust parse
+                        return res.clone().json().catch(() => res.text().then(t => {
+                            try { return JSON.parse(t); } catch { return {}; }
+                        }));
                     })
                     .then((data) => {
                         const id = data && (data.id || data.server_id || data.ID);
@@ -916,7 +924,14 @@
                             window.location.href = '/dashboard';
                         }
                     })
-                    .catch(() => {
+                    .catch((err) => {
+                        // If the server responded with a redirect (HTML), try to follow it
+                        try {
+                            if (err && err.redirect) {
+                                window.location.href = err.redirect;
+                                return;
+                            }
+                        } catch(_) {}
                         // keep on page; user can adjust and resubmit
                     })
                     .finally(() => {

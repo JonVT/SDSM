@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sdsm/internal/handlers"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
+	"sdsm/internal/utils"
 	"sdsm/internal/version"
 	"sdsm/ui"
 	"strconv"
@@ -20,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getlantern/systray"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 )
@@ -44,7 +47,8 @@ func logStuff(msg string) {
 	if app.manager != nil && app.manager.Log != nil {
 		app.manager.Log.Write(msg)
 	} else {
-		log.Println(msg)
+		// Fallback: write to default SDSM log instead of stdout
+		utils.NewLogger("").Write(msg)
 	}
 }
 
@@ -83,6 +87,15 @@ func main() {
 
 	mgr := manager.NewManager()
 
+	// On Windows with tray enabled, spawn a detached background instance so the
+	// launching console returns immediately. Use env guard to prevent infinite spawning.
+	if runtime.GOOS == "windows" && mgr != nil && mgr.TrayEnabled {
+		if spawnDetachedIfNeeded(mgr.TrayEnabled) {
+			// Parent exits; background child continues
+			return
+		}
+	}
+
 	// Initialize application
 	app = &App{
 		manager:     mgr,
@@ -92,10 +105,30 @@ func main() {
 		userStore:   manager.NewUserStore(mgr.Paths),
 	}
 
-	// Apply TLS settings from config
+	// If we are the detached/background process, hide the console window if present
+	if runtime.GOOS == "windows" && mgr != nil && mgr.TrayEnabled {
+		hideConsoleWindow()
+	}
+
+	// Apply TLS settings from config; resolve relative paths against the configured root
 	app.tlsEnabled = app.manager.TLSEnabled
 	app.tlsCertPath = app.manager.TLSCertPath
 	app.tlsKeyPath = app.manager.TLSKeyPath
+	resolveTLSPath := func(p string) string {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return p
+		}
+		if filepath.IsAbs(p) {
+			return p
+		}
+		if app.manager != nil && app.manager.Paths != nil {
+			return filepath.Join(app.manager.Paths.RootPath, p)
+		}
+		return p
+	}
+	app.tlsCertPath = resolveTLSPath(app.tlsCertPath)
+	app.tlsKeyPath = resolveTLSPath(app.tlsKeyPath)
 
 	// Ensure config directories exist and load users
 	if app.manager.Paths != nil {
@@ -149,8 +182,11 @@ func main() {
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
+	// Route standard library HTTP server errors (including TLS handshake errors)
+	// into sdsm.log instead of stderr/stdout.
+	srv.ErrorLog = log.New(managerLogWriter{mgr: app.manager}, "", 0)
 
-	// Start server in a goroutine
+	// Prepare to start server; actual start may differ if tray must run on main thread (Windows requirement for systray)
 	certMissing := strings.TrimSpace(app.tlsCertPath) == ""
 	keyMissing := strings.TrimSpace(app.tlsKeyPath) == ""
 	useTLS := app.tlsEnabled && !certMissing && !keyMissing
@@ -162,42 +198,54 @@ func main() {
 			app.manager.Save()
 		}
 	}
-	if useTLS {
-		go func() {
+
+	startServer := func() {
+		if useTLS {
 			logStuff(fmt.Sprintf("Starting HTTPS server on port %d", app.manager.Port))
 			if err := srv.ListenAndServeTLS(app.tlsCertPath, app.tlsKeyPath); err != nil && err != http.ErrServerClosed {
 				logStuff(fmt.Sprintf("HTTPS server failed to start: %v", err))
 				os.Exit(1)
 			}
-		}()
-	} else {
-		go func() {
-			fmt.Printf("Starting server at http://localhost:%d\n", app.manager.Port)
+		} else {
+			logStuff(fmt.Sprintf("Starting HTTP server on port %d", app.manager.Port))
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				logStuff(fmt.Sprintf("Server failed to start: %v", err))
 				os.Exit(1)
 			}
-		}()
+		}
 	}
 
-	// Windows tray integration (configurable)
 	trayDone := make(chan struct{})
-	if app.manager.TrayEnabled {
-		go startTray(app, srv, trayDone)
-	} else {
-		close(trayDone)
-	}
-
-	// Wait for either system signal or tray exit to gracefully shutdown
+	// Set up OS signal handling before potentially blocking tray
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// Block until an OS signal (Ctrl+C / termination) or tray exit
-	select {
-	case <-quit:
-		logStuff("Shutdown signal received")
-	case <-trayDone:
+	// On Windows, run systray on main thread and forward OS signals to systray.Quit
+	if app.manager.TrayEnabled && runtime.GOOS == "windows" {
+		go startServer() // server in background
+		go func() {
+			<-quit
+			logStuff("Shutdown signal received")
+			// Request systray to exit, which triggers onExit and closes trayDone
+			systray.Quit()
+		}()
+		// Run tray synchronously (blocks until tray exit)
+		startTray(app, srv, trayDone)
 		logStuff("Tray exit requested")
+	} else {
+		go startServer()
+		if app.manager.TrayEnabled {
+			go startTray(app, srv, trayDone)
+		} else {
+			close(trayDone)
+		}
+		// Block until an OS signal (Ctrl+C / termination) or tray exit
+		select {
+		case <-quit:
+			logStuff("Shutdown signal received")
+		case <-trayDone:
+			logStuff("Tray exit requested")
+		}
 	}
 
 	// Gracefully stop HTTP server (allow in-flight requests up to 5s)
@@ -348,7 +396,7 @@ func setupRouter() *gin.Engine {
 
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
-	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService)
+	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log)
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
 
@@ -359,6 +407,31 @@ func setupRouter() *gin.Engine {
 		auth.POST("/login", authHandlers.LoginPOST)
 		auth.GET("/logout", authHandlers.Logout)
 	}
+
+	// Root route: redirect to appropriate landing page
+	r.GET("/", func(c *gin.Context) {
+		// If first run (no users), send to admin setup
+		if app.userStore.IsEmpty() {
+			c.Redirect(http.StatusFound, "/admin/setup")
+			return
+		}
+		// Try auth cookie; if valid, route by role
+		if token, _ := c.Cookie(middleware.CookieName); token != "" {
+			if claims, err := app.authService.ValidateToken(token); err == nil {
+				// Default for authenticated users
+				target := "/dashboard"
+				if claims != nil && strings.TrimSpace(claims.Username) != "" {
+					if u, ok := app.userStore.Get(claims.Username); ok && u.Role == manager.RoleAdmin {
+						target = "/manager"
+					}
+				}
+				c.Redirect(http.StatusFound, target)
+				return
+			}
+		}
+		// Not authenticated -> login
+		c.Redirect(http.StatusFound, "/login")
+	})
 
 	// First-run admin setup routes (public until initialized)
 	r.GET("/admin/setup", authHandlers.AdminSetupGET)
@@ -371,13 +444,23 @@ func setupRouter() *gin.Engine {
 	api := r.Group("/api")
 	api.Use(app.authService.RequireAPIAuth())
 	api.Use(func(c *gin.Context) {
-		// Attach role for API requests
-		username, _ := c.Get("username")
+		// Attach role for API requests, with the same safety net as UI routes
+		usernameVal, _ := c.Get("username")
 		role := "user"
-		if uname, ok := username.(string); ok {
+		if uname, ok := usernameVal.(string); ok {
 			if u, ok := app.userStore.Get(uname); ok {
 				if string(u.Role) != "" {
 					role = string(u.Role)
+				}
+			}
+			// Safety net: if there are zero admin users but a user named "admin" exists,
+			// promote them to admin to prevent lockout (and persist the change).
+			if app.userStore.AdminCount() == 0 && strings.EqualFold(uname, "admin") {
+				if err := app.userStore.SetRole("admin", manager.RoleAdmin); err == nil {
+					role = "admin"
+					if app.manager != nil && app.manager.Log != nil {
+						app.manager.Log.Write("No admin found; auto-promoted 'admin' to admin role (API context).")
+					}
 				}
 			}
 		}
@@ -551,6 +634,49 @@ func setupRouter() *gin.Engine {
 		c.Next()
 	})
 	{
+		// Setup pages (admin only)
+		protected.GET("/setup", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			managerHandlers.SetupGET(c)
+		})
+		protected.POST("/setup/skip", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			managerHandlers.SetupSkipPOST(c)
+		})
+		protected.POST("/setup/install", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				return
+			}
+			managerHandlers.SetupInstallPOST(c)
+		})
+		protected.GET("/setup/status", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.SetupStatusGET(c)
+		})
+		protected.GET("/setup/progress", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.SetupProgressGET(c)
+		})
+		protected.POST("/setup/update", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.SetupUpdatePOST(c)
+		})
 		protected.GET("/dashboard", managerHandlers.Dashboard)
 		protected.GET("/frame", managerHandlers.Frame)
 		// Help pages

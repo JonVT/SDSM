@@ -225,7 +225,9 @@ func RestartProcess(executable string, args []string) error {
 		cmd.Stderr = os.Stderr
 		cmd.Stdin = os.Stdin
 		commandLine := strings.Join(append([]string{executable}, args...), " ")
-		fmt.Printf("Executing command: %s\n", commandLine)
+		// Log restart execution to sdsm.log instead of stdout
+		logger := NewLogger("")
+		logger.Write("Executing command: " + commandLine)
 		return cmd.Start()
 	}
 
