@@ -215,37 +215,29 @@ func main() {
 		}
 	}
 
-	trayDone := make(chan struct{})
-	// Set up OS signal handling before potentially blocking tray
+	// Windows tray integration (configurable)
+	// For non-Windows platforms or when tray disabled, use nil channel so select ignores tray exit.
+	var trayDone chan struct{}
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// On Windows, run systray on main thread and forward OS signals to systray.Quit
 	if app.manager.TrayEnabled && runtime.GOOS == "windows" {
-		go startServer() // server in background
-		go func() {
+		trayDone = make(chan struct{})
+		go startServer() // run server in background
+		go func() { // forward OS signals to tray exit
 			<-quit
 			logStuff("Shutdown signal received")
-			// Request systray to exit, which triggers onExit and closes trayDone
 			systray.Quit()
 		}()
-		// Run tray synchronously (blocks until tray exit)
+		// run tray on main thread (blocks until tray exit)
 		startTray(app, srv, trayDone)
 		logStuff("Tray exit requested")
 	} else {
+		trayDone = nil
 		go startServer()
-		if app.manager.TrayEnabled {
-			go startTray(app, srv, trayDone)
-		} else {
-			close(trayDone)
-		}
-		// Block until an OS signal (Ctrl+C / termination) or tray exit
-		select {
-		case <-quit:
-			logStuff("Shutdown signal received")
-		case <-trayDone:
-			logStuff("Tray exit requested")
-		}
+		// Block on OS signal only (trayDone nil ignored)
+		<-quit
+		logStuff("Shutdown signal received")
 	}
 
 	// Gracefully stop HTTP server (allow in-flight requests up to 5s)
