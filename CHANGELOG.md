@@ -22,6 +22,29 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 - _None yet_
 
+## [v0.6.0] - 2025-11-09
+
+- Added:
+  - Readiness probe at `/readyz` for orchestration and startup gating.
+  - Root path redirect logic: `/` now routes users to Login, Dashboard, or Manager based on auth and role.
+  - Centralized role attachment and safety net via `EnsureRoleContext` middleware (auto-promotes user "admin" if no admins exist to prevent lockout), used for both API and UI routes.
+  - CI/Security hardening:
+    - Build/Test/Vet/Govulncheck workflow
+    - CodeQL analysis
+    - Scheduled weekly vulnerability scan
+- Changed:
+  - Enforced API-only mutations: introduced POST guard to block non-API POSTs except an allowlist (`/login`, `/admin/setup`, `/setup/skip`, `/setup/install`, `/setup/update`, `/shutdown`, `/update`, `/api/*`).
+  - Converted legacy HTML form submissions to JS `fetch` calls against `/api` endpoints throughout the UI.
+    - Neutralized forms in Users, New Server, Player actions, Chat, Startup Parameters, and Profile pages (action removed or set to `#`, `data-api-only` flags added).
+  - Consolidated Gin access/error logs to dedicated GIN.log file alongside existing operational logs.
+  - Cleaned up duplicated CORS header assignment; now a single `Access-Control-Allow-Methods` includes PATCH.
+- Removed:
+  - Deprecated HTML POST handlers and routes; UI now exclusively hits `/api` for state changes.
+  - Stale "Legacy" references and comments in client-side scripts to reduce confusion.
+- Fixed:
+  - Root 404 by adding the explicit redirect logic mentioned above.
+  - Minor stability and clarity improvements across middleware and templates.
+
 ## [v0.5.0] - 2025-11-09
 
 - Added:
@@ -66,6 +89,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - CI:
   - New lint workflow (gofmt check + go vet).
 
-[Unreleased]: https://github.com/JonVT/SDSM/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/JonVT/SDSM/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/JonVT/SDSM/releases/tag/v0.6.0
 [v0.5.0]: https://github.com/JonVT/SDSM/releases/tag/v0.5.0
 [v0.4.0]: https://github.com/JonVT/SDSM/releases/tag/v0.4.0
