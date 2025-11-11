@@ -133,6 +133,14 @@ type Manager struct {
 	TLSEnabled  bool   `json:"tls_enabled"`
 	TLSCertPath string `json:"tls_cert"`
 	TLSKeyPath  string `json:"tls_key"`
+	// AutoPortForwardManager enables automatic router port forwarding (TCP) for the
+	// manager's own HTTP(S) port via UPnP/NAT-PMP when available. Default is false.
+	AutoPortForwardManager bool `json:"auto_port_forward_manager"`
+	// Transient NAT/port forward status for manager port (not persisted)
+	ManagerPortForwardActive       bool   `json:"-"`
+	ManagerPortForwardExternalPort int    `json:"-"`
+	ManagerPortForwardLastError    string `json:"-"`
+	pfStop                         chan struct{} `json:"-"`
 }
 
 type UpdateProgress struct {
@@ -209,6 +217,7 @@ func NewManager() *Manager {
 		TLSEnabled:     false,
 		TLSCertPath:    "",
 		TLSKeyPath:     "",
+		AutoPortForwardManager: false,
 	}
 
 	for _, deployType := range progressOrder {
@@ -926,6 +935,7 @@ func (m *Manager) load() (bool, error) {
 	m.TLSCertPath = strings.TrimSpace(temp.TLSCertPath)
 	m.TLSKeyPath = strings.TrimSpace(temp.TLSKeyPath)
 	m.TrayEnabled = temp.TrayEnabled
+	m.AutoPortForwardManager = temp.AutoPortForwardManager
 	// Default false when missing (zero value already false). Propagate to servers.
 	for _, srv := range m.Servers {
 		if srv != nil {
@@ -942,6 +952,95 @@ func (m *Manager) load() (bool, error) {
 	m.Active = true
 
 	return wasActive, nil
+}
+
+// --- Manager Port Forwarding (TCP) ---
+// managePortForwarding creates and periodically refreshes a TCP port mapping for the
+// manager's HTTP(S) port while the process is running and the feature is enabled.
+// It exits when pfStop is closed or the feature is disabled.
+func (m *Manager) managePortForwarding() {
+	if m == nil || m.Port <= 0 {
+		return
+	}
+	// Initial attempt
+	m.refreshManagerPortMapping()
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			// Periodic refresh
+			if !m.AutoPortForwardManager {
+				return
+			}
+			m.refreshManagerPortMapping()
+		case <-m.pfStop:
+			return
+		default:
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+// refreshManagerPortMapping attempts to (re)create the TCP mapping and updates transient status fields.
+func (m *Manager) refreshManagerPortMapping() {
+	ctx := context.Background()
+	externalPort, err := utils.AddOrRefreshMapping(ctx, "tcp", m.Port, "SDSM Manager", 10*time.Minute)
+	if err != nil {
+		if m.Log != nil {
+			m.Log.Write("Manager port forward attempt failed: " + err.Error())
+		}
+		m.ManagerPortForwardActive = false
+		m.ManagerPortForwardLastError = err.Error()
+		return
+	}
+	m.ManagerPortForwardActive = true
+	m.ManagerPortForwardExternalPort = externalPort
+	m.ManagerPortForwardLastError = ""
+	if m.Log != nil {
+		m.Log.Write(fmt.Sprintf("Manager port forward active: internal TCP %d -> external TCP %d", m.Port, externalPort))
+	}
+}
+
+// deleteManagerPortMapping removes the TCP mapping (best-effort); errors are logged but ignored.
+func (m *Manager) deleteManagerPortMapping() {
+	ctx := context.Background()
+	if err := utils.DeleteMapping(ctx, "tcp", m.Port); err != nil {
+		if m.Log != nil {
+			m.Log.Write("Manager port forward removal failed: " + err.Error())
+		}
+		return
+	}
+	if m.Log != nil {
+		m.Log.Write("Manager port forward mapping removed")
+	}
+	m.ManagerPortForwardActive = false
+}
+
+// StartManagerPortForwarding begins the background TCP mapping refresh loop when enabled.
+func (m *Manager) StartManagerPortForwarding() {
+	if m == nil || !m.AutoPortForwardManager || m.Port <= 0 {
+		return
+	}
+	if m.pfStop != nil {
+		// Already running
+		return
+	}
+	m.pfStop = make(chan struct{})
+	go m.managePortForwarding()
+}
+
+// StopManagerPortForwarding stops the background loop (if running) and deletes the mapping.
+func (m *Manager) StopManagerPortForwarding() {
+	if m == nil {
+		return
+	}
+	if m.pfStop != nil {
+		close(m.pfStop)
+		m.pfStop = nil
+	}
+	// Best-effort cleanup
+	m.deleteManagerPortMapping()
 }
 
 func (m *Manager) Save() {

@@ -461,6 +461,7 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		"player_saves":             true,
 		"auto_pause":               true,
 		"delete_skeleton_on_decay": false,
+		// Steam P2P removed; always disabled
 		"use_steam_p2p":            false,
 		"server_visible":           true,
 	}
@@ -670,6 +671,7 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"tls_enabled":         h.manager.TLSEnabled,
 		"tls_cert":            h.manager.TLSCertPath,
 		"tls_key":             h.manager.TLSKeyPath,
+		"auto_port_forward_manager": h.manager.AutoPortForwardManager,
 		"game_data_warnings":  warnings,
 	}
 

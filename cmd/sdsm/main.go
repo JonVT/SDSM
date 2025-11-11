@@ -223,6 +223,8 @@ func main() {
 	if app.manager.TrayEnabled && runtime.GOOS == "windows" {
 		trayDone = make(chan struct{})
 		go startServer() // run server in background
+		// Start manager TCP port forwarding if enabled
+		app.manager.StartManagerPortForwarding()
 		go func() { // forward OS signals to tray exit
 			<-quit
 			logStuff("Shutdown signal received")
@@ -234,6 +236,8 @@ func main() {
 	} else {
 		trayDone = nil
 		go startServer()
+		// Start manager TCP port forwarding if enabled
+		app.manager.StartManagerPortForwarding()
 		// Block on OS signal only (trayDone nil ignored)
 		<-quit
 		logStuff("Shutdown signal received")
@@ -245,6 +249,11 @@ func main() {
 		logStuff(fmt.Sprintf("HTTP server shutdown error: %v", err))
 	}
 	cancel()
+
+	// Stop manager TCP port forwarding and remove mapping
+	if app != nil && app.manager != nil {
+		app.manager.StopManagerPortForwarding()
+	}
 
 	// Exit manager, stopping servers unless detached mode keeps them running
 	if app.manager != nil {
@@ -261,20 +270,8 @@ func setupRouter() *gin.Engine {
 	// Add recovery middleware
 	r.Use(gin.Recovery())
 
-	// Add custom logging middleware
-	r.Use(gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
-		return fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\"\n",
-			param.ClientIP,
-			param.TimeStamp.Format(time.RFC1123),
-			param.Method,
-			param.Path,
-			param.Request.Proto,
-			param.StatusCode,
-			param.Latency,
-			param.Request.UserAgent(),
-			param.ErrorMessage,
-		)
-	}))
+	// Add filtered logging middleware to reduce noise in GIN.log
+	r.Use(middleware.RequestLogger())
 
 	// Security middleware
 	r.Use(middleware.SecurityHeaders())
@@ -476,6 +473,10 @@ func setupRouter() *gin.Engine {
 			managerHandlers.APIServersAnalyzeSave(c)
 		})
 		api.GET("/manager/status", managerHandlers.APIManagerStatus)
+		// Aggregated port forwarding metrics (admin)
+		api.GET("/metrics/port-forward", managerHandlers.APIPortForwardMetrics)
+		// Manager networking diagnostics
+		api.GET("/manager/test-port", managerHandlers.APIManagerTestPort)
 		api.GET("/servers/:server_id/status", managerHandlers.APIServerStatus)
 		api.GET("/servers/:server_id/progress", managerHandlers.ServerProgressGET)
 		api.GET("/servers/:server_id/saves", managerHandlers.APIServerSaves)

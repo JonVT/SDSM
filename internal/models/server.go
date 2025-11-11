@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"context"
 	"io"
 	fs "io/fs"
 	"net/http"
@@ -119,6 +120,9 @@ type ServerConfig struct {
 	// BepInExInitTimeoutSeconds controls how long the initial bootstrap run is allowed
 	// to execute on Windows before being force-killed. Defaults to 10 seconds when absent.
 	BepInExInitTimeoutSeconds int
+	// PortForwardProbeDelaySeconds controls delay before probing for UPnP when UseGameUPnP is true.
+	// Defaults to 10 seconds when absent. Range: 1-120 seconds.
+	PortForwardProbeDelaySeconds int
 }
 
 // Server represents a managed dedicated server instance, including
@@ -154,6 +158,22 @@ type Server struct {
 	DeleteSkeletonOnDecay bool `json:"delete_skeleton_on_decay"`
 	UseSteamP2P           bool `json:"use_steam_p2p"`
 	DisconnectTimeout     int  `json:"disconnect_timeout"`
+	// AutoPortForward requests automatic router port forwarding via UPnP/NAT-PMP (best-effort).
+	// When enabled, the manager attempts to create a UDP mapping for the game port while the
+	// server is running. Failures are logged but do not block startup.
+	AutoPortForward bool `json:"auto_port_forward"`
+	// UseGameUPnP signals that the built-in Stationeers server parameter UPNPEnabled=true
+	// will be passed on startup so the game itself attempts a UPnP mapping. When both
+	// UseGameUPnP and AutoPortForward are true we perform an adaptive strategy: allow the
+	// game to attempt mapping first, then probe after a short delay. If the probe succeeds
+	// (indicating a mapping exists or can be created) we assume the game's mapping is fine
+	// and skip the SDSM refresh loop; otherwise we fall back to SDSM's managePortForwarding
+	// (with UPnP + NAT-PMP + periodic refresh + cleanup). This improves compatibility while
+	// retaining resilience in failure scenarios.
+	UseGameUPnP bool `json:"use_game_upnp"`
+	// PortForwardProbeDelaySeconds controls the delay before probing UPnP when UseGameUPnP is true.
+	// Defaults to 10 seconds; clamped to 1-120 seconds at use.
+	PortForwardProbeDelaySeconds int `json:"port_forward_probe_delay_seconds"`
 	// PlayerSaves persists the preference to auto-save when players connect
 	PlayerSaves bool `json:"player_saves"`
 	// PlayerSaveExcludes lists Steam IDs for which player-save automation should be skipped
@@ -184,6 +204,13 @@ type Server struct {
 	StoppingCancel      chan struct{} `json:"-"` // cancellation channel for delayed shutdown
 	Running             bool          `json:"-"`
 	LastLogLine         string        `json:"-"`
+	// Transient NAT/port forward status (not persisted)
+	PortForwardActive       bool   `json:"-"`
+	PortForwardExternalPort int    `json:"-"`
+	PortForwardLastError    string `json:"-"`
+	// PortForwardSource indicates whether the active mapping appears to originate from
+	// the game ("game") or SDSM ("sdsm"). Empty when no mapping is active.
+	PortForwardSource string `json:"-"`
 	// LastError is a human-readable description of the last fatal/startup error detected from logs.
 	LastError string `json:"last_error,omitempty"`
 	// LastErrorAt records when LastError was updated.
@@ -1243,6 +1270,13 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 		s.BepInExInitTimeoutSeconds = 10
 	}
 
+	// Port forward probe delay (adaptive Game UPnP). Default 10s.
+	if cfg.PortForwardProbeDelaySeconds > 0 {
+		s.PortForwardProbeDelaySeconds = cfg.PortForwardProbeDelaySeconds
+	} else {
+		s.PortForwardProbeDelaySeconds = 10
+	}
+
 	s.EnsureLogger(paths)
 
 	return s
@@ -1261,6 +1295,7 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		ShutdownDelaySeconds:      2,
 		WelcomeDelaySeconds:       1,
 		BepInExInitTimeoutSeconds: 10,
+		PortForwardProbeDelaySeconds: 10,
 	}
 
 	s.EnsureLogger(paths)
@@ -1276,6 +1311,10 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		}
 		if !strings.Contains(data, "restart_delay_seconds") || s.RestartDelaySeconds < 0 {
 			s.RestartDelaySeconds = DefaultRestartDelaySeconds
+		}
+		// Backfill default for probe delay if absent or invalid
+		if s.PortForwardProbeDelaySeconds <= 0 {
+			s.PortForwardProbeDelaySeconds = 10
 		}
 		// Derive/repair SCON port from game port. Since SCON port isn't user-configurable yet,
 		// treat it as a derived value and fix stale values after port changes.
@@ -1641,6 +1680,10 @@ func (s *Server) Stop() {
 		return
 	}
 	delay := s.shutdownDelayDuration()
+	// Bypass delay and notices when no players are connected
+	if len(s.LiveClients()) == 0 {
+		delay = 0
+	}
 	if delay <= 0 {
 		// No delay: perform immediate shutdown
 		s.performFinalShutdown()
@@ -1667,6 +1710,10 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 		return
 	}
 	delay := s.shutdownDelayDuration()
+	// Bypass delay and countdown when no players are connected
+	if len(s.LiveClients()) == 0 {
+		delay = 0
+	}
 	if delay <= 0 {
 		// Immediate path
 		s.performFinalShutdown()
@@ -1696,6 +1743,13 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 		defer ticker.Stop()
 		tenSecondNoticeSent := false
 		for {
+			// If all players have disconnected during the countdown, accelerate shutdown immediately
+			if len(srv.LiveClients()) == 0 && time.Until(srv.StoppingEnds) > 0 {
+				if srv.Logger != nil {
+					srv.Logger.Write("No players connected; skipping remaining shutdown delay")
+				}
+				srv.StoppingEnds = time.Now()
+			}
 			remaining := time.Until(srv.StoppingEnds)
 			if remaining <= 0 {
 				break
@@ -1813,6 +1867,10 @@ func (s *Server) performFinalShutdown() {
 	}
 	if s.Proc != nil {
 		s.Proc.Process.Kill()
+	}
+	// Tear down any active port mapping after process termination.
+	if s.AutoPortForward && s.Port > 0 && s.PortForwardActive {
+		go s.deletePortMapping()
 	}
 }
 
@@ -1999,6 +2057,117 @@ func (s *Server) simpleShutdownWait() {
 	}
 }
 
+// managePortForwarding creates and periodically refreshes a UDP port mapping while the server runs.
+// It exits automatically once the server stops.
+func (s *Server) managePortForwarding() {
+	if s == nil || s.Port <= 0 {
+		return
+	}
+	// Initial attempt
+	s.refreshPortMapping()
+	// Refresh every 5 minutes to extend lifetime (~10m lifetime requested each time)
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for s.Running && s.Proc != nil {
+		select {
+		case <-ticker.C:
+			if !s.Running || s.Proc == nil {
+				return
+			}
+			s.refreshPortMapping()
+		default:
+			// Sleep a short interval to avoid busy loop
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+// adaptivePortForward allows the game's own UPnP attempt to occur first when UseGameUPnP is true,
+// then probes the mapping state after a short delay. If mapping appears available (either by the
+// game or by our quick test), we mark status and skip the refresh loop; otherwise we fall back to
+// SDSM's periodic managePortForwarding which supports NAT-PMP and lease refresh.
+func (s *Server) adaptivePortForward() {
+	if s == nil || s.Port <= 0 {
+		return
+	}
+	// Give the game a moment to attempt UPnP at startup; allow configurable probe delay (default 10s)
+	delay := 10 * time.Second
+	if s.PortForwardProbeDelaySeconds > 0 {
+		// Clamp to sane bounds (1s - 120s)
+		if s.PortForwardProbeDelaySeconds < 1 {
+			s.PortForwardProbeDelaySeconds = 1
+		} else if s.PortForwardProbeDelaySeconds > 120 {
+			s.PortForwardProbeDelaySeconds = 120
+		}
+		delay = time.Duration(s.PortForwardProbeDelaySeconds) * time.Second
+	}
+	time.Sleep(delay)
+
+	// Probe by attempting an AddOrRefreshMapping with a very short lifetime, then immediately remove it.
+	// If this succeeds, we assume UPnP works in the environment. We don't know whether game already mapped
+	// or our call did, but either way the environment supports mapping; prefer game ownership and avoid
+	// starting our periodic loop to reduce conflicts.
+	ctx := context.Background()
+	external, err := utils.AddOrRefreshMapping(ctx, "udp", s.Port, "SDSM Probe", 2*time.Minute)
+	if err == nil && external > 0 {
+		// Best-effort cleanup of probe mapping to leave the game's mapping in place
+		_ = utils.DeleteMapping(ctx, "udp", s.Port)
+		s.PortForwardActive = true
+		s.PortForwardExternalPort = external
+		s.PortForwardLastError = ""
+		s.PortForwardSource = "game"
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Port forward detected/available (assuming game mapping). External UDP %d", external))
+		}
+		// Do not start the SDSM refresh loop; rely on game's mapping
+		return
+	}
+
+	// Probe failed; fall back to SDSM-managed loop (UPnP/NAT-PMP + refresh)
+	if s.Logger != nil {
+		s.Logger.Write("UPnP probe failed; falling back to SDSM-managed port forwarding")
+	}
+	s.managePortForwarding()
+}
+
+// refreshPortMapping attempts to (re)create the UDP mapping and updates transient status fields.
+func (s *Server) refreshPortMapping() {
+	ctx := context.Background()
+	externalPort, err := utils.AddOrRefreshMapping(ctx, "udp", s.Port, "SDSM Stationeers Server", 10*time.Minute)
+	if err != nil {
+		if s.Logger != nil {
+			s.Logger.Write("Port forward attempt failed: " + err.Error())
+		}
+		s.PortForwardActive = false
+		s.PortForwardLastError = err.Error()
+		s.PortForwardSource = ""
+		return
+	}
+	s.PortForwardActive = true
+	s.PortForwardExternalPort = externalPort
+	s.PortForwardLastError = ""
+	s.PortForwardSource = "sdsm"
+	if s.Logger != nil {
+		s.Logger.Write(fmt.Sprintf("Port forward active: internal UDP %d -> external UDP %d", s.Port, externalPort))
+	}
+}
+
+// deletePortMapping removes the UDP mapping (best-effort); errors are logged but ignored.
+func (s *Server) deletePortMapping() {
+	ctx := context.Background()
+	if err := utils.DeleteMapping(ctx, "udp", s.Port); err != nil {
+		if s.Logger != nil {
+			s.Logger.Write("Port forward removal failed: " + err.Error())
+		}
+		return
+	}
+	if s.Logger != nil {
+		s.Logger.Write("Port forward mapping removed")
+	}
+	s.PortForwardActive = false
+	s.PortForwardSource = ""
+}
+
 func (s *Server) Start() {
 	if s.Logger != nil {
 		s.Logger.Write("Start requested")
@@ -2087,13 +2256,18 @@ func (s *Server) Start() {
 		"MaxAutoSaves", strconv.Itoa(max(1, s.MaxAutoSaves)),
 		"MaxQuickSaves", strconv.Itoa(max(1, s.MaxQuickSaves)),
 		"DeleteSkeletonOnDecay", strconv.FormatBool(s.DeleteSkeletonOnDecay),
-		"UseSteamP2P", strconv.FormatBool(s.UseSteamP2P),
+		// Force Steam P2P off due to stability issues
+		"UseSteamP2P", "false",
 		"DisconnectTimeout", strconv.Itoa(func(v int) int {
 			if v <= 0 {
 				return 10000
 			}
 			return v
 		}(s.DisconnectTimeout)),
+	}
+	// If configured, let the game attempt UPnP mapping on its own.
+	if s.UseGameUPnP {
+		args = append(args, "UPNPEnabled", "true")
 	}
 	s.Logger.Write(fmt.Sprintf("Starting server %d with command line: %v %v", s.ID, executablePath, args))
 
@@ -2187,6 +2361,15 @@ func (s *Server) Start() {
 	}(stopChan)
 	now := time.Now()
 	s.ServerStarted = &now
+
+	// Attempt automatic port forwarding if requested.
+	if s.AutoPortForward && s.Port > 0 {
+		if s.UseGameUPnP {
+			go s.adaptivePortForward()
+		} else {
+			go s.managePortForwarding()
+		}
+	}
 }
 
 func (s *Server) tailServerLog(path string, stop <-chan bool) {

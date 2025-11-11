@@ -15,201 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <style>
-        /* Confirm modal base styles for manager page (align center overlay) */
-        .confirm-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);z-index:1000}
-        .confirm-modal.active{display:flex}
-        .confirm-modal .modal-card{max-width:520px;width:92%;background:var(--panel-gradient);color:var(--text-primary);border:1px solid var(--panel-border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
-        .confirm-modal .modal-header{padding:16px 20px;border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:10px}
-        .confirm-modal .modal-title{font-size:16px;font-weight:600;margin:0}
-        .confirm-modal .modal-body{padding:16px 20px;line-height:1.5}
-        .confirm-modal .modal-actions{padding:16px 20px;border-top:1px solid var(--panel-border);display:flex;gap:10px;justify-content:flex-end}
-        
-        /* Connection banner uses shared styles from ui-theme.css */
-        
-        
-        /* Use shared .button-group styles from ui-theme.css */
-        
-        #updating {
-            max-height: 400px;
-            overflow-y: auto;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-md);
-            padding: var(--space-4);
-            font-family: monospace;
-            font-size: var(--text-sm);
-        }
-        
-        #updating div {
-            margin-bottom: var(--space-1);
-            color: var(--text-primary);
-        }
-        
-        /* Theme toggle uses shared styles from ui-theme.css */
-        
-
-        /* Software card: keep long messages and progress text from pushing layout */
-        .update-message {
-            display: none;
-            /* Inline with Update All button now; remove bottom margin */
-            margin: 0;
-            padding: var(--space-2) var(--space-3);
-            border: 1px solid var(--panel-border);
-            border-radius: var(--radius-md);
-            background: var(--surface-subtle);
-            color: var(--text-secondary);
-            overflow-wrap: anywhere;
-            word-break: break-word;
-        }
-        .update-message.active { display: block; }
-        .update-message.error {
-            border-color: rgba(239, 68, 68, 0.35);
-            background: rgba(127, 29, 29, 0.12);
-            color: var(--danger-500);
-        }
-
-        .table-container { width: 100%; overflow-x: visible; }
-        .table-container table { width: 100%; table-layout: auto; border-collapse: collapse; }
-        .table-container th, .table-container td { vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
-        /* Add vertical breathing room between Software Versions rows */
-        .table-container tbody tr td { padding-top: var(--space-2); padding-bottom: var(--space-2); }
-        .table-container tbody tr + tr td { border-top: 1px solid var(--panel-border); }
-        /* Allow Action column to wrap controls on small screens instead of forcing horizontal scroll */
-        .table-container th:nth-child(4),
-        .table-container td:nth-child(4) { width: auto; white-space: normal; }
-        .table-container td:nth-child(4) { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-        /* Allow long titles and progress text to wrap within first column */
-        .component-title, .progress-text { overflow-wrap: anywhere; word-break: break-word; }
-
-        
-
-        /* Inline spinner for action buttons */
-        .btn-spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            margin-left: 8px;
-            border-radius: 50%;
-            border: 2px solid rgba(99, 102, 241, 0.35);
-            border-top-color: #6366f1;
-            animation: btnspin 0.8s linear infinite;
-            vertical-align: -2px;
-        }
-
-        @keyframes btnspin { to { transform: rotate(360deg); } }
-
-        /* Arrange Manager cards side-by-side on wide screens */
-        .manager-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: var(--space-4);
-        }
-        /* Allow grid children to shrink/grow without overflow affecting column sizing */
-        .manager-grid > * { min-width: 0; }
-
-        @media (min-width: 900px) {
-            .manager-grid {
-                /* Keep Software a bit wider, but don't over-shrink Configuration */
-                grid-template-columns: 0.9fr 1.1fr;
-            }
-        }
-        @media (min-width: 1280px) {
-            .manager-grid {
-                /* On very wide screens, slight extra bias toward Software Versions */
-                grid-template-columns: 0.85fr 1.15fr;
-            }
-        }
-
-        .manager-content {
-            display: flex;
-            flex-direction: column;
-            gap: var(--space-4);
-            width: 100%;
-            padding-left: var(--space-6);
-            padding-right: var(--space-6);
-        }
-
-        /* Status pill variants are now provided globally by ui-theme.css */
-
-        /* Inline layout for Configuration form: labels left, inputs right */
-        .config-form .form-group {
-            display: grid;
-            grid-template-columns: minmax(110px, 160px) 1fr; /* flexible label column to avoid overflow */
-            align-items: center;
-            gap: var(--space-2); /* tighter label-to-field spacing */
-            min-width: 0;
-        }
-        /* Top-aligned variant for rows with multi-line descriptions or stacked controls */
-        .config-form .form-group.top-align { align-items: start; }
-        .config-form .form-group.top-align label { padding-top: 2px; }
-
-        .config-form .form-group label {
-            margin: 0;
-            color: var(--text-secondary);
-            font-weight: 600;
-        }
-
-        .config-form .form-group input[type="text"],
-        .config-form .form-group input[type="number"],
-        .config-form .form-group select {
-            width: 100%;
-        }
-        .config-form .form-group > * { min-width: 0; }
-
-        /* Checkbox row aligns inline as well */
-        .config-form .form-group input[type="checkbox"] {
-            justify-self: start;
-            width: 18px;
-            height: 18px;
-        }
-
-        /* Ensure consistent checkbox sizing across browsers */
-        .form-checkbox {
-            width: 18px;
-            height: 18px;
-            flex-shrink: 0;
-        }
-
-        /* Position Update button aligned with inputs (second column), add space above */
-        .config-form .form-row-full {
-            grid-template-columns: minmax(110px, 160px) 1fr; /* keep consistent with label column */
-            margin-top: var(--space-4);
-        }
-        .config-form .form-row-full > * {
-            /* Span across both columns and align to the right edge of the pane */
-            grid-column: 1 / -1;
-            justify-self: end;
-            width: auto;
-        }
-
-        /* Keep inline label/select rows tidy */
-        .field-inline { display: inline-flex; align-items: center; gap: var(--space-1); }
-        .inline-controls { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; }
-        /* Set practical widths to keep controls on one line */
-        #um_new_username.form-input-inline { width: 180px; min-width: 160px; }
-        #um_new_password.form-input-inline { width: 200px; min-width: 160px; }
-        #um_new_role.form-input-inline { width: 140px; min-width: 120px; }
-        /* Size/flow controls for Language/Source row */
-        .lang-select { flex: 0 0 160px; width: 160px; max-width: 200px; }
-        .source-select { flex: 1 1 260px; min-width: 220px; }
-        @media (max-width: 640px) {
-            .inline-controls { flex-wrap: wrap; overflow-x: visible; }
-            .lang-select, .source-select { flex: 1 1 100%; width: 100%; max-width: none; }
-        }
-        .field-inline label { margin: 0; }
-
-        @media (max-width: 640px) {
-            .config-form .form-group {
-                grid-template-columns: 1fr;
-                align-items: start;
-            }
-
-            .config-form .form-group label {
-                margin-bottom: var(--space-1);
-            }
-        }
-    </style>
+    
     <script>
         (function () {
             // Lightweight header stats fetcher to keep hero-meta live
@@ -1273,6 +1079,56 @@
             // Initial progress fetch
             fetchProgress();
             ensurePolling();
+            // Manager Port Forwarding status UI
+            (function(){
+                try {
+                    const pfToggle = document.getElementById('auto_port_forward_manager');
+                    const extras = document.getElementById('mgr_pf_extras');
+                    const statusEl = document.getElementById('mgr_pf_status');
+                    const ipEl = document.getElementById('mgr_external_ip');
+                    const testBtn = document.getElementById('mgr_test_port');
+                    function setStatus(kind, label){
+                        if (!statusEl) return;
+                        statusEl.className = 'status-pill ' + (kind==='active'?'status-success':kind==='error'?'status-error':kind==='pending'?'status-warning':'status-secondary');
+                        statusEl.innerHTML = '<span class="dot" aria-hidden="true"></span>' + (label||'');
+                    }
+                    function refreshMgrStatus(){
+                        fetch('/api/manager/status', { headers:{'Accept':'application/json'}, credentials:'same-origin', cache:'no-store' })
+                          .then(r=> r.ok ? r.json() : null)
+                          .then(data => {
+                              if (!data) return;
+                              if (pfToggle) pfToggle.checked = !!data.auto_port_forward_manager;
+                              const enabled = !!data.auto_port_forward_manager;
+                              if (extras) extras.style.display = enabled ? '' : 'none';
+                              if (ipEl && data.external_ip) ipEl.textContent = data.external_ip || '--';
+                              if (enabled) {
+                                  if (data.manager_port_forward_active) {
+                                      const ext = data.manager_port_forward_external_port || '';
+                                      setStatus('active', 'Active' + (ext?(' ('+ext+')'):''));
+                                  } else if (data.manager_port_forward_last_error) {
+                                      setStatus('error', 'Error');
+                                  } else {
+                                      setStatus('pending', 'Pending');
+                                  }
+                              } else {
+                                  setStatus('secondary', 'Disabled');
+                              }
+                          })
+                          .catch(()=>{});
+                    }
+                    refreshMgrStatus();
+                    setInterval(refreshMgrStatus, 15000);
+                    if (testBtn) {
+                        testBtn.addEventListener('click', ()=>{
+                            testBtn.disabled = true;
+                            fetch('/api/manager/test-port', { headers:{'Accept':'application/json'}, credentials:'same-origin' })
+                              .then(r=>{ if(window.showToast) { try { const t=r.headers.get('X-Toast-Type'); const title=r.headers.get('X-Toast-Title'); const msg=r.headers.get('X-Toast-Message'); if(msg) window.showToast({type:t||'info', title:title||'', message:msg}); } catch(_){} } return r.json().catch(()=>({})); })
+                              .then(()=> refreshMgrStatus())
+                              .finally(()=>{ testBtn.disabled = false; });
+                        });
+                    }
+                } catch(_) {}
+            })();
             }); // DOMContentLoaded end
         })();
     </script>
@@ -1364,6 +1220,26 @@
                         <div class="form-group">
                             <label for="port">Port</label>
                             <input type="text" id="port" name="port" value="{{ .port }}" required>
+                        </div>
+                        <div class="form-group top-align">
+                            <label for="auto_port_forward_manager">Port Forward (Manager)</label>
+                            <div class="field-inline items-start gap-2">
+                                <input type="checkbox" id="auto_port_forward_manager" name="auto_port_forward_manager" class="form-checkbox" {{if .auto_port_forward_manager}}checked{{end}}>
+                                <span class="text-secondary text-sm flex-1" aria-live="polite">
+                                    <span class="pill pill-sm" title="Forwarding behavior is adaptive">Adaptive</span>
+                                    Attempt automatic router port forwarding (TCP) for the manager's web port via UPnP/NAT-PMP.
+                                    <br><strong class="text-danger">WARNING:</strong> Exposing the management UI to the internet can be risky — enable only if you understand the implications.
+                                    <br><em class="text-xs">Details:</em> Game server UDP forwarding prefers a game-created UPnP mapping first; falls back to SDSM NAT-PMP/UPnP. The manager port always uses SDSM-created mappings.
+                                </span>
+                            </div>
+                        </div>
+                        <div class="form-group top-align" id="mgr_pf_extras" style="display:none;">
+                            <label>External Access</label>
+                            <div class="field-inline items-start gap-2">
+                                <span class="status-pill" id="mgr_pf_status"><span class="dot" aria-hidden="true"></span>Status</span>
+                                <span class="text-secondary text-sm">External IP: <span id="mgr_external_ip">--</span></span>
+                                <button type="button" id="mgr_test_port" class="btn btn-secondary btn-min-sm">Test Port</button>
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="root_path">Root Path</label>
@@ -1773,12 +1649,19 @@
     <script>
         (function () {
             const HEALTH_ENDPOINT = '/healthz';
-            const HEALTH_TIMEOUT = 4000;
-            const INTERVAL_OK = 15000;
-            const INTERVAL_LOST = 5000;
+            const HEALTH_TIMEOUT = 4000; // base timeout per request
+            const INTERVAL_OK = 15000;   // cadence when healthy
+            const INTERVAL_LOST = 5000;  // cadence when unhealthy
+            const INITIAL_GRACE_MS = 3500; // time after page load before we allow banner display
+            const FAILURE_THRESHOLD = 2;   // consecutive failures required (after grace) before showing banner
+            const FIRST_TIMEOUT_FACTOR = 1.75; // extend first timeout to reduce false aborts under load
 
             let healthTimer = null;
             let connectionLost = false;
+            let consecutiveFailures = 0;
+            let firstCheck = true;
+            let startTs = Date.now();
+            let attempts = 0;
 
             function setBanner(active, message) {
                 const banner = document.getElementById('connectionBanner');
@@ -1814,8 +1697,11 @@
             }
 
             function runHealthCheck() {
+                attempts++;
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
+                // Extend timeout for the very first attempt (server might still be warming caches / IO)
+                const effectiveTimeout = firstCheck ? Math.round(HEALTH_TIMEOUT * FIRST_TIMEOUT_FACTOR) : HEALTH_TIMEOUT;
+                const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
                 fetch(HEALTH_ENDPOINT, {
                     cache: 'no-store',
@@ -1843,18 +1729,34 @@
                             }, 1200);
                             return;
                         }
-                            // If still servers running, re-enable; otherwise remains disabled
-                            const stopAllBtn = document.getElementById('stopAllBtn');
-                            const rcEl2 = document.getElementById('server-count-running');
-                            const rc2 = rcEl2 ? parseInt(rcEl2.textContent || '0', 10) : 0;
-                            if (stopAllBtn) stopAllBtn.disabled = (rc2 === 0);
+                        // Healthy: reset failure counters
+                        consecutiveFailures = 0;
+                        firstCheck = false;
+                        // If still servers running, re-enable; otherwise remains disabled
+                        const stopAllBtn = document.getElementById('stopAllBtn');
+                        const rcEl2 = document.getElementById('server-count-running');
+                        const rc2 = rcEl2 ? parseInt(rcEl2.textContent || '0', 10) : 0;
+                        if (stopAllBtn) stopAllBtn.disabled = (rc2 === 0);
                     })
                     .catch(() => {
                         clearTimeout(timeoutId);
+                        consecutiveFailures++;
+                        const elapsed = Date.now() - startTs;
+                        // Determine if we should surface the banner yet
+                        const withinGrace = elapsed < INITIAL_GRACE_MS;
+                        const belowThreshold = consecutiveFailures < FAILURE_THRESHOLD;
                         if (!connectionLost) {
-                            connectionLost = true;
-                            setBanner(true, 'Connection lost. Attempting to reconnect...');
+                            if (!withinGrace && !belowThreshold) {
+                                connectionLost = true;
+                                setBanner(true, 'Connection lost. Attempting to reconnect...');
+                            } else {
+                                // Still treat as lost internally for scheduling (short cadence) but do not show banner
+                                // Keep connectionLost false so recovery logic doesn't auto-reload prematurely
+                                // Optionally could add subtle console info
+                                try { console.debug('[SDSM][Health] Suppressing banner (fail '+consecutiveFailures+', grace='+withinGrace+')'); } catch(_) {}
+                            }
                         }
+                        firstCheck = false;
                     })
                     .finally(() => {
                         scheduleNext(connectionLost ? INTERVAL_LOST : INTERVAL_OK);
@@ -1866,7 +1768,8 @@
                 if (reloadButton) {
                     reloadButton.addEventListener('click', () => window.location.reload());
                 }
-                runHealthCheck();
+                // Slight delay before first health check to allow parallel initial fetches to settle
+                setTimeout(runHealthCheck, 600);
                 // Kick off async versions fetch shortly after paint. Guard against missing function.
                 setTimeout(() => { try { if (typeof fetchVersions === 'function') fetchVersions(0); } catch(_) {} }, 50);
             });

@@ -48,7 +48,7 @@
                                 <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
                         </button>
-                        <div id="save-menu" class="lang-dropdown" role="menu" aria-label="Save options">
+                        <div id="save-menu" class="lang-dropdown dropdown-panel dropdown-primary" role="menu" aria-label="Save options">
                             <button type="button" class="dropdown-item" id="save-as-action">Save As…</button>
                         </div>
                     </div>
@@ -63,6 +63,10 @@
                 <div class="status-row">
                     <span class="status-label">Last Saved:</span>
                     <span id="server-saved-value">{{if .server.ServerSaved}}{{.server.ServerSaved.Format "01/02/2006 15:04:05"}}{{else}}Not saved{{end}}</span>
+                </div>
+                <div class="status-row" id="port-forward-row" aria-live="polite" title="Automatic router port forwarding status (UPnP/NAT-PMP).">
+                    <span class="status-label">Port Forward:</span>
+                    <span id="port-forward-status" class="pf-status pf-status-idle">Disabled</span>
                 </div>
             </div>
                 <div class="log-preview">

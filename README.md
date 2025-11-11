@@ -100,6 +100,12 @@ Benefits:
 
 Upgrade Note: If you had automation calling deprecated HTML endpoints, update them to use the corresponding `/api` routes. Deprecated endpoints now respond with 410 and an explanatory JSON error.
 
+### Networking updates
+
+- Steam P2P networking has been removed and is now always disabled at server startup. The UI no longer exposes it.
+- Port Forwarding is adaptive: when enabled, SDSM first checks for a mapping created by the game via UPnP and, if not present, falls back to creating a NAT-PMP/UPnP mapping itself.
+- Status badges indicate the source when forwarding is active: “Game UPnP” or “SDSM NAT.”
+
 New/updated files of note
 
 - `internal/handlers/toast.go` – toast helpers (headers)

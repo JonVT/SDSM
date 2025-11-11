@@ -52,6 +52,13 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 			}(),
 			"paused":   s.Paused,
 			"storming": s.Storming,
+			// Port forwarding status (transient)
+			"autoPortForward":         s.AutoPortForward,
+			"useGameUPnP":             s.UseGameUPnP,
+			"portForwardActive":       s.PortForwardActive,
+			"portForwardExternalPort": s.PortForwardExternalPort,
+			"portForwardLastError":    s.PortForwardLastError,
+			"portForwardSource":       s.PortForwardSource,
 		},
 	}
 	if msg, err := json.Marshal(payload); err == nil {
@@ -248,6 +255,23 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"chat_messages":  chatMessages,
 		"banned":         banned,
 	}
+	// Networking diagnostics: external IP (only when auto port forward requested)
+	if s.AutoPortForward {
+		if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
+			resp["external_ip"] = ip.String()
+		}
+	}
+	// Include port forwarding status for UI diagnostics
+	resp["auto_port_forward"] = s.AutoPortForward
+	resp["use_game_upnp"] = s.UseGameUPnP
+	resp["port_forward_active"] = s.PortForwardActive
+	resp["port_forward_external_port"] = s.PortForwardExternalPort
+	if strings.TrimSpace(s.PortForwardSource) != "" {
+		resp["port_forward_source"] = s.PortForwardSource
+	}
+	if strings.TrimSpace(s.PortForwardLastError) != "" {
+		resp["port_forward_last_error"] = s.PortForwardLastError
+	}
 	if s.PendingSavePurge {
 		resp["pending_save_purge"] = true
 	}
@@ -256,6 +280,58 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		if s.LastErrorAt != nil {
 			resp["last_error_at"] = s.LastErrorAt.Format(time.RFC3339)
 		}
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// APIServerTestPort performs a best-effort validation of port forwarding state.
+// Returns external IP/port and whether a mapping appears active.
+func (h *ManagerHandlers) APIServerTestPort(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	role := c.GetString("role")
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if !s.AutoPortForward {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "port forwarding is disabled"})
+		return
+	}
+	// Best-effort: we consider the port 'active' if a mapping is present and an external IP is available.
+	var externalIP string
+	if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
+		externalIP = ip.String()
+	}
+	active := s.PortForwardActive && externalIP != ""
+	resp := gin.H{
+		"external_ip":   externalIP,
+		"external_port": s.PortForwardExternalPort,
+		"active":        active,
+	}
+	if !active {
+		if strings.TrimSpace(s.PortForwardLastError) != "" {
+			resp["error"] = s.PortForwardLastError
+		} else if externalIP == "" {
+			resp["error"] = "external IP not reported by gateway"
+		} else if !s.PortForwardActive {
+			resp["error"] = "no active port mapping"
+		} else {
+			resp["error"] = "unverified"
+		}
+	}
+	if active {
+		ToastSuccess(c, "Test Port", "Port mapping appears active.")
+	} else {
+		ToastWarn(c, "Test Port", "Could not verify port reachability; check router and firewall.")
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -351,7 +427,12 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	// Initial response reflects scheduling (server still running for delayed stops)
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		c.Header("HX-Trigger", "refresh")
-		if shutdownDelayForServer(s) > 0 {
+		// Effective delay: bypass when no players connected (mirrors StopAsync behavior)
+		effectiveDelay := shutdownDelayForServer(s)
+		if s.ClientCount() == 0 {
+			effectiveDelay = 0
+		}
+		if effectiveDelay > 0 {
 			// Local timeframe formatter (duplicate of models.Server.formatTimeframe logic, kept unexported there)
 			formatTf := func(d time.Duration) string {
 				secs := int(d.Seconds())
@@ -380,7 +461,7 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 				}
 				return fmt.Sprintf("%d minutes %d seconds", m, rem)
 			}
-			ToastInfo(c, "Shutdown Scheduled", fmt.Sprintf("%s will shut down in %s (click Keep Running to cancel).", s.Name, formatTf(shutdownDelayForServer(s))))
+			ToastInfo(c, "Shutdown Scheduled", fmt.Sprintf("%s will shut down in %s (click Keep Running to cancel).", s.Name, formatTf(effectiveDelay)))
 		} else {
 			ToastInfo(c, "Shutdown Scheduled", s.Name+" is stopping now.")
 		}
@@ -388,7 +469,12 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 		return
 	}
 	// JSON branch
-	if shutdownDelayForServer(s) > 0 {
+	// Effective delay mirrors StopAsync: zero when no players
+	d := shutdownDelayForServer(s)
+	if s.ClientCount() == 0 {
+		d = 0
+	}
+	if d > 0 {
 		formatTf := func(d time.Duration) string {
 			secs := int(d.Seconds())
 			if secs < 60 {
@@ -416,7 +502,6 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 			}
 			return fmt.Sprintf("%d minutes %d seconds", m, rem)
 		}
-		d := shutdownDelayForServer(s)
 		ToastInfo(c, "Shutdown Scheduled", fmt.Sprintf("%s will shut down in %s.", s.Name, formatTf(d)))
 		c.JSON(http.StatusOK, gin.H{"status": "scheduled", "eta_seconds": int(d.Seconds())})
 		return
@@ -450,8 +535,50 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
 	}
+
+	// If a stop countdown is already in progress, treat this as a pending restart
+	if s.Stopping {
+		eta := 0
+		if !s.StoppingEnds.IsZero() {
+			rem := int(time.Until(s.StoppingEnds).Seconds())
+			if rem > 0 { eta = rem }
+		}
+		ToastInfo(c, "Restart Pending", s.Name+" shutdown already in progress; restart will follow.")
+		c.JSON(http.StatusOK, gin.H{"status": "restart-pending", "shutdown_eta_seconds": eta})
+		return
+	}
+
+	// If server is running and has a configured shutdown delay, perform an async stop first
+	shutdownDelay := s.ShutdownDelaySeconds
+	// If no players connected, bypass shutdown timer
+	if s.ClientCount() == 0 {
+		shutdownDelay = 0
+	}
+	if s.Running && shutdownDelay > 0 {
+		// Schedule asynchronous shutdown; after completion, schedule restart
+		s.StopAsync(func(srv *models.Server) {
+			// Broadcast each state change
+			h.BroadcastStatusAndStats(srv)
+			// When fully stopped, queue restart after restart delay
+			if !srv.Running && !srv.Starting {
+				restartDelay := srv.RestartDelaySeconds
+				if restartDelay < 0 { restartDelay = models.DefaultRestartDelaySeconds }
+				go func(sd int, srv2 *models.Server) {
+					if sd > 0 { time.Sleep(time.Duration(sd) * time.Second) }
+					// Start server
+					srv2.Start()
+					// Broadcast new running state
+					h.BroadcastStatusAndStats(srv2)
+				}(restartDelay, srv)
+			}
+		})
+		ToastInfo(c, "Restart Scheduled", s.Name+" will restart after shutdown completes.")
+		c.JSON(http.StatusOK, gin.H{"status": "restart-scheduled", "shutdown_eta_seconds": shutdownDelay})
+		return
+	}
+
+	// Fall back to legacy immediate restart path
 	go s.Restart()
-	// Early broadcast to indicate restarting/starting state; follow-ups will arrive via polling
 	h.BroadcastStatusAndStats(s)
 	ToastInfo(c, "Server Restarting", s.Name+" is restarting...")
 	c.JSON(http.StatusOK, gin.H{"status": "restarting"})
@@ -788,6 +915,15 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 			s.ShutdownDelaySeconds = shutdownDelay
 		}
 	}
+	// Automatic router port forwarding (UPnP/NAT-PMP)
+	if v := strings.TrimSpace(body["auto_port_forward"]); v != "" {
+		s.AutoPortForward = v == "on" || v == "true" || v == "1"
+	} else {
+		// If checkbox omitted in JSON, keep existing unless explicitly provided; in HTML form, missing means off
+		if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/x-www-form-urlencoded") || strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "multipart/form-data") || (!strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") && len(c.Request.PostForm) > 0) {
+			s.AutoPortForward = false
+		}
+	}
 	if v := strings.TrimSpace(body["max_auto_saves"]); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 1000 {
 			s.MaxAutoSaves = n
@@ -799,7 +935,17 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		}
 	}
 	s.DeleteSkeletonOnDecay = body["delete_skeleton_on_decay"] == "on" || body["delete_skeleton_on_decay"] == "true" || body["delete_skeleton_on_decay"] == "1"
-	s.UseSteamP2P = body["use_steam_p2p"] == "on" || body["use_steam_p2p"] == "true" || body["use_steam_p2p"] == "1"
+	// Steam P2P disabled globally; ignore any provided flag
+	s.UseSteamP2P = false
+	// Prefer game's built-in UPnP when enabled; SDSM will adaptively fallback if mapping not present
+	s.UseGameUPnP = body["use_game_upnp"] == "on" || body["use_game_upnp"] == "true" || body["use_game_upnp"] == "1"
+	// Optional: configure adaptive probe delay (1-120s)
+	if v := strings.TrimSpace(body["port_forward_probe_delay_seconds"]); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			if n < 1 { n = 1 } else if n > 120 { n = 120 }
+			s.PortForwardProbeDelaySeconds = n
+		}
+	}
 	if v := strings.TrimSpace(body["disconnect_timeout"]); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 1000 && n <= 600000 {
 			s.DisconnectTimeout = n
@@ -829,6 +975,7 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		v := strings.TrimSpace(pv)
 		s.PlayerSaves = v == "on" || v == "true" || v == "1"
 	}
+
 	s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
 
 	// Apply core parameter change effects + possible redeploy
@@ -947,7 +1094,7 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		MaxAutoSaves              int    `json:"max_auto_saves"`
 		MaxQuickSaves             int    `json:"max_quick_saves"`
 		DeleteSkeletonOnDecay     bool   `json:"delete_skeleton_on_decay"`
-		UseSteamP2P               bool   `json:"use_steam_p2p"`
+		// UseSteamP2P removed; always false
 		DisconnectTimeout         int    `json:"disconnect_timeout"`
 		Visible                   bool   `json:"server_visible"`
 		BepInExInitTimeoutSeconds int    `json:"bepinex_init_timeout_seconds"`
@@ -1004,7 +1151,7 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 			req.MaxQuickSaves = v
 		}
 		req.DeleteSkeletonOnDecay = parseBool(c.PostForm("delete_skeleton_on_decay"))
-		req.UseSteamP2P = parseBool(c.PostForm("use_steam_p2p"))
+		// Steam P2P disabled globally; ignore any form input
 		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("disconnect_timeout"))); err == nil {
 			req.DisconnectTimeout = v
 		}
@@ -1029,6 +1176,8 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		BetaRaw:          map[bool]string{true: "true", false: "false"}[req.Beta],
 	})
 	if verr != nil {
+		// Provide toast-friendly error response with explicit message
+		ToastError(c, "Create Failed", verr.Error())
 		c.JSON(http.StatusBadRequest, gin.H{"error": verr.Error()})
 		return
 	}
@@ -1061,7 +1210,8 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		MaxAutoSaves:          ifZero(req.MaxAutoSaves, 5),
 		MaxQuickSaves:         ifZero(req.MaxQuickSaves, 5),
 		DeleteSkeletonOnDecay: req.DeleteSkeletonOnDecay,
-		UseSteamP2P:           req.UseSteamP2P,
+		// Force Steam P2P off
+		UseSteamP2P:           false,
 		DisconnectTimeout:     ifZero(req.DisconnectTimeout, 10000),
 		RestartDelaySeconds:   v.RestartDelay,
 		ShutdownDelaySeconds:  v.ShutdownDelay,
@@ -1094,6 +1244,16 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 
 	newServer, err := h.manager.AddServer(cfg)
 	if err != nil {
+		// Detect duplicate name edge case not caught by validation (race condition)
+		nameLower := strings.ToLower(strings.TrimSpace(cfg.Name))
+		for _, existing := range h.manager.Servers {
+			if strings.EqualFold(strings.TrimSpace(existing.Name), nameLower) {
+				ToastError(c, "Create Failed", fmt.Sprintf("Server name '%s' already exists. Please choose a unique name.", cfg.Name))
+				c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("Server name '%s' already exists.", cfg.Name)})
+				return
+			}
+		}
+		ToastError(c, "Create Failed", "Failed to create server.")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create server"})
 		return
 	}
@@ -1301,9 +1461,7 @@ func (h *ManagerHandlers) APIServersAnalyzeSave(c *gin.Context) {
 		if settings.DeleteSkeletonOnDecay != nil {
 			resp["delete_skeleton_on_decay"] = *settings.DeleteSkeletonOnDecay
 		}
-		if settings.UseSteamP2P != nil {
-			resp["use_steam_p2p"] = *settings.UseSteamP2P
-		}
+		// Steam P2P is deprecated/disabled; ignore UseSteamP2P from settings
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			resp["disconnect_timeout"] = *settings.DisconnectTimeout
 		}
@@ -1336,7 +1494,7 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	autoPause := c.PostForm("auto_pause") == "on"
 	playerSaves := c.PostForm("player_saves") == "on"
 	deleteSkeletonOnDecay := c.PostForm("delete_skeleton_on_decay") == "on"
-	useSteamP2P := c.PostForm("use_steam_p2p") == "on"
+	// Steam P2P disabled globally
 	serverVisible := c.PostForm("server_visible") == "on"
 	welcomeMessage := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(middleware.SanitizeString(c.PostForm("welcome_message")), "\r", " "), "\n", " "))
 	if len(welcomeMessage) > 300 {
@@ -1429,9 +1587,7 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		if settings.DeleteSkeletonOnDecay != nil {
 			deleteSkeletonOnDecay = *settings.DeleteSkeletonOnDecay
 		}
-		if settings.UseSteamP2P != nil {
-			useSteamP2P = *settings.UseSteamP2P
-		}
+		// Ignore UseSteamP2P from settings
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			disconnectTimeout = *settings.DisconnectTimeout
 		}
@@ -1522,7 +1678,7 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		MaxAutoSaves:              maxAutoSaves,
 		MaxQuickSaves:             maxQuickSaves,
 		DeleteSkeletonOnDecay:     deleteSkeletonOnDecay,
-		UseSteamP2P:               useSteamP2P,
+		UseSteamP2P:               false,
 		DisconnectTimeout:         disconnectTimeout,
 		RestartDelaySeconds:       v.RestartDelay,
 		ShutdownDelaySeconds:      v.ShutdownDelay,
@@ -1764,6 +1920,51 @@ func (h *ManagerHandlers) APIServerLogTail(c *gin.Context) {
 		"offset": next,
 		"size":   size,
 		"reset":  reset,
+	})
+}
+
+// APIPortForwardMetrics returns aggregated counts of port forwarding state across servers.
+// JSON: { totalEnabled, activeTotal, activeGame, activeSDSM, pending, failures }
+func (h *ManagerHandlers) APIPortForwardMetrics(c *gin.Context) {
+	// Admin-only visibility for fleet-level diagnostics
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	totalEnabled := 0
+	activeTotal := 0
+	activeGame := 0
+	activeSDSM := 0
+	pending := 0
+	failures := 0
+	for _, s := range h.manager.Servers {
+		if s == nil { continue }
+		if s.AutoPortForward {
+			totalEnabled++
+			if s.PortForwardActive {
+				activeTotal++
+				switch strings.ToLower(strings.TrimSpace(s.PortForwardSource)) {
+				case "game":
+					activeGame++
+				case "sdsm":
+					activeSDSM++
+				}
+			} else {
+				if strings.TrimSpace(s.PortForwardLastError) != "" {
+					failures++
+				} else {
+					pending++
+				}
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"total_enabled": totalEnabled,
+		"active_total":  activeTotal,
+		"active_game":   activeGame,
+		"active_sdsm":   activeSDSM,
+		"pending":       pending,
+		"failures":      failures,
 	})
 }
 
@@ -2886,12 +3087,64 @@ func atoiSafe(s string) int {
 }
 
 func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"active":              h.manager.IsActive(),
 		"updating":            h.manager.IsUpdating(),
 		"server_count":        h.manager.ServerCount(),
 		"server_count_active": h.manager.ServerCountActive(),
-	})
+		"auto_port_forward_manager": h.manager.AutoPortForwardManager,
+		"manager_port_forward_active": h.manager.ManagerPortForwardActive,
+		"manager_port_forward_external_port": h.manager.ManagerPortForwardExternalPort,
+	}
+	if strings.TrimSpace(h.manager.ManagerPortForwardLastError) != "" {
+		resp["manager_port_forward_last_error"] = h.manager.ManagerPortForwardLastError
+	}
+	// Best-effort external IP lookup
+	if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
+		resp["external_ip"] = ip.String()
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// APIManagerTestPort performs a best-effort validation of manager port forwarding state.
+// Returns external IP/port and whether a mapping appears active.
+func (h *ManagerHandlers) APIManagerTestPort(c *gin.Context) {
+	role := c.GetString("role")
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	if !h.manager.AutoPortForwardManager {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "port forwarding is disabled"})
+		return
+	}
+	var externalIP string
+	if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
+		externalIP = ip.String()
+	}
+	active := h.manager.ManagerPortForwardActive && externalIP != ""
+	resp := gin.H{
+		"external_ip":   externalIP,
+		"external_port": h.manager.ManagerPortForwardExternalPort,
+		"active":        active,
+	}
+	if !active {
+		if strings.TrimSpace(h.manager.ManagerPortForwardLastError) != "" {
+			resp["error"] = h.manager.ManagerPortForwardLastError
+		} else if externalIP == "" {
+			resp["error"] = "external IP not reported by gateway"
+		} else if !h.manager.ManagerPortForwardActive {
+			resp["error"] = "no active port mapping"
+		} else {
+			resp["error"] = "unverified"
+		}
+	}
+	if active {
+		ToastSuccess(c, "Test Port", "Manager port mapping appears active.")
+	} else {
+		ToastWarn(c, "Test Port", "Could not verify manager port reachability; check router and firewall.")
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *ManagerHandlers) APIStats(c *gin.Context) {

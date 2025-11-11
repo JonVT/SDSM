@@ -7,15 +7,7 @@
   <link rel="stylesheet" href="/static/modern.css" />
   <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
   <link rel="icon" href="/sdsm.png" type="image/png" />
-  <style>
-    /* Use a dedicated class for vertical centering to avoid affecting header container */
-    .setup-center { min-height: 100vh; display:flex; align-items:center; justify-content:center; background: var(--surface-100); padding: var(--space-6); }
-    .card { background: var(--surface-0); border: 1px solid var(--border-color); border-radius: var(--radius-2xl); padding: var(--space-6); width: 100%; max-width: 480px; box-shadow: var(--shadow-lg); }
-    .title { font-size: var(--text-2xl); font-weight: 700; margin-bottom: var(--space-2); }
-    .subtitle { color: var(--text-secondary); margin-bottom: var(--space-6); }
-    .error { background: rgba(239, 68, 68, 0.12); color: var(--danger-500); border: 1px solid rgba(239, 68, 68, 0.25); padding: var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-4); }
-    .hint { color: var(--text-secondary); font-size: var(--text-sm); margin-top: var(--space-2); }
-  </style>
+  
   <script>
     function validateForm(e){
       const p = document.getElementById('password').value;

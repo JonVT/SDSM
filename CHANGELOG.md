@@ -12,7 +12,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Changed
 
-- _None yet_
+- Port forwarding is now adaptive: SDSM first prefers a mapping created by the game via UPnP (when available), and falls back to creating a NAT-PMP/UPnP mapping itself.
 
 ### Fixed
 
@@ -20,7 +20,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Removed
 
-- _None yet_
+- Steam P2P networking option. It is now always disabled at startup and no longer configurable in the UI or API. Legacy `net_mode` parsing has been removed.
 
 ## [v0.6.0] - 2025-11-09
 

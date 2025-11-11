@@ -308,13 +308,7 @@
                                 </label>
                                 <p class="help-text">When enabled, delete skeletons on decay (default off)</p>
                             </div>
-                            <div class="form-group">
-                                <label class="checkbox-label" for="use_steam_p2p" title="Use Steam peer-to-peer networking instead of direct sockets (default off)">
-                                    <input type="checkbox" id="use_steam_p2p" name="use_steam_p2p" {{ if index $form "use_steam_p2p" }}checked{{ end }} title="Use Steam peer-to-peer networking">
-                                    <span>Use Steam P2P</span>
-                                </label>
-                                <p class="help-text">Use Steam P2P networking (default off)</p>
-                            </div>
+                            <!-- Steam P2P removed/disabled -->
                             <div class="form-group">
                                 <label class="form-label" for="disconnect_timeout" title="Milliseconds before clients are disconnected due to inactivity (default 10000)">Disconnect Timeout (ms)</label>
                                 <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
@@ -837,7 +831,7 @@
                     setIf('save_interval', data.save_interval);
                     setBool('auto_pause', data.auto_pause);
                     setBool('delete_skeleton_on_decay', data.delete_skeleton_on_decay);
-                    setBool('use_steam_p2p', data.use_steam_p2p);
+                    // Steam P2P removed; ignore data.use_steam_p2p
                     setIf('disconnect_timeout', data.disconnect_timeout);
                     if (analysisBox) analysisBox.style.display = '';
                     hideForSaveMode(true);
@@ -910,7 +904,9 @@
                                 if (message) window.showToast({ type: type || 'info', title: title || '', message });
                             }
                         } catch(_) {}
-                        if (!res.ok) return res.json().catch(() => ({})).then((d) => Promise.reject(d));
+                        if (!res.ok) {
+                            return res.json().catch(() => ({})).then((d) => Promise.reject(d));
+                        }
                         // Some proxies or servers may return text/plain; attempt robust parse
                         return res.clone().json().catch(() => res.text().then(t => {
                             try { return JSON.parse(t); } catch { return {}; }
@@ -933,7 +929,26 @@
                                 return;
                             }
                         } catch(_) {}
-                        // keep on page; user can adjust and resubmit
+                        // Show inline alert if not already present
+                        try {
+                            const containerCard = form.closest('.card');
+                            if (containerCard && err && err.error) {
+                                let alert = containerCard.querySelector('.alert.alert-error');
+                                if (!alert) {
+                                    alert = document.createElement('div');
+                                    alert.className = 'alert alert-error';
+                                    alert.setAttribute('role', 'alert');
+                                    containerCard.insertBefore(alert, containerCard.firstChild.nextSibling);
+                                }
+                                alert.textContent = err.error;
+                            }
+                            if (typeof window.showToast === 'function' && err && err.error) {
+                                window.showToast({ type: 'error', title: 'Create Failed', message: err.error });
+                            } else if ((window.askInfo || window.openInfo) && err && err.error) {
+                                const fn = window.askInfo || window.openInfo;
+                                fn({ title: 'Create Server Error', message: err.error });
+                            }
+                        } catch(_) {}
                     })
                     .finally(() => {
                         if (submitBtn) { submitBtn.disabled = false; submitBtn.removeAttribute('aria-disabled'); }

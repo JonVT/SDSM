@@ -45,6 +45,7 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		detachedServers := c.PostForm("detached_servers") == "on"
 		trayEnabled := c.PostForm("tray_enabled") == "on"
 		tlsEnabled := c.PostForm("tls_enabled") == "on"
+		autoPFMgr := c.PostForm("auto_port_forward_manager") == "on"
 		tlsCert := middleware.SanitizePath(strings.TrimSpace(c.PostForm("tls_cert")))
 		tlsKey := middleware.SanitizePath(strings.TrimSpace(c.PostForm("tls_key")))
 
@@ -66,6 +67,9 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		// TLS is cross-platform; effective after restart
 		// Treat provided TLS paths as sources ONLY when absolute; copy into root/certs and persist relative paths.
 		h.manager.TLSEnabled = tlsEnabled
+		// Manager port forwarding toggle (applies immediately best-effort)
+		prevPF := h.manager.AutoPortForwardManager
+		h.manager.AutoPortForwardManager = autoPFMgr
 		if tlsEnabled {
 			certSrc := tlsCert
 			keySrc := tlsKey
@@ -153,6 +157,12 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			}
 		}
 		h.manager.Save()
+		// Apply manager port forwarding changes without requiring restart
+		if !prevPF && h.manager.AutoPortForwardManager {
+			go h.manager.StartManagerPortForwarding()
+		} else if prevPF && !h.manager.AutoPortForwardManager {
+			h.manager.StopManagerPortForwarding()
+		}
 		if language != "" {
 			h.manager.Language = language
 			h.manager.Save()

@@ -1,55 +1,15 @@
 {{ define "user_menu" }}
-<style>
-  .user-menu { position: relative; }
-  .avatar-btn {
-    width: 34px; height: 34px; border-radius: 50%;
-    position: relative;
-    display: inline-flex; align-items: center; justify-content: center;
-    border: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    font-weight: 700; font-size: 0.8rem;
-    padding: 0; cursor: pointer;
-    box-shadow: var(--shadow-sm);
-    user-select: none;
-  }
-  .avatar-btn:hover { background: var(--surface-soft); color: var(--text-primary); }
-  .avatar-initials { letter-spacing: 0.3px; }
-  .role-badge {
-    position: absolute; right: -2px; bottom: -2px; min-width: 14px; height: 14px;
-    padding: 0 3px;
-    border-radius: 999px; background: var(--accent-600);
-    color: white; font-size: 9px; line-height: 14px; font-weight: 800;
-    border: 1px solid var(--bg-secondary);
-  }
-  /* Dropdown uses fixed positioning when opened to escape header overflow */
-  .user-dropdown {
-    position: fixed; /* will be placed by script on open */
-    min-width: 180px; background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    display: none; z-index: 4000; padding: 6px;
-  }
-  .user-dropdown.active { display: block; }
-  .user-dropdown a {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 10px; text-decoration: none;
-    color: var(--text-secondary); border-radius: var(--radius-sm);
-  }
-  .user-dropdown a:hover { background: var(--surface-soft); color: var(--text-primary); }
-</style>
 <div class="user-menu" data-user-menu>
   <button class="avatar-btn" aria-haspopup="true" aria-expanded="false" title="Account" data-user-menu-trigger>
     <span class="avatar-initials">{{ if .username }}{{ initials (printf "%v" .username) }}{{ else }}?{{ end }}</span>
     <span class="role-badge" title="Role">?</span>
   </button>
-  <div class="user-dropdown" role="menu">
-    <a href="/profile" role="menuitem">
+  <div class="user-dropdown dropdown-panel dropdown-fixed" role="menu">
+    <a href="/profile" class="dropdown-item" role="menuitem">
       {{ template "icon_user" . }}
       <span>Update Profile</span>
     </a>
-    <a href="/logout" role="menuitem">
+    <a href="/logout" class="dropdown-item" role="menuitem">
       {{ template "icon_logout" . }}
       <span>Logout</span>
     </a>
@@ -65,7 +25,16 @@
       if(!trigger || !menu) return;
       if(root.dataset.bound === 'true') return;
       root.dataset.bound = 'true';
-      function closeMenu(){ menu.classList.remove('active'); trigger.setAttribute('aria-expanded','false'); }
+      function closeMenu(opts){
+        const options = opts || {};
+        const wasOpen = menu.classList.contains('active');
+        menu.classList.remove('active');
+        trigger.setAttribute('aria-expanded','false');
+        // Only restore focus when explicitly requested (e.g., Escape or trigger toggle)
+        if (options.restoreFocus && wasOpen) {
+          try { trigger.focus({ preventScroll: true }); } catch(_) { try { trigger.focus(); } catch(_) {} }
+        }
+      }
       function openMenu(){
         // Temporarily show to measure size
         menu.style.visibility = 'hidden';
@@ -86,19 +55,50 @@
         menu.style.visibility = '';
         menu.classList.add('active');
         trigger.setAttribute('aria-expanded','true');
+        // Focus first item for keyboard navigation
+        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
+        if (items.length) { try { items[0].focus(); } catch(_) {} }
       }
       trigger.addEventListener('click', function(e){
         e.stopPropagation();
-        if (menu.classList.contains('active')) {
-          closeMenu();
-        } else {
-          openMenu();
-        }
+        if (menu.classList.contains('active')) { closeMenu({ restoreFocus: true }); }
+        else { openMenu(); }
       });
       document.addEventListener('click', function(e){
-        if(!root.contains(e.target)) closeMenu();
+        // Close only when open, and do not restore focus on outside clicks to avoid scroll jumps
+        if(menu.classList.contains('active') && !root.contains(e.target)) closeMenu({ restoreFocus: false });
       });
-      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu(); });
+      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu({ restoreFocus: true }); });
+      // Keyboard support: open with Arrow keys/Enter/Space, navigate items with arrows/Home/End
+      function focusItemAt(idx){
+        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
+        if (!items.length) return;
+        const clamped = ((idx % items.length) + items.length) % items.length;
+        try { items[clamped].focus(); } catch(_) {}
+      }
+      trigger.addEventListener('keydown', function(e){
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (!menu.classList.contains('active')) openMenu();
+          focusItemAt(0);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (!menu.classList.contains('active')) openMenu();
+          const items = Array.from(menu.querySelectorAll('.dropdown-item'));
+          focusItemAt(items.length - 1);
+        }
+      });
+      menu.addEventListener('keydown', function(e){
+        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
+        if (!items.length) return;
+        const current = document.activeElement;
+        let idx = items.indexOf(current);
+        if (e.key === 'ArrowDown') { e.preventDefault(); focusItemAt((idx < 0 ? 0 : idx + 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusItemAt((idx < 0 ? items.length - 1 : idx - 1)); }
+        else if (e.key === 'Home') { e.preventDefault(); focusItemAt(0); }
+        else if (e.key === 'End') { e.preventDefault(); focusItemAt(items.length - 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeMenu({ restoreFocus: true }); }
+      });
       // Keep dropdown aligned on resize/scroll if open
       function maybeReposition(){ if(menu.classList.contains('active')) { openMenu(); } }
       window.addEventListener('resize', maybeReposition, { passive: true });

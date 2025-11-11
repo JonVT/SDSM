@@ -24,6 +24,21 @@
                     </div>
                 </div>
                 <div>
+                    <label for="server_visible">Public:</label>
+                    <div class="checkbox-inline checkbox-group">
+                        <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-row grid-2 grid-items-end">
+                <div>
+                    <label for="difficulty">Difficulty:</label>
+                    <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
+                <div>
                     <label for="port">Port:</label>
                     <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
                 </div>
@@ -44,16 +59,6 @@
                 </div>
             </div>
 
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="difficulty">Difficulty:</label>
-                    <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div></div>
-            </div>
-
             <div class="grid-2">
                 <div class="form-group">
                     <label class="form-label" for="max_clients">Max Players</label>
@@ -65,16 +70,7 @@
                 </div>
             </div>
 
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="restart_delay_seconds">Restart Delay (sec):</label>
-                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off" title="Delay before restarting after a restart is triggered.">
-                </div>
-                <div>
-                    <label for="shutdown_delay_seconds">Shutdown Delay (sec):</label>
-                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off" title="Delay before shutdown completes after stop is requested.">
-                </div>
-            </div>
+            
 
             
 
@@ -100,12 +96,12 @@
 
             <div class="form-row grid-2 grid-items-end">
                 <div>
-                    <label for="auth_secret">Auth Secret:</label>
-                    <input type="text" id="auth_secret" name="auth_secret" value="{{.server.AuthSecret}}" class="form-input-inline" placeholder="Auth Secret" autocomplete="off">
-                </div>
-                <div>
                     <label for="password">Server Password:</label>
                     <input type="password" id="password" name="password" value="{{.server.Password}}" class="form-input-inline" placeholder="Password" autocomplete="current-password">
+                </div>
+                <div>
+                    <label for="auth_secret">Auth Secret:</label>
+                    <input type="text" id="auth_secret" name="auth_secret" value="{{.server.AuthSecret}}" class="form-input-inline" placeholder="Auth Secret" autocomplete="off">
                 </div>
             </div>
 
@@ -121,9 +117,6 @@
             </div>
 
             
-
-            
-
             <div class="grid-2">
                 <div class="form-group">
                     <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
@@ -135,16 +128,47 @@
                 </div>
             </div>
 
-            
+            <div class="form-row grid-2 grid-items-end">
+                <div>
+                    <label for="shutdown_delay_seconds">Shutdown Delay (sec):</label>
+                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off" title="Delay before shutdown completes after stop is requested.">
+                </div>
+                <div>
+                    <label for="restart_delay_seconds">Restart Delay (sec):</label>
+                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off" title="Delay before restarting after a restart is triggered.">
+                </div>
+            </div>
+
             <div class="form-row form-row-full checkbox-row">
                 <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
                     <label class="radio-label"><input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}> Auto Start</label>
                     <label class="radio-label"><input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}> Auto Save</label>
                     <label class="radio-label"><input type="checkbox" id="auto_pause" name="auto_pause" {{if .server.AutoPause}}checked{{end}}> Auto Pause</label>
                     <label class="radio-label"><input type="checkbox" id="auto_update" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}> Auto Update</label>
+                </div>
+            </div>
+
+            <div class="form-row form-row-full checkbox-row">
+                <div class="checkbox-inline checkbox-group">
                     <label class="radio-label"><input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}> Delete Skeleton On Decay</label>
-                    <label class="radio-label"><input type="checkbox" id="use_steam_p2p" name="use_steam_p2p" {{if .server.UseSteamP2P}}checked{{end}}> Use Steam P2P</label>
+                </div>
+            </div>
+
+            <div class="form-row form-row-full">
+                <label>Port Forwarding:</label>
+                <div class="checkbox-inline checkbox-group">
+                    <label class="radio-label" title="Adaptive forwarding: prefers the game's built-in UPnP when available and falls back to SDSM's NAT-PMP/UPnP mapping.">
+                        <input type="checkbox" id="auto_port_forward" name="auto_port_forward" {{if .server.AutoPortForward}}checked{{end}}> Port Forwarding <span class="pill pill-sm" title="Forwarding behavior is adaptive">Adaptive</span>
+                    </label>
+                </div>
+                <p class="help-text">When enabled, SDSM will first look for a port mapping created by the game via UPnP. If none is found, SDSM will attempt to create a NAT-PMP/UPnP mapping for the game UDP port.</p>
+            </div>
+
+            <div class="form-row form-row-full" id="net-forwarding-extras" style="display: none;">
+                <label>External Address:</label>
+                <div class="row-controls">
+                    <span id="external-ip-value" class="readonly-field" title="External IP as reported by your router (UPnP/NAT-PMP)">—</span>
+                    <button type="button" class="btn btn-secondary btn-min-sm" id="btn-test-port" title="Best-effort check for port reachability from the internet">Test Port</button>
                 </div>
             </div>
         </div>

@@ -1162,6 +1162,16 @@
             return;
         }
 
+        // Client-side enforce newest first (descending connected_at) even if backend/order changes later.
+        try {
+            players.sort((a, b) => {
+                if (!a || !b) return 0;
+                const ad = new Date(a.connected_at || a.ConnectDatetime || 0).getTime();
+                const bd = new Date(b.connected_at || b.ConnectDatetime || 0).getTime();
+                return bd - ad; // newest first
+            });
+        } catch(_) {}
+
         showElement(playersLiveTable, true, 'table');
         showElement(playersLiveEmpty, false);
 
@@ -1204,6 +1214,16 @@
             showElement(playersHistoryEmpty, true);
             return;
         }
+
+        // Sort descending by connected_at to keep most recent sessions at top after refresh.
+        try {
+            history.sort((a, b) => {
+                if (!a || !b) return 0;
+                const ad = new Date(a.connected_at || a.ConnectDatetime || 0).getTime();
+                const bd = new Date(b.connected_at || b.ConnectDatetime || 0).getTime();
+                return bd - ad; // newest first
+            });
+        } catch(_) {}
 
         showElement(playersHistoryTable, true, 'table');
         showElement(playersHistoryEmpty, false);
@@ -1982,14 +2002,14 @@
                         const wrap = document.createElement('div');
                         wrap.innerHTML = '<p>You can include these tokens in chat messages and the Welcome Message. They will be replaced automatically before sending to the server. Click any token to copy it.</p>'+
                             '<ul class="pl-5 token-list">'
-                            + '<li><code class="token-ref" data-token="[ServerName]" title="Click to copy">[ServerName]</code>: The server name</li>'
-                            + '<li><code class="token-ref" data-token="[WorldName]" title="Click to copy">[WorldName]</code>: The world name</li>'
-                            + '<li><code class="token-ref" data-token="[WorldID]" title="Click to copy">[WorldID]</code>: The world ID</li>'
-                            + '<li><code class="token-ref" data-token="[StartLocation]" title="Click to copy">[StartLocation]</code>: Start location</li>'
-                            + '<li><code class="token-ref" data-token="[StartCondition]" title="Click to copy">[StartCondition]</code>: Start condition</li>'
-                            + '<li><code class="token-ref" data-token="[Date]" title="Click to copy">[Date]</code>: Current date (YYYY-MM-DD)</li>'
-                            + '<li><code class="token-ref" data-token="[Time]" title="Click to copy">[Time]</code>: Current time (HH:MM:SS)</li>'
-                            + '<li><code class="token-ref" data-token="[LastPlayer]" title="Click to copy">[LastPlayer]</code>: Name of the last player to connect</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[ServerName]" title="Click to copy">[ServerName]</code>: The server name</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[WorldName]" title="Click to copy">[WorldName]</code>: The world name</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[WorldID]" title="Click to copy">[WorldID]</code>: The world ID</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[StartLocation]" title="Click to copy">[StartLocation]</code>: Start location</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[StartCondition]" title="Click to copy">[StartCondition]</code>: Start condition</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[Date]" title="Click to copy">[Date]</code>: Current date (YYYY-MM-DD)</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[Time]" title="Click to copy">[Time]</code>: Current time (HH:MM:SS)</li>'
+                            + '<li><code class="token-ref cmd-name" data-token="[LastPlayer]" title="Click to copy">[LastPlayer]</code>: Name of the last player to connect</li>'
                             + '</ul>';
                         // Event delegation for copying tokens
                         wrap.addEventListener('click', async (ev) => {
@@ -2033,6 +2053,15 @@
                                     setTimeout(()=>{ try { fb.remove(); } catch(_){} }, 1500);
                                 }
                                 setTimeout(()=>{ codeEl.classList.remove('copied'); }, 1200);
+                                // Close the info popup after copying
+                                try {
+                                    const modal = wrap.closest('.confirm-modal');
+                                    if (modal) {
+                                        const okBtn = modal.querySelector('[data-confirm]');
+                                        const closeBtn = modal.querySelector('[data-close]');
+                                        if (okBtn) okBtn.click(); else if (closeBtn) closeBtn.click();
+                                    }
+                                } catch(_) {}
                             }
                         });
                         return wrap;
@@ -2265,7 +2294,7 @@
             langs.forEach(l => {
                 const item = document.createElement('button');
                 item.type = 'button';
-                item.className = 'menu-item';
+                item.className = 'dropdown-item';
                 item.setAttribute('role', 'menuitem');
                 item.textContent = l;
                 item.addEventListener('click', function(){
@@ -2309,6 +2338,11 @@
                 // With absolute positioning in CSS, just toggle visibility under the button
                 langMenu.classList.add('active');
                 langBtn.setAttribute('aria-expanded', 'true');
+                // Focus first item for keyboard use
+                try {
+                    const first = langMenu.querySelector('.dropdown-item');
+                    if (first) first.focus();
+                } catch(_) {}
             }
             langBtn.addEventListener('click', function(e){
                 e.stopPropagation();
@@ -2326,6 +2360,35 @@
             });
             // No reposition needed with absolute anchoring
             window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeLanguageMenu(); });
+            // Keyboard support: open menu from button, navigate items
+            langBtn.addEventListener('keydown', function(e){
+                if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (!langMenu.classList.contains('active')) {
+                        buildLanguageMenu();
+                        openLanguageMenu();
+                    }
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (!langMenu.classList.contains('active')) {
+                        buildLanguageMenu();
+                        openLanguageMenu();
+                    }
+                    const items = Array.from(langMenu.querySelectorAll('.dropdown-item'));
+                    if (items.length) { try { items[items.length - 1].focus(); } catch(_) {} }
+                }
+            });
+            langMenu.addEventListener('keydown', function(e){
+                const items = Array.from(langMenu.querySelectorAll('.dropdown-item'));
+                if (!items.length) return;
+                const current = document.activeElement;
+                const idx = items.indexOf(current);
+                if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length].focus(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus(); }
+                else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+                else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+                else if (e.key === 'Escape') { e.preventDefault(); closeLanguageMenu(); try { langBtn.focus(); } catch(_) {} }
+            });
         }
 
         if (locSelect) {
@@ -2393,6 +2456,55 @@
         (function(){
             const form = document.getElementById('startup-params-form');
             if (!form) return;
+            // Toggle visibility of forwarding extras based on auto port forwarding toggle
+            const extras = document.getElementById('net-forwarding-extras');
+            const ipEl = document.getElementById('external-ip-value');
+            function refreshForwardingExtras() {
+                try {
+                    const pf = form.querySelector('#auto_port_forward');
+                    const enabled = !!(pf && pf.checked);
+                    if (enabled) {
+                        if (extras) extras.style.display = '';
+                    } else {
+                        if (extras) extras.style.display = 'none';
+                    }
+                } catch(_) {}
+            }
+            form.addEventListener('change', function(e){
+                if (e && e.target && e.target.id === 'auto_port_forward') {
+                    refreshForwardingExtras();
+                }
+            });
+            refreshForwardingExtras();
+
+            // Wire Test Port button
+            const testButton = document.getElementById('btn-test-port');
+            if (testButton) {
+                testButton.addEventListener('click', function(ev){
+                    ev.preventDefault();
+                    const serverId = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId ? rootEl.dataset.serverId : '0');
+                    if (!serverId) return;
+                    testButton.disabled = true;
+                    fetch(`/api/servers/${serverId}/port-test`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin'
+                    }).then(res => {
+                        try { if (typeof window.showToast === 'function') { showToastFromResponse(res); } } catch(_) {}
+                        return res.ok ? res.json().catch(() => ({})) : res.json().catch(() => ({}));
+                    }).then(data => {
+                        if (ipEl && data && data.external_ip) {
+                            ipEl.textContent = String(data.external_ip);
+                        }
+                        // Fallback toast if headers not set
+                        if (typeof window.showToast === 'function') {
+                            const ok = !!(data && data.active);
+                            const msg = ok ? `Port ${data.external_port || ''} appears mapped on ${data.external_ip || 'external IP'}.` : (data && data.error ? data.error : 'Port check could not verify reachability.');
+                            window.showToast({ type: ok ? 'success' : 'warning', title: 'Test Port', message: msg });
+                        }
+                    }).finally(() => { testButton.disabled = false; });
+                });
+            }
             form.addEventListener('submit', function(e){
                 if (connectionLost) return; // let default if offline (though form is API-only)
                 e.preventDefault();
@@ -2707,6 +2819,39 @@
                     const mc = Number(data.max_clients) || 0;
                     if (String(mc) !== maxEl.textContent) maxEl.textContent = String(mc);
                 }
+                // Port forwarding status row (hide when disabled)
+                const pfRow = document.getElementById('port-forward-row');
+                const pfEl = document.getElementById('port-forward-status');
+                if (pfEl) {
+                    const enabled = !!data.auto_port_forward;
+                    const active = !!data.port_forward_active;
+                    const extPort = Number(data.port_forward_external_port) || 0;
+                    const lastErr = (data.port_forward_last_error || '').trim();
+                    const source = (data.port_forward_source || '').trim();
+                    const useGame = !!data.use_game_upnp;
+                    if (!enabled) {
+                        if (pfRow) pfRow.style.display = 'none';
+                    } else if (enabled && lastErr && !active) {
+                        if (pfRow) pfRow.style.display = '';
+                        pfEl.textContent = 'Error';
+                        pfEl.className = 'pf-status pf-status-error';
+                        pfEl.title = 'Failed to establish port mapping: ' + lastErr;
+                    } else if (enabled && active) {
+                        if (pfRow) pfRow.style.display = '';
+                        const parts = [];
+                        if (extPort) parts.push(String(extPort));
+                        if (source === 'game') parts.push('Game UPnP');
+                        else if (source === 'sdsm') parts.push('SDSM NAT');
+                        pfEl.textContent = parts.length ? ('Active (' + parts.join(', ') + ')') : 'Active';
+                        pfEl.className = 'pf-status pf-status-active';
+                        pfEl.title = 'Port forwarding active' + (source ? ' via ' + (source === 'game' ? 'Game UPnP' : 'SDSM NAT') : '') + '. External UDP port may differ from internal.';
+                    } else {
+                        if (pfRow) pfRow.style.display = '';
+                        pfEl.textContent = 'Pending';
+                        pfEl.className = 'pf-status pf-status-pending';
+                        pfEl.title = useGame ? 'Attempting to establish port mapping (Game UPnP first)...' : 'Attempting to establish port mapping...';
+                    }
+                }
             } catch(_) {}
 
             const lastLine = data.last_log_line && data.last_log_line.trim() ? data.last_log_line : 'No log data';
@@ -2865,7 +3010,7 @@
         startLogTail();
         startLogListRefresh();
 
-        // Enhanced View Log button behavior: expand logs card, select primary/output log, scroll into view
+        // Enhanced View Log button behavior: expand logs card, select primary/output log, scroll into view (navigate to output log)
         (function(){
             if (!viewLogBtn) return;
             viewLogBtn.addEventListener('click', function(e){
@@ -2894,8 +3039,8 @@
                             scrollViewerToBottom();
                         }
                     }
-                    // Scroll card into view smoothly
-                    if (serverLogsCard) {
+                    // Scroll logs card into view (user explicitly requested navigation)
+                    if (serverLogsCard && typeof serverLogsCard.scrollIntoView === 'function') {
                         serverLogsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                     // Focus the viewer for accessibility
@@ -3203,9 +3348,19 @@
                 if (btn) { setButtonDisabled(btn, true); toggleButtonSpinner(btn, true); }
                 // If stopping, kick off local countdown UI based on configured delay
                 if (param === 'stop') {
-                    try { startStopCountdown(); } catch(_) {}
+                    // Only show local countdown if players are connected
+                    const liveCount = Number(playersLiveCount && playersLiveCount.textContent ? playersLiveCount.textContent.split(' ')[0] : '0');
+                    if (liveCount > 0) {
+                        try { startStopCountdown(); } catch(_) {}
+                    }
                 }
                 if (param === 'restart') {
+                    // For restart with shutdown delay, use stop countdown only if players present
+                    const sd = Math.max(0, parseInt(rootEl.dataset.shutdownDelay || '0', 10));
+                    const liveCount = Number(playersLiveCount && playersLiveCount.textContent ? playersLiveCount.textContent.split(' ')[0] : '0');
+                    if (sd > 0 && liveCount > 0) {
+                        try { startStopCountdown(); } catch(_) {}
+                    }
                     try { startRestartSpinner(); } catch(_) {}
                 }
                 const serverId = Number(rootEl.dataset.serverId || '0');
@@ -3226,6 +3381,25 @@
                     // status refresh to reflect new state
                     fetchStatus();
                     return res.ok ? res.json().catch(() => ({})) : Promise.resolve({});
+                })
+                .then((data) => {
+                    // If API provided explicit scheduling info for restart, keep countdown UX
+                    if (param === 'restart' && data && (data.status === 'restart-scheduled' || data.status === 'restart-pending')) {
+                        const eta = Number(data.shutdown_eta_seconds || 0);
+                        if (eta > 0) {
+                            // Override local end time if provided by server (more accurate)
+                            try {
+                                const now = Date.now();
+                                stopCountdownEnd = now + (eta * 1000);
+                                if (!stoppingCountdownActive) {
+                                    stoppingCountdownActive = true;
+                                    setButtonDisabled(stopButton, true);
+                                    toggleButtonSpinner(stopButton, true);
+                                }
+                            } catch(_) {}
+                        }
+                    }
+                    return data;
                 })
                 .catch(() => { /* ignore, status poll will reconcile */ })
                 .finally(() => {
@@ -3307,8 +3481,8 @@
             const saveAsAction = document.getElementById('save-as-action');
             if ((!saveMain && !saveMenuBtn) || !serverId) return;
 
-            function closeSaveMenu(){ if (saveMenu) saveMenu.classList.remove('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', 'false'); }
-            function toggleSaveMenu(){ if (!saveMenu) return; const active = saveMenu.classList.toggle('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', active ? 'true' : 'false'); }
+            function closeSaveMenu(){ if (saveMenu) saveMenu.classList.remove('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', 'false'); try { saveMenuBtn.focus(); } catch(_) {} }
+            function toggleSaveMenu(){ if (!saveMenu) return; const active = saveMenu.classList.toggle('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', active ? 'true' : 'false'); if (active) { try { const first = saveMenu.querySelector('.dropdown-item'); if (first) first.focus(); } catch(_) {} } }
             document.addEventListener('click', (ev) => {
                 const root = document.getElementById('save-split');
                 if (!root) return;
@@ -3342,6 +3516,33 @@
             });
 
             if (saveMenuBtn) saveMenuBtn.addEventListener('click', function(e){ e.preventDefault(); if (saveMenuBtn.disabled) return; toggleSaveMenu(); });
+            // Keyboard navigation for save split menu
+            if (saveMenuBtn && saveMenu) {
+                saveMenuBtn.addEventListener('keydown', function(e){
+                    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (!saveMenu.classList.contains('active')) toggleSaveMenu();
+                        const first = saveMenu.querySelector('.dropdown-item');
+                        if (first) { try { first.focus(); } catch(_) {} }
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (!saveMenu.classList.contains('active')) toggleSaveMenu();
+                        const items = Array.from(saveMenu.querySelectorAll('.dropdown-item'));
+                        if (items.length) { try { items[items.length - 1].focus(); } catch(_) {} }
+                    }
+                });
+                saveMenu.addEventListener('keydown', function(e){
+                    const items = Array.from(saveMenu.querySelectorAll('.dropdown-item'));
+                    if (!items.length) return;
+                    const current = document.activeElement;
+                    const idx = items.indexOf(current);
+                    if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length].focus(); }
+                    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus(); }
+                    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+                    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); closeSaveMenu(); }
+                });
+            }
 
             // Save As… flow using shared prompt modal (fallback to simple modal if helpers unavailable)
             (function(){

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -138,6 +139,60 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 
 		c.Next()
+	}
+}
+
+// RequestLogger provides a filtered request logging middleware reducing noise in GIN.log.
+// It suppresses logs for health probes, readiness checks, version endpoint, static assets,
+// favicon, websocket upgrades, and any successful (2xx/3xx) responses to lightweight endpoints.
+// Set SDSM_VERBOSE_HTTP=1 to force full logging (similar to default gin logger).
+func RequestLogger() gin.HandlerFunc {
+	noisy := strings.EqualFold(os.Getenv("SDSM_VERBOSE_HTTP"), "1")
+	// Paths to suppress entirely unless verbose
+	suppressedPrefixes := []string{"/static/"}
+	suppressedExact := map[string]struct{}{
+		"/healthz": {},
+		"/readyz":  {},
+		"/version": {},
+		"/favicon.ico": {},
+		"/sdsm.png": {},
+	}
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.Request.URL.Path
+		method := c.Request.Method
+		// Process request first
+		c.Next()
+		latency := time.Since(start)
+		status := c.Writer.Status()
+
+		if !noisy {
+			// Skip websocket (will generally be upgraded and noisy if logged each poll)
+			if strings.HasPrefix(strings.ToLower(c.GetHeader("Upgrade")), "websocket") {
+				return
+			}
+			if _, ok := suppressedExact[path]; ok {
+				return
+			}
+			for _, p := range suppressedPrefixes {
+				if strings.HasPrefix(path, p) {
+					return
+				}
+			}
+			// Suppress successful GETs to lightweight endpoints
+			if method == http.MethodGet && status < 400 {
+				// Allow errors through for diagnostics
+				return
+			}
+		}
+
+		// Log line format (IP - time method path proto status latency ua err)
+		clientIP := c.ClientIP()
+		ua := c.Request.UserAgent()
+		errMsg := c.Errors.ByType(gin.ErrorTypePrivate).String()
+		line := fmt.Sprintf("%s - [%s] \"%s %s %s %d %s \"%s\" %s\n", clientIP, time.Now().Format(time.RFC1123), method, path, c.Request.Proto, status, latency, ua, strings.TrimSpace(errMsg))
+		// Use gin DefaultWriter (already redirected to GIN.log) – fallback safe.
+		_, _ = gin.DefaultWriter.Write([]byte(line))
 	}
 }
 
