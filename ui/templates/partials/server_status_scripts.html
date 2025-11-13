@@ -99,6 +99,7 @@
     const cleanupDiscButton = document.getElementById('btn-cleanup-disconnected');
     const cleanupAllButton = document.getElementById('btn-cleanup-all');
     const deleteButton = document.getElementById('btn-delete');
+    const updateNeededBadge = document.getElementById('update-needed-badge');
     const connectionBanner = document.getElementById('connection-banner');
     const connectionBannerText = document.getElementById('connection-banner-text');
     const chatMessagesContainer = document.getElementById('chat-messages');
@@ -1967,6 +1968,16 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Safety net: ensure every .btn has a visible variant; default to secondary if none present
+        (function enforceButtonVariants(){
+            try {
+                const btns = document.querySelectorAll('.btn');
+                btns.forEach((b)=>{
+                    const hasVariant = b.classList.contains('btn-primary') || b.classList.contains('btn-secondary') || b.classList.contains('btn-danger') || b.classList.contains('btn-success') || b.classList.contains('btn-warning') || b.classList.contains('btn-control') || b.classList.contains('btn-storm');
+                    if (!hasVariant) b.classList.add('btn-secondary');
+                });
+            } catch(_) {}
+        })();
         const worldSelect = document.getElementById('world');
         const locSelect = document.getElementById('start_location');
         const condSelect = document.getElementById('start_condition');
@@ -2353,11 +2364,14 @@
                     closeLanguageMenu();
                 }
             });
+            // Constrain outside click listener to language menu interactions only.
+            // Using capture on the whole document can contribute to scroll jumps in some
+            // browsers when focus is moved after close; keep this minimal.
             document.addEventListener('click', function(e){
                 if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) {
                     closeLanguageMenu();
                 }
-            });
+            }, { passive: true });
             // No reposition needed with absolute anchoring
             window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeLanguageMenu(); });
             // Keyboard support: open menu from button, navigate items
@@ -2741,6 +2755,15 @@
                     statusText.textContent = 'Running';
                 }
             }
+
+            // Toggle update-needed badge: show when backend reports update_needed and no active copy in progress
+            try {
+                const needed = !!data.update_needed;
+                const busy = !!progressActive;
+                if (updateNeededBadge) {
+                    updateNeededBadge.classList.toggle('hidden', !(needed && !busy));
+                }
+            } catch(_) {}
 
             // Manage local pill countdown interval
             if (stopping && running) {
@@ -3487,7 +3510,7 @@
                 const root = document.getElementById('save-split');
                 if (!root) return;
                 if (!root.contains(ev.target)) { closeSaveMenu(); }
-            });
+            }, { passive: true });
 
             if (saveMain) saveMain.addEventListener('click', function(e){
                 e.preventDefault();

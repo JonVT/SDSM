@@ -141,8 +141,13 @@ func main() {
 	}
 
 	if app.manager.Paths != nil {
+		// Clear Gin log at startup to avoid unbounded growth.
 		clearLogFile(filepath.Join(app.manager.Paths.LogsDir(), "GIN.log"))
-		clearLogFile(app.manager.Paths.UpdateLogFile())
+		// Do NOT clear updates.log here. It may already contain progress written during
+		// manager initialization (e.g., startup selective updates). Clearing it again
+		// would wipe that progress. updates.log should only be truncated explicitly
+		// when the user requests it or during an intentional restart.
+		// clearLogFile(app.manager.Paths.UpdateLogFile())
 	}
 
 	// Start WebSocket hub

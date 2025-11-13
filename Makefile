@@ -1,6 +1,6 @@
 # Simple helper targets
 
-.PHONY: build lint lint-css
+.PHONY: build lint lint-css test
 
 build:
 	go build ./...
@@ -10,3 +10,6 @@ lint: lint-css
 
 lint-css:
 	bash tools/check_unused_css.sh
+
+test:
+	go test ./...

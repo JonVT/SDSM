@@ -30,10 +30,9 @@
         const wasOpen = menu.classList.contains('active');
         menu.classList.remove('active');
         trigger.setAttribute('aria-expanded','false');
-        // Only restore focus when explicitly requested (e.g., Escape or trigger toggle)
-        if (options.restoreFocus && wasOpen) {
-          try { trigger.focus({ preventScroll: true }); } catch(_) { try { trigger.focus(); } catch(_) {} }
-        }
+        // Avoid restoring focus on close to prevent any inadvertent scroll-to-top
+        // behaviors in some browsers. The trigger is already under the pointer
+        // when toggling; for Escape, users remain in context without forced focus.
       }
       function openMenu(){
         // Temporarily show to measure size
@@ -61,14 +60,14 @@
       }
       trigger.addEventListener('click', function(e){
         e.stopPropagation();
-        if (menu.classList.contains('active')) { closeMenu({ restoreFocus: true }); }
+        if (menu.classList.contains('active')) { closeMenu({ restoreFocus: false }); }
         else { openMenu(); }
       });
       document.addEventListener('click', function(e){
         // Close only when open, and do not restore focus on outside clicks to avoid scroll jumps
         if(menu.classList.contains('active') && !root.contains(e.target)) closeMenu({ restoreFocus: false });
       });
-      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu({ restoreFocus: true }); });
+      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu({ restoreFocus: false }); });
       // Keyboard support: open with Arrow keys/Enter/Space, navigate items with arrows/Home/End
       function focusItemAt(idx){
         const items = Array.from(menu.querySelectorAll('.dropdown-item'));

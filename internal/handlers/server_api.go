@@ -226,6 +226,9 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		})
 	}
 
+	// Compute update-needed indicator for this server based on deploy snapshot vs manager
+	updateNeeded := h.serverUpdateNeeded(s)
+
 	resp := gin.H{
 		"id":       s.ID,
 		"name":     s.Name,
@@ -255,6 +258,8 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"chat_messages":  chatMessages,
 		"banned":         banned,
 	}
+	// Include update indicator
+	resp["update_needed"] = updateNeeded
 	// Networking diagnostics: external IP (only when auto port forward requested)
 	if s.AutoPortForward {
 		if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
@@ -282,6 +287,94 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// serverUpdateNeeded returns true when a server's copied files are out of sync with
+// the manager's currently deployed components based on a per-server deploy snapshot.
+func (h *ManagerHandlers) serverUpdateNeeded(s *models.Server) bool {
+	if h == nil || h.manager == nil || s == nil {
+		return false
+	}
+	// Hide during active updates for this server
+	if h.manager.IsServerUpdateRunning(s.ID) {
+		return false
+	}
+	var paths *utils.Paths
+	if s.Paths != nil {
+		paths = s.Paths
+	} else {
+		paths = h.manager.Paths
+	}
+	if paths == nil {
+		return false
+	}
+	snapPath := paths.ServerDeploySnapshotFile(s.ID)
+	data, err := os.ReadFile(snapPath)
+	if err != nil {
+		return false
+	}
+	var snap struct {
+		Timestamp         string `json:"timestamp"`
+		Beta              bool   `json:"beta"`
+		ReleaseDeployed   string `json:"release_deployed"`
+		BetaDeployed      string `json:"beta_deployed"`
+		BepInExDeployed   string `json:"bepinex_deployed"`
+		LaunchPadDeployed string `json:"launchpad_deployed"`
+		SCONDeployed      string `json:"scon_deployed"`
+	}
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return false
+	}
+	isSentinel := func(v string) bool {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return true
+		}
+		switch v {
+		case "Missing", "Unknown", "Error", "Installed":
+			return true
+		}
+		return false
+	}
+	// Release/Beta channel source comparison
+	if s.Beta {
+		cur := strings.TrimSpace(h.manager.BetaDeployed())
+		old := strings.TrimSpace(snap.BetaDeployed)
+		if !isSentinel(cur) && !isSentinel(old) && cur != old {
+			return true
+		}
+	} else {
+		cur := strings.TrimSpace(h.manager.ReleaseDeployed())
+		old := strings.TrimSpace(snap.ReleaseDeployed)
+		if !isSentinel(cur) && !isSentinel(old) && cur != old {
+			return true
+		}
+	}
+	// BepInEx: direct string change indicates out-of-sync
+	if cur, old := strings.TrimSpace(h.manager.BepInExDeployed()), strings.TrimSpace(snap.BepInExDeployed); !isSentinel(cur) && !isSentinel(old) {
+		if !strings.EqualFold(cur, old) {
+			return true
+		}
+	}
+	// LaunchPad: case-insensitive equality
+	if cur, old := strings.TrimSpace(h.manager.LaunchPadDeployed()), strings.TrimSpace(snap.LaunchPadDeployed); !isSentinel(cur) && !isSentinel(old) {
+		if !strings.EqualFold(cur, old) {
+			return true
+		}
+	}
+	// SCON: normalize leading 'v' and case-insensitive
+	norm := func(v string) string {
+		v = strings.TrimSpace(v)
+		if v == "" { return v }
+		if v[0] == 'v' || v[0] == 'V' { v = v[1:] }
+		return strings.ToLower(v)
+	}
+	if curRaw, oldRaw := strings.TrimSpace(h.manager.SCONDeployed()), strings.TrimSpace(snap.SCONDeployed); !isSentinel(curRaw) && !isSentinel(oldRaw) {
+		if norm(curRaw) != norm(oldRaw) {
+			return true
+		}
+	}
+	return false
 }
 
 // APIServerTestPort performs a best-effort validation of port forwarding state.
@@ -1259,6 +1352,11 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 	}
 	if err := newServer.Deploy(); err != nil {
 		h.manager.Log.Write(fmt.Sprintf("Initial deploy failed for %s (ID:%d): %v", newServer.Name, newServer.ID, err))
+	} else {
+		// Persist initial deploy snapshot
+		if err := h.writeServerDeploySnapshot(newServer); err != nil {
+			h.manager.Log.Write("Warning: failed to write initial deploy snapshot: " + err.Error())
+		}
 	}
 
 	// Broadcast that a new server exists + updated stats
@@ -1745,6 +1843,10 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	// Best-effort initial deploy
 	if err := newServer.Deploy(); err != nil {
 		h.manager.Log.Write(fmt.Sprintf("Initial deploy failed for %s (ID:%d): %v", newServer.Name, newServer.ID, err))
+	} else {
+		if err := h.writeServerDeploySnapshot(newServer); err != nil {
+			h.manager.Log.Write("Warning: failed to write initial deploy snapshot: " + err.Error())
+		}
 	}
 
 	// Broadcast roster + stats

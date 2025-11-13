@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,10 +10,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
 	"sdsm/internal/models"
+	"sdsm/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -539,8 +542,75 @@ func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
 			return
 		}
 
+		// Persist a deploy snapshot capturing manager's deployed component versions
+		if err := h.writeServerDeploySnapshot(s); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write("Warning: failed to write deploy snapshot: " + err.Error())
+			}
+		}
+
 		h.manager.ServerProgressComplete(s.ID, "Completed", nil)
 	}()
+}
+
+// writeServerDeploySnapshot stores a per-server snapshot of component versions at the time
+// server files were last copied. This enables computing an "update needed" indicator later.
+func (h *ManagerHandlers) writeServerDeploySnapshot(s *models.Server) error {
+	if h == nil || h.manager == nil || s == nil {
+		return fmt.Errorf("invalid context")
+	}
+	// Resolve path helpers from server when available, otherwise from manager
+	var paths *utils.Paths
+	if s.Paths != nil { paths = s.Paths } else { paths = h.manager.Paths }
+	if paths == nil {
+		return fmt.Errorf("paths unavailable")
+	}
+	// Ensure settings directory exists
+	if err := os.MkdirAll(paths.ServerSettingsDir(s.ID), 0o755); err != nil {
+		return err
+	}
+	// Build snapshot payload
+	snap := struct {
+		Timestamp         string `json:"timestamp"`
+		Beta              bool   `json:"beta"`
+		ReleaseDeployed   string `json:"release_deployed"`
+		BetaDeployed      string `json:"beta_deployed"`
+		BepInExDeployed   string `json:"bepinex_deployed"`
+		LaunchPadDeployed string `json:"launchpad_deployed"`
+		SCONDeployed      string `json:"scon_deployed"`
+	}{
+		Timestamp:         time.Now().Format(time.RFC3339),
+		Beta:              s.Beta,
+		ReleaseDeployed:   strings.TrimSpace(h.manager.ReleaseDeployed()),
+		BetaDeployed:      strings.TrimSpace(h.manager.BetaDeployed()),
+		BepInExDeployed:   strings.TrimSpace(h.manager.BepInExDeployed()),
+		LaunchPadDeployed: strings.TrimSpace(h.manager.LaunchPadDeployed()),
+		SCONDeployed:      strings.TrimSpace(h.manager.SCONDeployed()),
+	}
+	data, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		return err
+	}
+	// Write atomically: temp file then rename
+	dst := paths.ServerDeploySnapshotFile(s.ID)
+	tmp, err := os.CreateTemp(paths.ServerSettingsDir(s.ID), "deploy-*.tmp")
+	if err != nil { return err }
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close(); _ = os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, dst); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	// Best-effort permissions
+	_ = os.Chmod(dst, 0o644)
+	return nil
 }
 
 // Home redirects to the login page (root entry point).

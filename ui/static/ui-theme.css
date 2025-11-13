@@ -1325,6 +1325,11 @@ code.token-ref.copied {
     border-top-right-radius: var(--radius-full) !important;
     border-bottom-right-radius: var(--radius-full) !important;
 }
+/* Also round when using adjacent sibling syntax to be resilient to DOM changes */
+.split-button > .btn + .btn {
+    border-top-right-radius: var(--radius-full) !important;
+    border-bottom-right-radius: var(--radius-full) !important;
+}
 /* Caret button is overlaid on the right; maintain a subtle divider */
 .split-button > .btn.btn-split-caret {
     position: absolute; right: 0; top: 0; bottom: 0; z-index: 2;
@@ -1444,6 +1449,23 @@ code.token-ref.copied {
     background: var(--surface-subtle);
     border-radius: var(--radius-full);
     overflow: hidden;
+}
+
+/* Small inline badge indicating server files are out of sync with manager components */
+.update-needed-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    background: rgba(245, 158, 11, 0.16); /* amber tint */
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    color: var(--warning-500);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .update-progress-fill {
@@ -1868,8 +1890,15 @@ code.token-ref.copied {
 [data-theme="dark"] .progress-container { background: #1a202c; border-color: #4a5568; }
 [data-theme="dark"] .progress-text { color: #cbd5e0; }
 [data-theme="dark"] .progress-bar { background: #4a5568; }
-[data-theme="dark"] .btn-secondary { background: #1a202c; color: #e2e8f0; border-color: #4a5568; }
-[data-theme="dark"] .btn-secondary:hover:not(:disabled) { background: #4a5568; }
+[data-theme="dark"] .btn-secondary {
+    /* Restore a visible gradient variant for dark mode instead of a flat background */
+    background: linear-gradient(128deg, #64748b 0%, #475569 100%); /* slate-500 -> slate-600 */
+    color: #f8fafc;
+    border-color: rgba(100, 116, 139, 0.45);
+}
+[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
+    box-shadow: 0 12px 28px rgba(100, 116, 139, 0.32);
+}
 [data-theme="dark"] .error-box { background: rgba(239, 68, 68, 0.15); border-color: #f87171; }
 [data-theme="dark"] .error-box h3,
 [data-theme="dark"] .error-box li,

@@ -134,6 +134,12 @@ func (p *Paths) ServerSettingsDir(id int) string {
 	return filepath.Join(p.ServerDir(id), "settings")
 }
 
+// ServerDeploySnapshotFile returns the path to the per-server deploy snapshot file.
+// The snapshot records component versions at the time server files were last copied.
+func (p *Paths) ServerDeploySnapshotFile(id int) string {
+	return filepath.Join(p.ServerSettingsDir(id), "deploy.json")
+}
+
 // ServerGameDir returns the game directory for a server deployment.
 func (p *Paths) ServerGameDir(id int) string {
 	return filepath.Join(p.ServerDir(id), "game")
