@@ -22,7 +22,7 @@ chmod +x ./sdsm
 ```
 
 3) Open the app
-- Visit `http://localhost:5000/login` (or `https://` if you enabled TLS)
+- Visit `http://localhost:5000/login`
 - First run guides you through setup at `/setup` (or `/admin/setup` to create the first admin).
 
 What happens automatically
@@ -41,7 +41,7 @@ What happens automatically
 	- Inbound HTTP to the SDSM port (default `5000`) if accessing from another machine
 	- Stationeers game port you configure (default `26017`) and SCON port (`GamePort + 1`) reachable as needed
 - Permissions: Ability to execute the binary and write to the chosen root path (directories are created on first run)
-- TLS (optional): Valid PEM files for `SDSM_TLS_CERT` and `SDSM_TLS_KEY` when `SDSM_USE_TLS=true`
+- TLS (optional): Terminate HTTPS at a reverse proxy (e.g., Nginx, Caddy, Traefik) if you need TLS.
 - Browser: Modern Chromium/Firefox-based browser
 
 ---
@@ -50,83 +50,7 @@ What happens automatically
 
 SDSM is a Go (Gin) web application that wraps everything you need to operate Stationeers servers on Linux. It supervises deployments, keeps SteamCMD/BepInEx/LaunchPad files current, exposes a clean dashboard for day-to-day operations, and parses log output to surface real-time player, chat, and save activity.
 
-## What’s New (Nov 2025)
-
-Backend consistency and UI cleanup refinements landed recently. Highlights:
-
-- Centralized toast notifications
-	- Added helpers in `internal/handlers/toast.go`: `SetToast`, `ToastSuccess`, `ToastInfo`, `ToastWarn`, `ToastError`.
-	- All handlers now set `X-Toast-*` headers via helpers for both HTML (HTMX) and JSON flows.
-- Unified validation and creation
-	- New helpers in `internal/handlers/validation.go`: `ValidateServerNameAvailable`, `ValidatePortAvailable`, `SanitizeWelcome`.
-	- `ValidateNewServerConfig` unifies server creation checks across web and API paths.
-	- `DefaultDifficulty` selects sensible difficulty when not provided.
-- Streamlined realtime updates
-	- `BroadcastStatusAndStats` consolidates paired status+stats websocket broadcasts for fewer code paths and consistent UI updates.
-- Safe core changes and redeploys
-	- `ApplyCoreChangeEffects` detects changes to world/start parameters/beta and triggers appropriate save purge flags and beta redeploys.
-- UI utilities and template cleanup
-	- Removed inline styles from templates in `ui/templates/`; shared, utility-first CSS lives in `ui/static/ui-theme.css` (and `modern.css`).
-	- The only intentional dynamic inline style left is progress bar width in long-running tasks.
-- Unified modal system (Confirm/Prompt/Info)
-	- Added shared templates in `ui/templates/partials/modal_templates.html` and helpers in `ui/templates/partials/modal_scripts.html`.
-	- Use `openConfirm({ title, body, confirmText, cancelText, danger })`, `openPrompt({ title, label, placeholder, defaultValue, validate })`, and `openInfo({ title, body, buttonText })`.
-	- Included on pages via `{{ template "modal_templates" . }}` and `{{ template "modal_scripts" . }}`; removes fragile inline onclick handlers and page-specific modals.
-	- Server Status now uses these for Rename, Save As, Delete, Load Save, Param-change confirmation, Token Help, and Log popup.
-- Language handling
-	API-only UI (enforced)
-
-	- Legacy HTML POST endpoints have been removed. All state-changing interactions now go through JSON APIs under `/api/*`.
-	- A POST guard middleware blocks non-API POSTs except for a small allowlist (login, setup, update, shutdown). This prevents accidental reintroduction of HTML form posts.
-	- The UI templates keep forms for progressive enhancement/semantics but submission is intercepted in JavaScript to call the corresponding API.
-	- If JavaScript is disabled, non-API POSTs will be rejected as designed.
-
-	- Language selection is handled via a dedicated endpoint and is no longer treated as a startup parameter change.
-
-### API-Only UI (New Enforcement Layer)
-
-All interactive operations now flow strictly through JSON API endpoints under `/api/*`:
-
-- Legacy HTML form POST handlers for profile password change, user management, server actions, server creation, and server settings have been removed (they now return HTTP 410 Gone).
-- A security middleware guard blocks any POST to a non-API path (except a small allowlist: `/login`, setup/update/shutdown endpoints, and the deprecated `/profile` POST which returns 410). This prevents accidental reintroduction of direct template form posts.
-- Templates retain forms only for progressive enhancement; JavaScript intercepts submissions and issues `fetch` calls to API endpoints, reading toast headers for feedback.
-- Toast headers (`X-Toast-Type`, `X-Toast-Title`, `X-Toast-Message`) are set consistently for both JSON and HTML responses so UI code can surface notifications without parsing bodies.
-
-Benefits:
-- Consistent validation and error handling via unified API handlers.
-- Easier auditing (all mutations live under `/api`).
-- Cleaner separation of concerns (presentation vs. state change).
-- Future external integrations can reuse the same API used by the built-in UI.
-
-Upgrade Note: If you had automation calling deprecated HTML endpoints, update them to use the corresponding `/api` routes. Deprecated endpoints now respond with 410 and an explanatory JSON error.
-
-### Recent Server Status Navigation Enhancements
-
-Focused quality-of-life improvements were added to the Server Status page to reduce page hops and accelerate multi-server administration:
-
-- Prev/Next server navigation buttons now appear in the header (next to global actions) instead of inside the status card for consistent placement.
-- Wraparound navigation: moving past the first or last accessible server cycles to the other end (based on your role + assignments).
-- Keyboard shortcuts: use ← / → (ArrowLeft / ArrowRight) to move between servers without clicking (ignored while typing in inputs/textareas).
-- Tooltips show the target server name and shortcut hint for quick discovery.
-- Compact button style: new `.btn-nav` 32px circular outline buttons keep the header uncluttered while preserving a comfortable focus target.
-- Rename action styling: the server rename button now uses the `btn-info` semantic variant for clearer affordance.
-- Role-based visibility: user management controls remain admin-only; operators see only permitted server actions and navigation.
-
-These improvements are incremental and do not alter existing API endpoints; they refine the UI layer for faster operator workflows.
-
-### Networking updates
-
-- Steam P2P networking has been removed and is now always disabled at server startup. The UI no longer exposes it.
-- Port Forwarding is adaptive: when enabled, SDSM first checks for a mapping created by the game via UPnP and, if not present, falls back to creating a NAT-PMP/UPnP mapping itself.
-- Status badges indicate the source when forwarding is active: “Game UPnP” or “SDSM NAT.”
-
-New/updated files of note
-
-- `internal/handlers/toast.go` – toast helpers (headers)
-- `internal/handlers/validation.go` – validation and creation pipeline
-- `internal/handlers/broadcast.go` – paired status+stats broadcast helper
-- `internal/handlers/update_helpers.go` – core change + redeploy logic
-- Multiple handler refactors to use these helpers (API and HTML flows)
+<!-- What's New section intentionally removed until v1.0.0 release -->
 
 ## Feature Highlights
 
@@ -156,7 +80,7 @@ New/updated files of note
 
 ## Using SDSM
 
-SDSM listens on port `5000` by default. Visit `http://localhost:5000/login` (or `https://` when TLS is enabled).
+SDSM listens on port `5000` by default. Visit `http://localhost:5000/login`.
 
 - Dashboard: overview of servers, players, and deployments.
 - Setup: shows live download/install progress parsed from `logs/updates.log`.
@@ -175,8 +99,6 @@ The default root path is derived from the executable directory and contains `bin
 | --- | --- |
 | `SDSM_CONFIG` | Absolute or relative path to the configuration JSON. |
 | `GIN_MODE` | Set to `release` to suppress Gin debug logging. |
-| `SDSM_USE_TLS` | Enable HTTPS delivery when set to `true`. |
-| `SDSM_TLS_CERT` / `SDSM_TLS_KEY` | PEM files used when TLS is enabled. |
 | `SDSM_ALLOW_IFRAME` | Set to `true` to permit same-origin iframe embedding. |
 
 ### Sample Launch Commands
@@ -184,9 +106,6 @@ The default root path is derived from the executable directory and contains `bin
 ```bash
 # Plain HTTP
 SDSM_CONFIG=/srv/sdsm/sdsm.config ./sdsm
-
-# HTTPS (env-style arguments)
-SDSM_USE_TLS=true SDSM_TLS_CERT=/etc/ssl/mycert.pem SDSM_TLS_KEY=/etc/ssl/mykey.pem SDSM_CONFIG=/srv/sdsm/sdsm.config ./sdsm
 ```
 
 ## Operating The Manager
@@ -219,8 +138,7 @@ SDSM_USE_TLS=true SDSM_TLS_CERT=/etc/ssl/mycert.pem SDSM_TLS_KEY=/etc/ssl/mykey.
 	- Set a non-empty Welcome Message in the server settings.
 	- Ensure SCON is reachable (use the health probe); welcome uses `SAY` with a short delay after connect.
 
-- TLS enabled but won’t start:
-	- When `SDSM_USE_TLS=true`, both `SDSM_TLS_CERT` and `SDSM_TLS_KEY` must point to readable PEM files.
+ 
 
 - SteamCMD or downloads failing:
 	- Check network connectivity and try again from the Setup or Manager Deploy controls.
@@ -270,6 +188,105 @@ sudo iptables -A INPUT -p tcp --dport 26018 -j ACCEPT
 
 ---
 
+## TLS via reverse proxy (optional)
+
+SDSM serves plain HTTP on the configured port (default `5000`). If you need HTTPS, terminate TLS at a reverse proxy and forward to SDSM over localhost. Below are minimal examples.
+
+### Nginx
+
+```nginx
+server {
+		listen 80;
+		server_name example.com;
+		return 301 https://$host$request_uri;
+}
+
+server {
+		listen 443 ssl http2;
+		server_name example.com;
+
+		ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+		ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+		# Proxy to SDSM
+		location / {
+				proxy_pass http://127.0.0.1:5000;
+				proxy_set_header Host $host;
+				proxy_set_header X-Real-IP $remote_addr;
+				proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+				proxy_set_header X-Forwarded-Proto $scheme;
+
+				# WebSockets (if used)
+				proxy_http_version 1.1;
+				proxy_set_header Upgrade $http_upgrade;
+				proxy_set_header Connection $connection_upgrade;
+				map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+		}
+}
+```
+
+### Caddy
+
+```caddyfile
+example.com {
+		encode zstd gzip
+		reverse_proxy 127.0.0.1:5000
+}
+```
+
+### Traefik (static file + dynamic router)
+
+```yaml
+# traefik.yml (static)
+entryPoints:
+	web:
+		address: ":80"
+	websecure:
+		address: ":443"
+providers:
+	file:
+		filename: /etc/traefik/dynamic.yml
+certificatesResolvers:
+	letsencrypt:
+		acme:
+			email: you@example.com
+			storage: /letsencrypt/acme.json
+			httpChallenge:
+				entryPoint: web
+```
+
+```yaml
+# dynamic.yml
+http:
+	routers:
+		sdsm:
+			rule: Host(`example.com`)
+			entryPoints: [websecure]
+			service: sdsm
+			tls:
+				certResolver: letsencrypt
+		sdsm-redirect:
+			rule: Host(`example.com`)
+			entryPoints: [web]
+			middlewares: [redirect]
+			service: noop@internal
+	middlewares:
+		redirect:
+			redirectScheme:
+				scheme: https
+				permanent: true
+	services:
+		sdsm:
+			loadBalancer:
+				servers:
+					- url: http://127.0.0.1:5000
+```
+
+Notes
+- Open port 443/tcp on your firewall when exposing HTTPS.
+- Keep SDSM bound to localhost or restrict access at the proxy if exposing to the internet.
+- Enable HSTS only after validating HTTPS works across your domain/subdomains.
+
 ## Run as a systemd Service (optional)
 
 Create a unit file at `/etc/systemd/system/sdsm.service`:
@@ -285,10 +302,6 @@ User=sdsm
 Group=sdsm
 WorkingDirectory=/srv/sdsm
 Environment=SDSM_CONFIG=/srv/sdsm/sdsm.config
-# Uncomment to enable HTTPS
-# Environment=SDSM_USE_TLS=true
-# Environment=SDSM_TLS_CERT=/etc/ssl/certs/sdsm.crt
-# Environment=SDSM_TLS_KEY=/etc/ssl/private/sdsm.key
 ExecStart=/srv/sdsm/sdsm
 Restart=on-failure
 RestartSec=5s
@@ -315,7 +328,7 @@ sudo systemctl enable --now sdsm.service
 sudo systemctl status sdsm.service --no-pager
 ```
 
-Note: Adjust paths, user/group, and TLS vars for your environment. Logs live under the configured root path; ensure the `sdsm` user can write to it.
+Note: Adjust paths and user/group for your environment. Logs live under the configured root path; ensure the `sdsm` user can write to it.
 
 ## Developers
 
