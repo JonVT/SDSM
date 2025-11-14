@@ -2890,10 +2890,10 @@ func (s *Server) detectSCONPortFromLog() int {
 	if err != nil {
 		return 0
 	}
-    // Explicit containment guard to satisfy static analysis
-    if !isPathWithin(base, safeLogPath) {
-        return 0
-    }
+	// Explicit containment guard to satisfy static analysis
+	if !isPathWithin(base, safeLogPath) {
+		return 0
+	}
 	f, err := os.Open(safeLogPath)
 	if err != nil {
 		return 0
