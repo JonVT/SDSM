@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"sdsm/internal/utils"
 )
@@ -2270,16 +2271,41 @@ func (s *Server) Start() {
 
 	s.Logger.Write(fmt.Sprintf("World: %s  -  WorldId: %s", s.World, s.WorldID))
 
+	// Sanitize key launch parameters to a restricted character set to avoid
+	// injecting unexpected control characters or shell metacharacters into
+	// downstream wrappers (e.g. run_bepinex.sh) while preserving readability.
+	clean := func(val string) string {
+		v := strings.TrimSpace(val)
+		if v == "" {
+			return ""
+		}
+		var b strings.Builder
+		for _, r := range v {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	launchName := clean(s.Name)
+	launchWorld := clean(worldIdentifier)
+	launchDifficulty := clean(s.Difficulty)
+	launchStartCond := clean(s.StartCondition)
+	launchStartLoc := clean(s.StartLocation)
+	// Password/auth secret may legitimately include broader character set; strip newlines only.
+	secure := func(v string) string { return strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "") }
+	serverPassword := secure(s.Password)
+	serverAuthSecret := secure(s.AuthSecret)
 	args := []string{
-		"-FILE", "start", s.Name, worldIdentifier, s.Difficulty, s.StartCondition, s.StartLocation,
+		"-FILE", "start", launchName, launchWorld, launchDifficulty, launchStartCond, launchStartLoc,
 		"-logFile", s.Paths.ServerOutputFile(s.ID),
 		"-SETTINGSPATH", s.Paths.ServerSettingsFile(s.ID),
 		"-SETTINGS",
 		"ServerVisible", strconv.FormatBool(s.Visible),
 		"GamePort", strconv.Itoa(s.Port),
-		"ServerName", s.Name,
-		"ServerPassword", s.Password,
-		"ServerAuthSecret", s.AuthSecret,
+		"ServerName", launchName,
+		"ServerPassword", serverPassword,
+		"ServerAuthSecret", serverAuthSecret,
 		"ServerMaxPlayers", strconv.Itoa(s.MaxClients),
 		"AutoSave", strconv.FormatBool(s.AutoSave),
 		"SaveInterval", strconv.Itoa(s.SaveInterval),
