@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/JonVT/SDSM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JonVT/SDSM/actions/workflows/ci.yml)
 
-![SDSM logo](sdsm.png)
+<img src="docs/media/sdsm.png" alt="SDSM logo" width="120" />
 
 Modern control plane for running, updating, and monitoring Stationeers dedicated servers. Self-hosted. No telemetry.
 
@@ -68,7 +68,7 @@ SDSM is a Go (Gin) web application that wraps everything you need to operate Sta
 
 | Manager | Dashboard | Server Control |
 | --- | --- | --- |
-| ![Manager](docs/media/SDSM%20Manager.png) | ![Dashboard](docs/media/SDSM%20Dashboard.png) | ![Server Control](docs/media/SDSM%20Server%20Control.png) |
+| <img src="docs/media/SDSM%20Manager.png" alt="Manager" width="320" /> | <img src="docs/media/SDSM%20Dashboard.png" alt="Dashboard" width="320" /> | <img src="docs/media/SDSM%20Server%20Control.png" alt="Server Control" width="320" /> |
 
 ## Architecture At A Glance
 
