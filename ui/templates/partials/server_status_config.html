@@ -88,7 +88,7 @@
                 <label for="welcome_delay_seconds">Message Delay (sec):</label>
                 <div class="row-controls">
                     <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" value="{{.server.WelcomeDelaySeconds}}" class="form-input-inline" min="0" max="600" placeholder="1" autocomplete="off" title="Delay before sending welcome / welcome back messages.">
-                    <button type="button" class="btn btn-secondary btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages">Message Tokens</button>
+                        <button type="button" class="btn btn-ghost btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages">Message Tokens</button>
                 </div>
             </div>
 
@@ -113,6 +113,21 @@
                 <div>
                     <label for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec):</label>
                     <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" value="{{.server.BepInExInitTimeoutSeconds}}" class="form-input-inline" min="5" max="120" placeholder="10" autocomplete="off" title="Maximum time to wait for initial BepInEx bootstrap on Windows.">
+                </div>
+            </div>
+
+            <div class="form-row grid-3 grid-items-end">
+                <div>
+                    <label for="log_attach_rehydrate_kb">Attach Rehydrate Window (KB):</label>
+                    <input type="number" id="log_attach_rehydrate_kb" name="log_attach_rehydrate_kb" value="{{.server.LogAttachRehydrateKB}}" class="form-input-inline" min="16" max="4096" step="16" placeholder="256" autocomplete="off" title="How many KB of recent output log to replay when attaching to a running server.">
+                </div>
+                <div>
+                    <label for="clients_query_retry_count">CLIENTS Retry Count:</label>
+                    <input type="number" id="clients_query_retry_count" name="clients_query_retry_count" value="{{.server.ClientsQueryRetryCount}}" class="form-input-inline" min="1" max="10" step="1" placeholder="3" autocomplete="off" title="How many times to issue CLIENTS after attach.">
+                </div>
+                <div>
+                    <label for="clients_query_retry_delay_seconds">CLIENTS Retry Delay (sec):</label>
+                    <input type="number" id="clients_query_retry_delay_seconds" name="clients_query_retry_delay_seconds" value="{{.server.ClientsQueryRetryDelaySeconds}}" class="form-input-inline" min="1" max="10" step="1" placeholder="2" autocomplete="off" title="Seconds to wait between CLIENTS retries.">
                 </div>
             </div>
 
@@ -168,7 +183,7 @@
                 <label>External Address:</label>
                 <div class="row-controls">
                     <span id="external-ip-value" class="readonly-field" title="External IP as reported by your router (UPnP/NAT-PMP)">—</span>
-                    <button type="button" class="btn btn-secondary btn-min-sm" id="btn-test-port" title="Best-effort check for port reachability from the internet">Test Port</button>
+                        <button type="button" class="btn btn-info btn-min-sm" id="btn-test-port" title="Best-effort check for port reachability from the internet">Test Port</button>
                 </div>
             </div>
         </div>

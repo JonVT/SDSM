@@ -136,11 +136,21 @@ type Manager struct {
 	// AutoPortForwardManager enables automatic router port forwarding (TCP) for the
 	// manager's own HTTP(S) port via UPnP/NAT-PMP when available. Default is false.
 	AutoPortForwardManager bool `json:"auto_port_forward_manager"`
+	// Discord integration
+	// DiscordDefaultWebhook is the per-manager default webhook for notifications (servers, updates)
+	DiscordDefaultWebhook string `json:"discord_default_webhook"`
+	// DiscordBugReportWebhook routes user-submitted bug reports to the SDSM community server
+	DiscordBugReportWebhook string `json:"discord_bug_report_webhook"`
 	// Transient NAT/port forward status for manager port (not persisted)
 	ManagerPortForwardActive       bool   `json:"-"`
 	ManagerPortForwardExternalPort int    `json:"-"`
 	ManagerPortForwardLastError    string `json:"-"`
 	pfStop                         chan struct{} `json:"-"`
+	// OnServerAttached is an optional callback invoked whenever the manager
+	// attaches to an already running detached server process during initialization
+	// or through recovery flows. Handlers can set this to trigger realtime UI
+	// broadcasts so dashboards update immediately after attach.
+	OnServerAttached func(*models.Server) `json:"-"`
 }
 
 type UpdateProgress struct {
@@ -859,6 +869,16 @@ func (m *Manager) initializeServers() {
 	if m.Paths == nil {
 		m.Paths = utils.NewPaths("/tmp/sdsm")
 	}
+	// Perform best-effort process discovery before per-server initialization when detached mode is enabled.
+	var discovered map[int]int
+	if m.DetachedServers {
+		discovered = discoverRunningServerPIDs(m.Paths, func(msg string) { m.safeLog(msg) })
+		if len(discovered) > 0 {
+			m.safeLog(fmt.Sprintf("Process discovery found running detached servers: %v", discovered))
+		} else {
+			m.safeLog("Process discovery found no running detached server processes")
+		}
+	}
 	for _, srv := range m.Servers {
 		if srv == nil {
 			continue
@@ -868,6 +888,32 @@ func (m *Manager) initializeServers() {
 			m.safeLog(fmt.Sprintf("Failed to ensure logs directory for server %d: %v", srv.ID, err))
 		}
 		srv.EnsureLogger(m.Paths)
+
+		// Attempt to attach via process discovery first; fallback to PID file if necessary.
+		if m.DetachedServers {
+			if pid, ok := discovered[srv.ID]; ok && pid > 0 && models.IsPidAlive(pid) {
+				srv.AttachToRunning(pid)
+				m.safeLog(fmt.Sprintf("Attached (discovered) detached server %s (ID:%d) PID %d", srv.Name, srv.ID, pid))
+				if m.OnServerAttached != nil {
+					m.OnServerAttached(srv)
+				}
+			} else {
+				// Fallback to PID file method for backward compatibility / Windows stub.
+				pidPath := m.Paths.ServerPIDFile(srv.ID)
+				if data, err := os.ReadFile(pidPath); err == nil {
+					pidStr := strings.TrimSpace(string(data))
+					if pid, perr := strconv.Atoi(pidStr); perr == nil && pid > 0 {
+						if models.IsPidAlive(pid) {
+							srv.AttachToRunning(pid)
+							m.safeLog(fmt.Sprintf("Attached (pidfile) detached server %s (ID:%d) PID %d", srv.Name, srv.ID, pid))
+							if m.OnServerAttached != nil {
+								m.OnServerAttached(srv)
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -936,6 +982,9 @@ func (m *Manager) load() (bool, error) {
 	m.TLSKeyPath = strings.TrimSpace(temp.TLSKeyPath)
 	m.TrayEnabled = temp.TrayEnabled
 	m.AutoPortForwardManager = temp.AutoPortForwardManager
+	// Discord integration fields
+	m.DiscordDefaultWebhook = strings.TrimSpace(temp.DiscordDefaultWebhook)
+	m.DiscordBugReportWebhook = strings.TrimSpace(temp.DiscordBugReportWebhook)
 	// Default false when missing (zero value already false). Propagate to servers.
 	for _, srv := range m.Servers {
 		if srv != nil {
@@ -1383,6 +1432,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 	if m.UpdateLog != nil {
 		m.UpdateLog.Write(fmt.Sprintf("Deployment (%s) started", deployType))
 	}
+	m.notifyDeployStart(deployType)
 
 	m.Paths.DeployRoot(m.Log)
 
@@ -1548,6 +1598,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 		if m.UpdateLog != nil {
 			m.UpdateLog.Write(fmt.Sprintf("Deployment (%s) completed with errors in %s", deployType, duration))
 		}
+		m.notifyDeployComplete(deployType, duration, errs)
 		return combined
 	}
 
@@ -1555,6 +1606,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 	if m.UpdateLog != nil {
 		m.UpdateLog.Write(fmt.Sprintf("Deployment (%s) completed successfully in %s", deployType, duration))
 	}
+	m.notifyDeployComplete(deployType, duration, nil)
 	m.Active = true
 	return nil
 }

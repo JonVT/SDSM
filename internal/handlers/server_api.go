@@ -472,6 +472,7 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	}
 
 	s.Start()
+	h.manager.NotifyServerEvent(s, "started", "Server start initiated.")
 	// Broadcast status + stats for realtime dashboards
 	h.BroadcastStatusAndStats(s)
 	// If requested via HTMX for HTML swap, return a single server card fragment
@@ -515,6 +516,11 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	s.StopAsync(func(srv *models.Server) {
 		// Broadcast each significant state change (scheduled, canceled, final stopped)
 		h.BroadcastStatusAndStats(srv)
+		if srv.Stopping && srv.Running {
+			// countdown in progress
+		} else if !srv.Running && !srv.Starting {
+			h.manager.NotifyServerEvent(srv, "stopped", "Server shutdown completed.")
+		}
 	})
 
 	// Initial response reflects scheduling (server still running for delayed stops)
@@ -596,10 +602,12 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 			return fmt.Sprintf("%d minutes %d seconds", m, rem)
 		}
 		ToastInfo(c, "Shutdown Scheduled", fmt.Sprintf("%s will shut down in %s.", s.Name, formatTf(d)))
+		h.manager.NotifyServerEvent(s, "stopping", fmt.Sprintf("Shutdown scheduled; ETA %s.", formatTf(d)))
 		c.JSON(http.StatusOK, gin.H{"status": "scheduled", "eta_seconds": int(d.Seconds())})
 		return
 	}
 	ToastInfo(c, "Shutdown Scheduled", s.Name+" is stopping now.")
+	h.manager.NotifyServerEvent(s, "stopping", "Shutdown initiated (no delay).")
 	c.JSON(http.StatusOK, gin.H{"status": "stopping"})
 }
 
@@ -637,6 +645,7 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 			if rem > 0 { eta = rem }
 		}
 		ToastInfo(c, "Restart Pending", s.Name+" shutdown already in progress; restart will follow.")
+		h.manager.NotifyServerEvent(s, "restart-pending", fmt.Sprintf("Shutdown already in progress; restart will follow (ETA %d seconds).", eta))
 		c.JSON(http.StatusOK, gin.H{"status": "restart-pending", "shutdown_eta_seconds": eta})
 		return
 	}
@@ -660,12 +669,17 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 					if sd > 0 { time.Sleep(time.Duration(sd) * time.Second) }
 					// Start server
 					srv2.Start()
+					// Notify restart execution
+					h.manager.NotifyServerEvent(srv2, "restarting", "Server restarting now.")
 					// Broadcast new running state
 					h.BroadcastStatusAndStats(srv2)
+					// Notify restart completion
+					h.manager.NotifyServerEvent(srv2, "started", "Restart complete.")
 				}(restartDelay, srv)
 			}
 		})
 		ToastInfo(c, "Restart Scheduled", s.Name+" will restart after shutdown completes.")
+		h.manager.NotifyServerEvent(s, "restart-scheduled", fmt.Sprintf("Restart scheduled; shutdown delay %d seconds.", shutdownDelay))
 		c.JSON(http.StatusOK, gin.H{"status": "restart-scheduled", "shutdown_eta_seconds": shutdownDelay})
 		return
 	}
@@ -674,6 +688,7 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 	go s.Restart()
 	h.BroadcastStatusAndStats(s)
 	ToastInfo(c, "Server Restarting", s.Name+" is restarting...")
+	h.manager.NotifyServerEvent(s, "restarting", "Immediate restart initiated.")
 	c.JSON(http.StatusOK, gin.H{"status": "restarting"})
 }
 
@@ -1045,6 +1060,41 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		}
 	}
 
+	// Attach/rehydration knobs
+	if v := strings.TrimSpace(body["log_attach_rehydrate_kb"]); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			// clamp 16KB .. 4096KB
+			if n < 16 {
+				n = 16
+			} else if n > 4096 {
+				n = 4096
+			}
+			s.LogAttachRehydrateKB = n
+		}
+	}
+	if v := strings.TrimSpace(body["clients_query_retry_count"]); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			// clamp 1 .. 10
+			if n < 1 {
+				n = 1
+			} else if n > 10 {
+				n = 10
+			}
+			s.ClientsQueryRetryCount = n
+		}
+	}
+	if v := strings.TrimSpace(body["clients_query_retry_delay_seconds"]); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			// clamp 1 .. 10 seconds
+			if n < 1 {
+				n = 1
+			} else if n > 10 {
+				n = 10
+			}
+			s.ClientsQueryRetryDelaySeconds = n
+		}
+	}
+
 	// BepInEx init timeout (Windows bootstrap)
 	if v := strings.TrimSpace(body["bepinex_init_timeout_seconds"]); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
@@ -1086,6 +1136,40 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 
 	ToastSuccess(c, "Settings Updated", "Startup parameters saved.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerAttachDefaults returns effective defaults for attach/rehydration knobs
+// so the UI can show correct placeholders even when unset.
+// GET /api/servers/:server_id/settings/attach-defaults
+func (h *ManagerHandlers) APIServerAttachDefaults(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	// Compute effective values with defaults
+	windowKB := s.LogAttachRehydrateKB
+	if windowKB <= 0 {
+		windowKB = 256
+	}
+	retryCount := s.ClientsQueryRetryCount
+	if retryCount <= 0 {
+		retryCount = 3
+	}
+	retryDelay := s.ClientsQueryRetryDelaySeconds
+	if retryDelay <= 0 {
+		retryDelay = 2
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"log_attach_rehydrate_kb":           windowKB,
+		"clients_query_retry_count":         retryCount,
+		"clients_query_retry_delay_seconds": retryDelay,
+	})
 }
 
 // APIServerSetLanguage updates only the language setting (no redeploy here).
@@ -2023,6 +2107,116 @@ func (h *ManagerHandlers) APIServerLogTail(c *gin.Context) {
 		"size":   size,
 		"reset":  reset,
 	})
+}
+
+// APIServerLogDownload streams a server log file as an attachment.
+// RBAC: admins or assigned operators may download.
+func (h *ManagerHandlers) APIServerLogDownload(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// RBAC: allow admin or assigned operator
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	name := filepath.Base(strings.TrimSpace(c.Query("name")))
+	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+
+	var logsDir string
+	if s.Paths != nil {
+		logsDir = s.Paths.ServerLogsDir(s.ID)
+	} else if h.manager.Paths != nil {
+		logsDir = h.manager.Paths.ServerLogsDir(s.ID)
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	path := filepath.Join(logsDir, name)
+	if _, err := os.Stat(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to access log"})
+		return
+	}
+	c.FileAttachment(path, name)
+}
+
+// APIServerLogClear truncates a server log file. Admin-only.
+// Accepts name via form or JSON body.
+func (h *ManagerHandlers) APIServerLogClear(c *gin.Context) {
+	// Admin only
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	name := strings.TrimSpace(c.PostForm("name"))
+	if name == "" {
+		var body struct{ Name string `json:"name"` }
+		if err := c.ShouldBindJSON(&body); err == nil {
+			name = strings.TrimSpace(body.Name)
+		}
+	}
+	name = filepath.Base(name)
+	if name == "" || !strings.HasSuffix(strings.ToLower(name), ".log") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid log file"})
+		return
+	}
+
+	var logsDir string
+	if s.Paths != nil {
+		logsDir = s.Paths.ServerLogsDir(s.ID)
+	} else if h.manager.Paths != nil {
+		logsDir = h.manager.Paths.ServerLogsDir(s.ID)
+	}
+	if strings.TrimSpace(logsDir) == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "logs directory not available"})
+		return
+	}
+	path := filepath.Join(logsDir, name)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "unable to clear log"})
+		return
+	}
+	_ = f.Close()
+	ToastWarn(c, "Log Cleared", name+" truncated")
+	c.JSON(http.StatusOK, gin.H{"status": "cleared"})
 }
 
 // APIPortForwardMetrics returns aggregated counts of port forwarding state across servers.

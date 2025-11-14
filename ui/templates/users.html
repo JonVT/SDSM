@@ -25,7 +25,7 @@
         <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
           <span id="theme-icon">🌙</span>
         </button>
-        <a href="/manager" class="btn btn-secondary">Back to Manager</a>
+        <a href="/manager" class="btn btn-ghost">Back to Manager</a>
         {{ template "user_menu" . }}
       </div>
     </header>
@@ -89,13 +89,13 @@
                     <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
                     <option value="operator" {{ if eq .Role "operator" }}selected{{ end }}>Operator</option>
                   </select>
-                  <button type="submit" class="btn btn-secondary">Update Role</button>
+                  <button type="submit" class="btn btn-info">Update Role</button>
                 </form>
                 <!-- API-only: neutral form, JS intercepts -->
                 <form method="POST" action="#" class="inline-flex gap-2 items-center ml-2 form-reset-pass" data-username="{{ .Username }}" data-api-only="true">
                   <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
                   <input name="reset_password_value" type="password" class="form-input w-160" placeholder="new password" />
-                  <button type="submit" class="btn btn-secondary">Set Password</button>
+                  <button type="submit" class="btn btn-info">Set Password</button>
                 </form>
                 <!-- API-only: neutral form, JS intercepts -->
                 <form method="POST" action="#" class="inline ml-2 form-delete-user" data-username="{{ .Username }}" data-api-only="true">

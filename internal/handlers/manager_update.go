@@ -42,6 +42,9 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		rootPath := middleware.SanitizePath(c.PostForm("root_path"))
 		portStr := c.PostForm("port")
 		language := middleware.SanitizeString(c.PostForm("language"))
+		// Discord webhooks
+		dcDefault := strings.TrimSpace(c.PostForm("discord_default_webhook"))
+		dcBug := strings.TrimSpace(c.PostForm("discord_bug_report_webhook"))
 		detachedServers := c.PostForm("detached_servers") == "on"
 		trayEnabled := c.PostForm("tray_enabled") == "on"
 		tlsEnabled := c.PostForm("tls_enabled") == "on"
@@ -157,6 +160,12 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			}
 		}
 		h.manager.Save()
+		// Update Discord webhooks after base config save (same transaction)
+		if dcDefault != "" || dcBug != "" {
+			if dcDefault != "" { h.manager.DiscordDefaultWebhook = dcDefault }
+			if dcBug != "" { h.manager.DiscordBugReportWebhook = dcBug }
+			h.manager.Save()
+		}
 		// Apply manager port forwarding changes without requiring restart
 		if !prevPF && h.manager.AutoPortForwardManager {
 			go h.manager.StartManagerPortForwarding()

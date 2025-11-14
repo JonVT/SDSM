@@ -312,6 +312,16 @@ go build -o dist/sdsm ./cmd/sdsm
 SDSM_CONFIG=/path/to/sdsm.config ./dist/sdsm
 ```
 
+### Architecture Decision Records (ADRs)
+
+We track notable design and operations decisions in ADRs under `docs/adr/`.
+
+- ADR Index: `docs/adr/README.md`
+- ADR 0001 — Session Decisions (2025-11-14): `docs/adr/0001-session-decisions-2025-11-14.md`
+	- New ADRs: start from `docs/adr/_template.md` and add to the index.
+
+These documents capture conventions like Discord integration, lifecycle notifications, detached server attach-on-restart, Windows/Linux PID liveness checks, SCON-only command delivery, adaptive port forwarding, in-process log parsers, player-save automation, and attach/rehydration knobs.
+
 ### Developer Notes: Helper APIs (new)
 
 Cross-cutting concerns are now centralized. Prefer these helpers in handlers:

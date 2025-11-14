@@ -14,6 +14,7 @@ import (
 	"sdsm/internal/handlers"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
+	"sdsm/internal/models"
 	"sdsm/internal/utils"
 	"sdsm/internal/version"
 	"sdsm/ui"
@@ -396,6 +397,15 @@ func setupRouter() *gin.Engine {
 	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log)
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
+	// Wire realtime broadcast for servers that are attached on startup (detached mode)
+	if app != nil && app.manager != nil {
+		app.manager.OnServerAttached = func(s *models.Server) {
+			if s == nil {
+				return
+			}
+			managerHandlers.BroadcastStatusAndStats(s)
+		}
+	}
 
 	// Authentication routes
 	auth := r.Group("/")
@@ -443,6 +453,14 @@ func setupRouter() *gin.Engine {
 	// Attach role and perform admin safety net via shared middleware
 	api.Use(middleware.EnsureRoleContext(app.userStore, app.manager.Log, "API"))
 	{
+		// Report a bug to configured SDSM Discord webhook (admin only)
+		api.POST("/bug-report", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.BugReportPOST(c)
+		})
 		// Profile self-service password change (JSON only)
 		api.POST("/profile/password", profileHandlers.APIProfileChangePassword)
 		// Simple refresh endpoint used by UI header buttons to trigger htmx 'refresh' events.
@@ -489,6 +507,8 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/logs", managerHandlers.APIServerLogsList)
 		api.GET("/servers/:server_id/log", managerHandlers.APIServerLog)
 		api.GET("/servers/:server_id/log/tail", managerHandlers.APIServerLogTail)
+		api.GET("/servers/:server_id/log/download", managerHandlers.APIServerLogDownload)
+		api.POST("/servers/:server_id/log/clear", managerHandlers.APIServerLogClear)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
 		// legacy generic command removed; use explicit endpoints below
@@ -507,6 +527,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
 		api.POST("/servers/:server_id/player-saves/delete-all", managerHandlers.APIServerPlayerSaveDeleteAll)
 		api.POST("/servers/:server_id/settings", managerHandlers.APIServerUpdateSettings)
+		api.GET("/servers/:server_id/settings/attach-defaults", managerHandlers.APIServerAttachDefaults)
 		api.POST("/servers/:server_id/language", managerHandlers.APIServerSetLanguage)
 		api.POST("/servers/:server_id/update-server", managerHandlers.APIServerUpdateServerFiles)
 		// Admin-only delete via API

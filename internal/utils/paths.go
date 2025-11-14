@@ -160,6 +160,13 @@ func (p *Paths) ServerOutputFile(id int) string {
 	return filepath.Join(p.ServerLogsDir(id), fmt.Sprintf("%s_output.log", p.ServerName(id)))
 }
 
+// ServerPIDFile returns the path to a PID file used to record the game process ID
+// when a server is launched in detached mode. The manager uses this to detect
+// running detached servers after it restarts.
+func (p *Paths) ServerPIDFile(id int) string {
+	return filepath.Join(p.ServerDir(id), "server.pid")
+}
+
 // ServerSettingsFile returns the settings file path for a server.
 func (p *Paths) ServerSettingsFile(id int) string {
 	return filepath.Join(p.ServerSettingsDir(id), "settings.xml")

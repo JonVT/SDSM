@@ -111,7 +111,7 @@
                     </h3>
                     <div class="right-title-actions">
                         {{ if eq .role "admin" }}
-                        <button type="button" id="btn-rename-server" class="btn btn-secondary btn-min-sm" title="Rename server" aria-label="Rename server">
+                        <button type="button" id="btn-rename-server" class="btn btn-ghost btn-min-sm" title="Rename server" aria-label="Rename server">
                             <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
                                 <path d="M14.06 4.94l3.75 3.75"></path>
@@ -120,7 +120,7 @@
                         </button>
                         {{ end }}
                         <div class="lang-control relative">
-                            <button type="button" id="btn-language" class="btn btn-secondary btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
+                            <button type="button" id="btn-language" class="btn btn-ghost btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
                                 <span aria-hidden="true">🌐</span>
                                 <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
                             </button>
@@ -199,12 +199,43 @@
         <div class="card" id="server-logs-card">
             <div class="card-header">
                 <h2 class="card-title m-0">Logs</h2>
-                <button type="button" id="serverLogsToggle" class="btn btn-secondary btn-min-sm" aria-expanded="true" aria-controls="serverLogsContent" title="Collapse or expand logs">
+                <button type="button" id="serverLogsToggle" class="btn btn-ghost btn-min-sm" aria-expanded="true" aria-controls="serverLogsContent" title="Collapse or expand logs">
                     <svg id="serverLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     <span id="serverLogsToggleLabel" class="ml-6">Less</span>
                 </button>
             </div>
             <div id="serverLogsContent" class="card-body" aria-hidden="false">
+                <div class="control-actions mb-3">
+                    <div class="button-group">
+                        <button type="button" id="sl-refresh" class="btn btn-info">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                                <path d="M21 3v5h-5"/>
+                            </svg>
+                            <span class="ml-6">Refresh</span>
+                        </button>
+                        <button type="button" id="sl-download" class="btn btn-info">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            <span class="ml-6">Download</span>
+                        </button>
+                        {{ if eq .role "admin" }}
+                        <button type="button" id="sl-clear" class="btn btn-danger">
+                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                <path d="M10 11v6"/>
+                                <path d="M14 11v6"/>
+                                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                            <span class="ml-6">Clear</span>
+                        </button>
+                        {{ end }}
+                    </div>
+                </div>
                 <div class="logs-grid">
                     <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
                     <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">

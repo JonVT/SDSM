@@ -267,6 +267,17 @@ body {
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.24);
 }
 
+/* Accessible focus ring for keyboard users */
+.btn:focus-visible {
+    outline: 2px solid var(--primary-500);
+    outline-offset: 2px;
+}
+
+.btn:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.18);
+}
+
 .btn:disabled {
     opacity: 0.55;
     cursor: not-allowed;
@@ -287,6 +298,46 @@ body {
     border-color: rgba(107, 114, 128, 0.5);
 }
 
+/* New semantic variants */
+/* Ghost: minimal, for Back/Cancel/Close and low-emphasis affordances */
+.btn-ghost {
+    background: transparent;
+    color: var(--text-primary);
+    border-color: var(--panel-border);
+}
+.btn-ghost:hover { background: var(--surface-soft); }
+
+/* Neutral: subtle filled look, softer than secondary */
+.btn-neutral {
+    background: var(--surface-subtle);
+    color: var(--text-primary);
+    border-color: var(--panel-border);
+}
+.btn-neutral:hover { box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18); }
+
+/* Info: utility actions (Refresh/Download/Test). Mirrors current btn-control default. */
+.btn-info {
+    background: linear-gradient(128deg, #0ea5e9 0%, #0284c7 100%); /* sky-500 -> sky-600 */
+    color: #f0f9ff;
+    border-color: rgba(14, 165, 233, 0.48);
+}
+.btn-info:hover { box-shadow: 0 12px 28px rgba(2, 132, 199, 0.35); }
+
+/* Outline: primary-colored outline, no fill */
+.btn-outline {
+    background: transparent;
+    color: var(--primary-600);
+    border-color: var(--primary-600);
+}
+.btn-outline:hover { background: rgba(37, 99, 235, 0.12); }
+
+/* Dark theme fine-tuning for outline and ghost */
+[data-theme="dark"] .btn-outline {
+    color: var(--primary-400);
+    border-color: var(--primary-400);
+}
+[data-theme="dark"] .btn-ghost:hover { background: rgba(255,255,255,0.06); }
+
 .btn-danger {
     background: linear-gradient(128deg, #f87171 0%, #ef4444 100%);
     color: white;
@@ -300,13 +351,13 @@ body {
 }
 
 /* Default look for control buttons without explicit variant (e.g., Save/Resume) */
-.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm) {
+.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm):not(.btn-info):not(.btn-neutral):not(.btn-ghost):not(.btn-outline) {
     background: linear-gradient(128deg, #0ea5e9 0%, #0284c7 100%); /* sky-500 -> sky-600 */
     color: #f0f9ff;
     border-color: rgba(14, 165, 233, 0.48);
 }
 
-.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm):hover {
+.btn-control:not(.btn-success):not(.btn-danger):not(.btn-secondary):not(.btn-primary):not(.btn-warning):not(.btn-storm):not(.btn-info):not(.btn-neutral):not(.btn-ghost):not(.btn-outline):hover {
     box-shadow: 0 12px 28px rgba(2, 132, 199, 0.35);
 }
 
@@ -1340,6 +1391,8 @@ code.token-ref.copied {
     border-bottom-right-radius: var(--radius-full) !important;
     background-clip: padding-box;
 }
+/* Defensive rounding: some cascade paths may still flatten the caret’s outer edge */
+#save-split .btn.btn-split-caret { border-top-right-radius: var(--radius-full) !important; border-bottom-right-radius: var(--radius-full) !important; }
 /* Match divider to primary tone when the group uses a primary variant */
 .split-button > .btn.btn-primary.btn-split-caret { border-left-color: rgba(59, 130, 246, 0.42) !important; }
 /* Prevent hover lift that visually splits the halves */
@@ -1959,8 +2012,25 @@ code.token-ref.copied {
 .card-more-section .more-label { flex: 0 0 160px; }
 
 /* Save split dropdown tweaks */
-#save-split { overflow: visible; z-index: 6500; }
+#save-split { overflow: visible; z-index: 6500; display: inline-flex; position: relative; }
 #save-split #save-menu { padding: 6px; border-radius: var(--radius-lg); overflow: hidden; }
+#save-split > .btn:first-child {
+    /* Ensure pill rounding on the left half regardless of other button rules */
+    border-top-left-radius: var(--radius-full) !important;
+    border-bottom-left-radius: var(--radius-full) !important;
+    /* Use standard padding when caret is inline (not overlaid) */
+    padding-right: var(--space-4) !important;
+}
+#save-split > .btn.btn-split-caret {
+    /* Ensure pill rounding on the right half */
+    border-top-right-radius: var(--radius-full) !important;
+    border-bottom-right-radius: var(--radius-full) !important;
+    /* Render as an inline half for this specific control (avoid absolute overlay issues) */
+    position: static !important;
+    width: 38px; min-width: 38px !important; padding-left: 0; padding-right: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-left: 1px solid var(--border-color) !important;
+}
 #save-split.is-disabled #save-menu { background: var(--bg-secondary); color: var(--text-secondary); border-color: var(--border-color); }
 #save-split.is-disabled > .btn.btn-control { opacity: 0.65; }
 

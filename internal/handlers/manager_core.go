@@ -517,6 +517,8 @@ func (h *ManagerHandlers) startDeployAsync(deployType manager.DeployType) error 
 }
 
 func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
+	// Discord notification: update started
+	h.manager.NotifyServerEvent(s, "update-started", "Server file update started.")
 	h.manager.ServerProgressBegin(s.ID, "Queued")
 	s.SetProgressReporter(func(stage string, processed, total int64) {
 		h.manager.ServerProgressUpdate(s.ID, stage, processed, total)
@@ -539,6 +541,8 @@ func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
 				s.Logger.Write(fmt.Sprintf("Server update failed: %v", err))
 			}
 			h.manager.ServerProgressComplete(s.ID, "Failed", err)
+			// Discord notification: update failed
+			h.manager.NotifyServerEvent(s, "update-failed", fmt.Sprintf("Server file update failed: %v", err))
 			return
 		}
 
@@ -550,6 +554,8 @@ func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
 		}
 
 		h.manager.ServerProgressComplete(s.ID, "Completed", nil)
+		// Discord notification: update completed
+		h.manager.NotifyServerEvent(s, "update-completed", "Server file update completed successfully.")
 	}()
 }
 
@@ -728,6 +734,8 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"root_path":           h.manager.Paths.RootPath,
 		"port":                h.manager.Port,
 		"language":            h.manager.Language,
+		"discord_default_webhook":   h.manager.DiscordDefaultWebhook,
+		"discord_bug_report_webhook": h.manager.DiscordBugReportWebhook,
 		"languages":           relLangs,
 		"release_languages":   relLangs,
 		"beta_languages":      betaLangs,

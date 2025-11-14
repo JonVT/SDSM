@@ -20,3 +20,15 @@ func setDetachedProcessGroup(cmd *exec.Cmd) {
 	}
 	cmd.SysProcAttr.Setpgid = true
 }
+
+// isPidAlive attempts to check whether a process with the given PID is alive on Unix
+// by sending signal 0. It returns true when the process exists and the caller has
+// permission to signal it.
+func IsPidAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	// kill(pid, 0) performs error checking without sending a signal
+	err := syscall.Kill(pid, 0)
+	return err == nil
+}

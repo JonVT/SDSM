@@ -1,0 +1,35 @@
+name: ADR Index Check
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  adr-index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify ADR index contains all ADR files
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          adr_dir="docs/adr"
+          index_file="$adr_dir/README.md"
+          missing=()
+          for f in "$adr_dir"/*.md; do
+            base="$(basename "$f")"
+            # Skip index and template
+            if [[ "$base" == "README.md" || "$base" == "_template.md" ]]; then
+              continue
+            fi
+            if ! grep -q "$base" "$index_file"; then
+              missing+=("$base")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "The ADR index does not reference: ${missing[*]}" 1>&2
+            echo "Please add link(s) to docs/adr/README.md" 1>&2
+            exit 1
+          fi
+          echo "ADR index is up to date."

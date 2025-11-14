@@ -118,6 +118,10 @@
     const logTabs = document.getElementById('log-tabs');
     const logTabsEmpty = document.getElementById('log-tabs-empty');
     const logViewer = document.getElementById('log-viewer');
+    // Server Logs buttons
+    const btnLogRefresh = document.getElementById('sl-refresh');
+    const btnLogDownload = document.getElementById('sl-download');
+    const btnLogClear = document.getElementById('sl-clear');
     let logFiles = [];
     let selectedLog = '';
     let logTimer = null;
@@ -1130,7 +1134,7 @@
             button.title = 'Kick player';
             button.setAttribute('aria-label', 'Kick player');
         } else {
-            button.className = 'btn btn-secondary btn-icon';
+            button.className = 'btn btn-ghost btn-icon';
             const label = action.charAt(0).toUpperCase() + action.slice(1);
             button.title = label;
             button.setAttribute('aria-label', label);
@@ -1968,13 +1972,13 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Safety net: ensure every .btn has a visible variant; default to secondary if none present
+        // Safety net: ensure every .btn has a visible variant; default to neutral if none present
         (function enforceButtonVariants(){
             try {
                 const btns = document.querySelectorAll('.btn');
                 btns.forEach((b)=>{
-                    const hasVariant = b.classList.contains('btn-primary') || b.classList.contains('btn-secondary') || b.classList.contains('btn-danger') || b.classList.contains('btn-success') || b.classList.contains('btn-warning') || b.classList.contains('btn-control') || b.classList.contains('btn-storm');
-                    if (!hasVariant) b.classList.add('btn-secondary');
+                    const hasVariant = b.classList.contains('btn-primary') || b.classList.contains('btn-secondary') || b.classList.contains('btn-danger') || b.classList.contains('btn-success') || b.classList.contains('btn-warning') || b.classList.contains('btn-control') || b.classList.contains('btn-storm') || b.classList.contains('btn-info') || b.classList.contains('btn-neutral') || b.classList.contains('btn-ghost') || b.classList.contains('btn-outline');
+                    if (!hasVariant) b.classList.add('btn-neutral');
                 });
             } catch(_) {}
         })();
@@ -2159,7 +2163,7 @@
                             + '<input id="rename-input" class="form-input" style="margin-top:8px;width:100%;" />'
                             + '</div>'
                             + '<div class="modal-actions">'
-                            + '<button type="button" class="btn btn-secondary" data-action="cancel">Cancel</button>'
+                            + '<button type="button" class="btn btn-ghost" data-action="cancel">Cancel</button>'
                             + '<button type="button" class="btn btn-primary" data-action="apply">Save</button>'
                             + '</div>'
                             + '</div>';
@@ -2424,6 +2428,41 @@
         }
 
         const serverId = Number(rootEl.dataset.serverId || '0');
+        // Hydrate attach/rehydration placeholders with effective defaults from API
+        (function hydrateAttachDefaults(){
+            if (!serverId) return;
+            const winEl = document.getElementById('log_attach_rehydrate_kb');
+            const cntEl = document.getElementById('clients_query_retry_count');
+            const delEl = document.getElementById('clients_query_retry_delay_seconds');
+            if (!winEl && !cntEl && !delEl) return;
+            fetch(`/api/servers/${serverId}/settings/attach-defaults`, {
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                try {
+                    if (winEl && typeof data.log_attach_rehydrate_kb !== 'undefined') {
+                        const v = Number(data.log_attach_rehydrate_kb) || 0;
+                        winEl.setAttribute('placeholder', String(v > 0 ? v : 256));
+                    }
+                } catch(_) {}
+                try {
+                    if (cntEl && typeof data.clients_query_retry_count !== 'undefined') {
+                        const v = Number(data.clients_query_retry_count) || 0;
+                        cntEl.setAttribute('placeholder', String(v > 0 ? v : 3));
+                    }
+                } catch(_) {}
+                try {
+                    if (delEl && typeof data.clients_query_retry_delay_seconds !== 'undefined') {
+                        const v = Number(data.clients_query_retry_delay_seconds) || 0;
+                        delEl.setAttribute('placeholder', String(v > 0 ? v : 2));
+                    }
+                } catch(_) {}
+            })
+            .catch(() => { /* non-fatal */ });
+        })();
         // Helper to submit startup params via API
         function submitStartupParamsAPI(form){
             if (!form || connectionLost) return;
@@ -3029,6 +3068,19 @@
         startStatusUpdates();
         // Initialize logs UI
         initLogsUI();
+        // Optimistic default: immediately tail the primary output log without waiting for the list
+        (function(){
+            const sid = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
+            if (!selectedLog && sid) {
+                selectedLog = `Server${sid}_output.log`;
+                // Start with tail from end; viewer will clear if rotation occurs
+                logTailOffset = -1;
+                if (logViewer) {
+                    // kick off an immediate tail read; do not wait for list fetch/sort
+                    fetchLogTail();
+                }
+            }
+        })();
         fetchLogList();
         startLogTail();
         startLogListRefresh();
@@ -3504,7 +3556,7 @@
             const saveAsAction = document.getElementById('save-as-action');
             if ((!saveMain && !saveMenuBtn) || !serverId) return;
 
-            function closeSaveMenu(){ if (saveMenu) saveMenu.classList.remove('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', 'false'); try { saveMenuBtn.focus(); } catch(_) {} }
+            function closeSaveMenu(){ if (saveMenu) saveMenu.classList.remove('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', 'false'); }
             function toggleSaveMenu(){ if (!saveMenu) return; const active = saveMenu.classList.toggle('active'); if (saveMenuBtn) saveMenuBtn.setAttribute('aria-expanded', active ? 'true' : 'false'); if (active) { try { const first = saveMenu.querySelector('.dropdown-item'); if (first) first.focus(); } catch(_) {} } }
             document.addEventListener('click', (ev) => {
                 const root = document.getElementById('save-split');
@@ -3563,7 +3615,7 @@
                     else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus(); }
                     else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
                     else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
-                    else if (e.key === 'Escape') { e.preventDefault(); closeSaveMenu(); }
+                    else if (e.key === 'Escape') { e.preventDefault(); closeSaveMenu(); try { saveMenuBtn && saveMenuBtn.focus(); } catch(_) {} }
                 });
             }
 
@@ -3883,11 +3935,13 @@
                 logPausedByScroll = false; // resume tailing on new selection
                 if (logViewer) logViewer.textContent = '';
                 fetchLogTail();
+                try { if (typeof updateLogButtonsState === 'function') updateLogButtonsState(); } catch(_) {}
             });
             logTabs.appendChild(btn);
             if (!selectedLog && idx === 0) {
                 selectedLog = name;
                 btn.setAttribute('aria-selected', 'true');
+                try { if (typeof updateLogButtonsState === 'function') updateLogButtonsState(); } catch(_) {}
             }
         });
     }
@@ -3908,6 +3962,7 @@
                     logTailOffset = -1;
                     if (logViewer) logViewer.textContent = '';
                 }
+                try { if (typeof updateLogButtonsState === 'function') updateLogButtonsState(); } catch(_) {}
                 // Kick off tailing if we have a selection and no timer
                 if (selectedLog && !logTimer) {
                     fetchLogTail();
@@ -3998,4 +4053,64 @@
         if (!logViewer) return;
         logViewer.scrollTop = logViewer.scrollHeight;
     }
+
+    // --- Logs actions (Refresh/Download/Clear) ---
+    function updateLogButtonsState(){
+        const hasSel = !!selectedLog;
+        try { if (btnLogRefresh) btnLogRefresh.disabled = !hasSel; } catch(_) {}
+        try { if (btnLogDownload) btnLogDownload.disabled = !hasSel; } catch(_) {}
+        try { if (btnLogClear) btnLogClear.disabled = !hasSel; } catch(_) {}
+    }
+
+    (function initLogButtons(){
+        const serverId = Number(rootEl && rootEl.dataset && rootEl.dataset.serverId || '0');
+        if (!serverId) return;
+        if (btnLogRefresh) {
+            btnLogRefresh.addEventListener('click', function(){
+                if (!selectedLog) return;
+                logTailOffset = -1; // force reread from end/back window
+                if (logViewer) logViewer.textContent = '';
+                fetchLogTail();
+            });
+        }
+        if (btnLogDownload) {
+            btnLogDownload.addEventListener('click', function(){
+                if (!selectedLog) return;
+                const url = `/api/servers/${serverId}/log/download?name=` + encodeURIComponent(selectedLog);
+                window.location = url;
+            });
+        }
+        if (btnLogClear) {
+            btnLogClear.addEventListener('click', function(){
+                if (!selectedLog || btnLogClear.disabled) return;
+                btnLogClear.disabled = true;
+                const body = new URLSearchParams();
+                body.set('name', selectedLog);
+                fetch(`/api/servers/${serverId}/log/clear`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: body.toString()
+                }).then((res) => {
+                    // On success, reset viewer and re-tail
+                    logTailOffset = -1;
+                    if (logViewer) logViewer.textContent = '';
+                    fetchLogTail();
+                    try {
+                        if (typeof window.showToast === 'function') {
+                            const type = res.headers.get('X-Toast-Type');
+                            const title = res.headers.get('X-Toast-Title');
+                            const msg = res.headers.get('X-Toast-Message');
+                            if (msg) window.showToast({ type: type || (res.ok ? 'warning' : 'error'), title: title || (res.ok ? 'Log Cleared' : 'Log Error'), message: msg });
+                        }
+                    } catch(_) {}
+                }).catch(()=>{
+                    // ignore
+                }).finally(()=>{
+                    btnLogClear.disabled = false;
+                });
+            });
+        }
+        updateLogButtonsState();
+    })();
 </script>

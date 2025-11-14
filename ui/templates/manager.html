@@ -17,7 +17,7 @@
     
     
     <script>
-        (function () {
+            (function(){
             // Lightweight header stats fetcher to keep hero-meta live
             function pollStats() {
                 fetch('/api/stats', {
@@ -246,7 +246,7 @@
                                 // Provisional coloring before strict compare: default neutral
                                 try {
                                         document.querySelectorAll('button.update-trigger[data-component]')
-                                            .forEach(btn => { btn.classList.remove('btn-success','btn-danger'); if (!btn.classList.contains('btn-primary')) btn.classList.add('btn-secondary'); });
+                                            .forEach(btn => { btn.classList.remove('btn-success','btn-danger'); if (!btn.classList.contains('btn-primary')) btn.classList.add('btn-neutral'); });
                                 } catch(_) {}
                 // Update button colors based on component-specific state logic, mirroring backend decisions
                 function setBtnColor(name, deployedKey, latestKey){
@@ -274,7 +274,7 @@
                             btn.title = 'Missing or unavailable';
                             return;
                         } else {
-                            btn.classList.add('btn-secondary');
+                            btn.classList.add('btn-neutral');
                             btn.title = 'Unavailable';
                             return;
                         }
@@ -371,8 +371,8 @@
                     try {
                         const btns = document.querySelectorAll('.btn');
                         btns.forEach((b)=>{
-                            const hasVariant = b.classList.contains('btn-primary') || b.classList.contains('btn-secondary') || b.classList.contains('btn-danger') || b.classList.contains('btn-success') || b.classList.contains('btn-warning') || b.classList.contains('btn-control') || b.classList.contains('btn-storm');
-                            if (!hasVariant) b.classList.add('btn-secondary');
+                            const hasVariant = b.classList.contains('btn-primary') || b.classList.contains('btn-secondary') || b.classList.contains('btn-danger') || b.classList.contains('btn-success') || b.classList.contains('btn-warning') || b.classList.contains('btn-control') || b.classList.contains('btn-storm') || b.classList.contains('btn-info') || b.classList.contains('btn-neutral') || b.classList.contains('btn-ghost') || b.classList.contains('btn-outline');
+                            if (!hasVariant) b.classList.add('btn-neutral');
                         });
                     } catch(_) {}
                 })();
@@ -838,7 +838,7 @@
                         panelRow = document.createElement('tr');
                         panelRow.className = 'um-assign-panel';
                         const td = document.createElement('td'); td.colSpan = 4; td.className = 'assign-panel-cell';
-                        td.innerHTML = '<div><strong>Server Access</strong><div class="form-group mt-2"><label class="inline-flex items-center gap-2"><input type="checkbox" id="assign_all_'+username+'"> All servers</label></div><div id="assign_list_'+username+'" class="assign-list mt-2"></div><div class="mt-2"><button class="btn btn-primary" id="assign_save_'+username+'">Save</button> <button class="btn btn-secondary" id="assign_close_'+username+'">Close</button></div></div>';
+                        td.innerHTML = '<div><strong>Server Access</strong><div class="form-group mt-2"><label class="inline-flex items-center gap-2"><input type="checkbox" id="assign_all_'+username+'"> All servers</label></div><div id="assign_list_'+username+'" class="assign-list mt-2"></div><div class="mt-2"><button class="btn btn-primary" id="assign_save_'+username+'">Save</button> <button class="btn btn-ghost" id="assign_close_'+username+'">Close</button></div></div>';
                         panelRow.appendChild(td);
                         row.insertAdjacentElement('afterend', panelRow);
                     }
@@ -950,7 +950,9 @@
                                 accessList.querySelectorAll('.um-new-assign-cb').forEach(el => { el.disabled = newAssignAll; });
                             };
                         }
+                        // Show dropdown with active class for CSS transitions
                         accessDrop.classList.remove('hidden');
+                        accessDrop.classList.add('active');
                         try { accessBtn.setAttribute('aria-expanded','true'); } catch(_) {}
                         positionDropdown(accessBtn, accessDrop);
                         function onDocClick(evt){
@@ -968,7 +970,14 @@
                     });
                 }
 
-                function closeAccessDropdown(){ if (accessDrop) { accessDrop.classList.add('hidden'); try { accessBtn.setAttribute('aria-expanded','false'); } catch(_) {} } }
+                function closeAccessDropdown(){
+                    if (!accessDrop) return;
+                    // Hide and reset display so CSS can control visibility
+                    accessDrop.classList.remove('active');
+                    accessDrop.classList.add('hidden');
+                    try { accessBtn.setAttribute('aria-expanded','false'); } catch(_) {}
+                    try { accessDrop.style.display = 'none'; accessDrop.style.visibility = ''; } catch(_) {}
+                }
 
                 if (accessBtn) accessBtn.addEventListener('click', () => { if (!accessDrop.classList.contains('hidden')) closeAccessDropdown(); else openAccessDropdown(); });
                 if (accessClose) accessClose.addEventListener('click', closeAccessDropdown);
@@ -1026,8 +1035,8 @@
                         const tdC = document.createElement('td'); tdC.textContent = (u.created_at ? new Date(u.created_at).toLocaleString() : ''); tr.appendChild(tdC);
                         const tdA = document.createElement('td');
                         // Reset password button
-                        const btnPw = document.createElement('button'); btnPw.className='btn btn-secondary';
-                        btnPw.innerHTML = ICON_KEY + ' <span class="ml-4">Set Password</span>';
+                        const btnPw = document.createElement('button'); btnPw.className='btn btn-info';
+                        btnPw.innerHTML = ICON_KEY + '<span class="ml-4">Set Password</span>';
                         btnPw.addEventListener('click', () => {
                             const p = prompt('Enter new password for '+u.username+':');
                             if(p && p.length>=8){ resetPassword(u.username, p); }
@@ -1036,7 +1045,7 @@
                         tdA.appendChild(btnPw);
                         // Delete button
                         const btnDel = document.createElement('button'); btnDel.className='btn btn-danger ml-2';
-                        btnDel.innerHTML = ICON_TRASH + ' <span class="ml-4">Delete</span>';
+                        btnDel.innerHTML = ICON_TRASH + '<span class="ml-4">Delete</span>';
                                                 btnDel.addEventListener('click', () => {
                                                         askConfirm({ title: 'Delete User', message: 'Delete user '+u.username+'?', confirmText: 'Delete', cancelText: 'Cancel', danger: true }, 'Delete user '+u.username+'?')
                                                             .then((ok) => { if (ok) deleteUser(u.username); });
@@ -1045,7 +1054,7 @@
                         // Assignments button (operators only)
                         const isOperator = String(u.role).toLowerCase() === 'operator';
                         if (isOperator) {
-                            const btnAssign = document.createElement('button'); btnAssign.className='btn btn-secondary ml-2'; btnAssign.textContent='Assign Servers'; btnAssign.title='Manage server access for this operator';
+                            const btnAssign = document.createElement('button'); btnAssign.className='btn btn-info ml-2'; btnAssign.textContent='Assign Servers'; btnAssign.title='Manage server access for this operator';
                             btnAssign.addEventListener('click', () => openAssignPanel(u.username));
                             tdA.appendChild(btnAssign);
                         }
@@ -1254,6 +1263,7 @@
             <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
                 <span id="theme-icon">🌙</span>
             </button>
+            <button type="button" id="bugReportBtn" class="btn btn-info" title="Report a bug to SDSM">Report Bug</button>
             <button
                 class="btn btn-primary"
                 hx-get="/api/refresh"
@@ -1312,6 +1322,14 @@
                             <label for="port">Port</label>
                             <input type="text" id="port" name="port" value="{{ .port }}" required>
                         </div>
+                        <div class="form-group">
+                            <label for="discord_default_webhook">Discord Notifications Webhook</label>
+                            <input type="text" id="discord_default_webhook" name="discord_default_webhook" value="{{ .discord_default_webhook }}" placeholder="https://discord.com/api/webhooks/...">
+                        </div>
+                        <div class="form-group">
+                            <label for="discord_bug_report_webhook">SDSM Bug Report Webhook</label>
+                            <input type="text" id="discord_bug_report_webhook" name="discord_bug_report_webhook" value="{{ .discord_bug_report_webhook }}" placeholder="https://discord.com/api/webhooks/...">
+                        </div>
                         <div class="form-group top-align">
                             <label for="auto_port_forward_manager">Port Forward (Manager)</label>
                             <div class="field-inline items-start gap-2">
@@ -1320,7 +1338,6 @@
                                     <span class="pill pill-sm" title="Forwarding behavior is adaptive">Adaptive</span>
                                     Attempt automatic router port forwarding (TCP) for the manager's web port via UPnP/NAT-PMP.
                                     <br><strong class="text-danger">WARNING:</strong> Exposing the management UI to the internet can be risky — enable only if you understand the implications.
-                                    <br><em class="text-xs">Details:</em> Game server UDP forwarding prefers a game-created UPnP mapping first; falls back to SDSM NAT-PMP/UPnP. The manager port always uses SDSM-created mappings.
                                 </span>
                             </div>
                         </div>
@@ -1329,7 +1346,7 @@
                             <div class="field-inline items-start gap-2">
                                 <span class="status-pill" id="mgr_pf_status"><span class="dot" aria-hidden="true"></span>Status</span>
                                 <span class="text-secondary text-sm">External IP: <span id="mgr_external_ip">--</span></span>
-                                <button type="button" id="mgr_test_port" class="btn btn-secondary btn-min-sm">Test Port</button>
+                                <button type="button" id="mgr_test_port" class="btn btn-info btn-min-sm">Test Port</button>
                             </div>
                         </div>
                         <div class="form-group">
@@ -1372,7 +1389,7 @@
                         <div class="form-group top-align">
                             <label for="generate_tls_self_signed">Advanced TLS</label>
                             <div class="flex-col gap-3">
-                                <button id="generate_tls_self_signed" type="submit" name="generate_tls_self_signed" class="btn btn-secondary mb-2" data-tls-enabled="{{if .tls_enabled}}true{{else}}false{{end}}" title="{{if .tls_enabled}}Regenerate and replace the existing certificate{{else}}Generate a new self-signed certificate{{end}}">
+                                <button id="generate_tls_self_signed" type="submit" name="generate_tls_self_signed" class="btn btn-info mb-2" data-tls-enabled="{{if .tls_enabled}}true{{else}}false{{end}}" title="{{if .tls_enabled}}Regenerate and replace the existing certificate{{else}}Generate a new self-signed certificate{{end}}">
                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                         <path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"></path>
                                         <path d="M19 11a7 7 0 1 0-14 0v2H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h0v-2Z"></path>
@@ -1468,7 +1485,7 @@
                                             <td id="ver-steamcmd-deployed">Loading…</td>
                                             <td id="ver-steamcmd-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1488,7 +1505,7 @@
                                             <td id="ver-release-deployed">Loading…</td>
                                             <td id="ver-release-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1508,7 +1525,7 @@
                                             <td id="ver-beta-deployed">Loading…</td>
                                             <td id="ver-beta-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1528,7 +1545,7 @@
                                             <td id="ver-bepinex-deployed">Loading…</td>
                                             <td id="ver-bepinex-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1548,7 +1565,7 @@
                                             <td id="ver-launchpad-deployed">Loading…</td>
                                             <td id="ver-launchpad-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1568,7 +1585,7 @@
                                             <td id="ver-scon-deployed">Loading…</td>
                                             <td id="ver-scon-latest">Loading…</td>
                                             <td>
-                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn btn-secondary update-trigger" {{if .updating}}disabled{{end}}>
+                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn btn-neutral update-trigger" {{if .updating}}disabled{{end}}>
                                                     <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                         <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
                                                         <path d="M21 3v5h-5"></path>
@@ -1600,7 +1617,7 @@
                     <div class="status-badges">
                         <span class="pill" title="Total users">Users: <span id="userMgmtCount">--</span></span>
                     </div>
-                    <button type="button" id="userMgmtToggle" class="btn btn-secondary btn-min-sm" aria-expanded="false" aria-controls="userMgmtContent" title="Expand">
+                    <button type="button" id="userMgmtToggle" class="btn btn-ghost btn-min-sm" aria-expanded="false" aria-controls="userMgmtContent" title="Expand">
                         <svg id="userMgmtChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         <span id="userMgmtToggleLabel" class="ml-6">More</span>
                     </button>
@@ -1616,13 +1633,13 @@
                                     <option value="admin">Admin</option>
                                     <option value="operator" selected>Operator</option>
                                 </select>
-                                <button type="button" id="um_access_btn" class="btn btn-secondary min-w-120 nowrap" title="Choose servers for this operator">Servers ▾</button>
+                                <button type="button" id="um_access_btn" class="btn btn-info min-w-120 nowrap" title="Choose servers for this operator">Servers ▾</button>
                                 <button type="submit" id="um_add_btn" class="btn btn-primary">{{ template "icon_add" . }} <span class="ml-4">Add</span></button>
                             </form>
                             <div id="um_access_dropdown" class="glass-card dropdown-panel hidden w-340">
                                 <div class="row justify-between mb-2">
                                     <strong>Server Access</strong>
-                                    <button type="button" id="um_access_close" class="btn btn-min-sm btn-secondary">Close</button>
+                                    <button type="button" id="um_access_close" class="btn btn-min-sm btn-ghost">Close</button>
                                 </div>
                                 <div class="form-group mb-2">
                                     <label class="inline-flex items-center gap-2"><input type="checkbox" id="um_access_all"> All servers</label>
@@ -1680,7 +1697,7 @@
             <div class="glass-card" id="manageLogsCard">
                 <div class="card-header">
                     <h3 class="card-title m-0">Manage Logs</h3>
-                    <button type="button" id="manageLogsToggle" class="btn btn-secondary btn-min-sm" aria-expanded="true" aria-controls="manageLogsContent" title="Collapse">
+                    <button type="button" id="manageLogsToggle" class="btn btn-ghost btn-min-sm" aria-expanded="true" aria-controls="manageLogsContent" title="Collapse">
                         <svg id="manageLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"></polyline></svg>
                         <span id="manageLogsToggleLabel" class="ml-6">Less</span>
                     </button>
@@ -1688,9 +1705,31 @@
                 <div id="manageLogsContent" class="card-body" aria-hidden="false">
                     <div class="control-actions mb-3">
                         <div class="button-group">
-                            <button type="button" id="ml-refresh" class="btn btn-secondary">Refresh</button>
-                            <button type="button" id="ml-download" class="btn btn-secondary">Download</button>
-                            <button type="button" id="ml-clear" class="btn btn-danger">Clear</button>
+                            <button type="button" id="ml-refresh" class="btn btn-info">
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                                    <path d="M21 3v5h-5"/>
+                                </svg>
+                                <span class="ml-6">Refresh</span>
+                            </button>
+                            <button type="button" id="ml-download" class="btn btn-info">
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="7 10 12 15 17 10"/>
+                                    <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                                <span class="ml-6">Download</span>
+                            </button>
+                            <button type="button" id="ml-clear" class="btn btn-danger">
+                                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                    <path d="M10 11v6"/>
+                                    <path d="M14 11v6"/>
+                                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                                </svg>
+                                <span class="ml-6">Clear</span>
+                            </button>
                         </div>
                     </div>
                     <div class="logs-grid">
@@ -1981,6 +2020,97 @@
     
     {{ template "modal_templates" . }}
     {{ template "modal_scripts" . }}
+        <template id="tpl-modal-bugreport">
+            <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="bugReportTitle" aria-describedby="bugReportBody">
+                <div class="modal-card">
+                    <header class="modal-header">
+                        <span class="icon">🪲</span>
+                        <h3 id="bugReportTitle" class="modal-title">Report a Bug</h3>
+                        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+                    </header>
+                    <div id="bugReportBody" class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label" for="bug_title">Title</label>
+                            <input id="bug_title" type="text" class="input" maxlength="120" placeholder="Short summary" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="bug_desc">Description</label>
+                            <textarea id="bug_desc" class="input" rows="6" placeholder="Steps to reproduce, expected vs actual"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label class="inline-flex items-center gap-2"><input id="bug_inc_mgr" type="checkbox" checked /> Include manager log tail</label>
+                            <label class="inline-flex items-center gap-2"><input id="bug_inc_upd" type="checkbox" checked /> Include update log tail</label>
+                            <label class="inline-flex items-center gap-2"><input id="bug_inc_env" type="checkbox" checked /> Include environment info</label>
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                        <button type="button" class="btn btn-primary" data-submit>Submit</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+        <script>
+            function openBugReportModal(){
+                const tpl = document.getElementById('tpl-modal-bugreport');
+                if(!tpl || !tpl.content) return;
+                const modal = tpl.content.cloneNode(true).querySelector('.confirm-modal');
+                document.body.appendChild(modal);
+                const closeBtn = modal.querySelector('[data-close]');
+                const cancelBtn = modal.querySelector('[data-cancel]');
+                const submitBtn = modal.querySelector('[data-submit]');
+                function finish(){ if(modal && modal.parentNode) modal.parentNode.removeChild(modal); }
+                function activate(){ modal.classList.add('active'); modal.setAttribute('aria-hidden','false'); try { modal.querySelector('#bug_title').focus(); } catch(_){} }
+                closeBtn && closeBtn.addEventListener('click', finish);
+                cancelBtn && cancelBtn.addEventListener('click', finish);
+                submitBtn && submitBtn.addEventListener('click', ()=>{
+                    const title = (modal.querySelector('#bug_title')?.value||'').trim();
+                    const desc = (modal.querySelector('#bug_desc')?.value||'').trim();
+                    const incMgr = !!modal.querySelector('#bug_inc_mgr')?.checked;
+                    const incUpd = !!modal.querySelector('#bug_inc_upd')?.checked;
+                    const incEnv = !!modal.querySelector('#bug_inc_env')?.checked;
+                    if(!title){ try { modal.querySelector('#bug_title').focus(); } catch(_){} return; }
+                    fetch('/api/bug-report', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'same-origin', body: JSON.stringify({ title, description: desc, include_manager_log: incMgr, include_update_log: incUpd, include_environment: incEnv }) })
+                        .then(r=> r.ok ? r.json() : r.json().then(Promise.reject))
+                        .then(()=> { if(window.showToast) window.showToast({type:'success', title:'Thanks!', message:'Bug report submitted'}); finish(); })
+                        .catch((e)=> { if(window.showToast) window.showToast({type:'error', title:'Submit Failed', message:(e&&e.error)||'Unable to submit'}); });
+                });
+                modal.addEventListener('click', (e)=>{ if(e.target===modal) finish(); });
+                activate();
+            }
+        </script>
+
+        <script>
+            // Wire Report Bug button to modal (with a simple fallback)
+            (function(){
+                function attach(){
+                    var btn = document.getElementById('bugReportBtn');
+                    if (!btn) return;
+                    if (btn.__bugInit) return; btn.__bugInit = true;
+                    btn.addEventListener('click', function(e){
+                        e.preventDefault();
+                        if (typeof openBugReportModal === 'function') {
+                            openBugReportModal();
+                            return;
+                        }
+                        // Fallback: quick prompts
+                        var title = prompt('Bug title:');
+                        if (!title) return;
+                        var desc = prompt('Describe the issue (optional):') || '';
+                        fetch('/api/bug-report', {
+                            method: 'POST', credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ title: title, description: desc, include_manager_log: true, include_update_log: true, include_environment: true })
+                        }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+                          .then(function(){ if (window.showToast) window.showToast({ type:'success', title:'Thanks!', message:'Bug report submitted' }); })
+                          .catch(function(){ if (window.showToast) window.showToast({ type:'error', title:'Submit Failed', message:'Unable to submit' }); });
+                    });
+                }
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', attach);
+                } else { attach(); }
+            })();
+        </script>
 
     {{ template "toast.html" . }}
     {{ template "footer" . }}

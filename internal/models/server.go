@@ -131,6 +131,7 @@ type Server struct {
 	ID             int            `json:"id"`
 	Proc           *exec.Cmd      `json:"-"`
 	Thrd           chan bool      `json:"-"`
+	pid            int            `json:"-"`
 	stdin          io.WriteCloser `json:"-"` // deprecated: stdin fallback removed; retained for struct compatibility
 	Logger         *utils.Logger  `json:"-"`
 	Paths          *utils.Paths   `json:"-"`
@@ -184,6 +185,10 @@ type Server struct {
 	RestartDelaySeconds       int      `json:"restart_delay_seconds"`
 	SCONPort                  int      `json:"scon_port"`                    // Port for SCON plugin HTTP API
 	BepInExInitTimeoutSeconds int      `json:"bepinex_init_timeout_seconds"` // Timeout for initial BepInEx bootstrap (Windows)
+	// Attach/rehydrate settings (optional; defaults applied when zero/absent)
+	LogAttachRehydrateKB         int `json:"log_attach_rehydrate_kb"`          // How many KB of the output log to replay on attach (default 256)
+	ClientsQueryRetryCount       int `json:"clients_query_retry_count"`        // How many times to issue CLIENTS after attach (default 3)
+	ClientsQueryRetryDelaySeconds int `json:"clients_query_retry_delay_seconds"` // Delay between CLIENTS retries (default 2s)
 	// Detached indicates this server should start in its own process group (Unix) and remain
 	// running if the manager exits. It is derived from Manager.DetachedServers and is not
 	// persisted independently in sdsm.config.
@@ -1414,6 +1419,18 @@ func (s *Server) IsRunning() bool {
 		}
 	}
 
+	// Support attach-to-running mode where we do not hold an exec.Cmd but track an external PID.
+	if s.pid > 0 {
+		if IsPidAlive(s.pid) {
+			// Keep the running flag true for UI and command allowance in attached mode
+			s.Running = true
+			s.Starting = false
+			return true
+		}
+		// PID no longer alive; clear tracked pid
+		s.pid = 0
+	}
+
 	if s.Running || s.Starting || s.Paused {
 		s.Running = false
 		s.Starting = false
@@ -1672,11 +1689,13 @@ func (s *Server) installBepInEx(gameDir string) error {
 // Stop performs an immediate (blocking) shutdown with any configured delay, without cancellation support.
 // Used by internal restart flows and legacy code paths where a synchronous stop is acceptable.
 func (s *Server) Stop() {
-	if !s.Running || s.Proc == nil {
+	if s == nil || !s.IsRunning() {
 		// Nothing to stop; mark state and return
-		s.Running = false
-		s.Stopping = false
-		s.Starting = false
+		if s != nil {
+			s.Running = false
+			s.Stopping = false
+			s.Starting = false
+		}
 		return
 	}
 	delay := s.shutdownDelayDuration()
@@ -1701,7 +1720,7 @@ func (s *Server) Stop() {
 // channel allows interruption via CancelStop(). The provided broadcast callback (optional) is invoked
 // after state changes (initial schedule, cancellation, final termination) so the UI can refresh promptly.
 func (s *Server) StopAsync(broadcast func(*Server)) {
-	if s == nil || !s.Running || s.Proc == nil {
+	if s == nil || !s.IsRunning() {
 		// Fallback to immediate stop logic
 		s.Stop()
 		if broadcast != nil {
@@ -1818,7 +1837,8 @@ func (s *Server) sendCancellationNotice() {
 }
 
 func (s *Server) sendChat(msg string) {
-	if s == nil || !s.Running || s.Proc == nil {
+	// Allow chat via SCON in attached mode (Proc may be nil)
+	if s == nil || !s.IsRunning() {
 		return
 	}
 	expanded := s.RenderChatMessage(msg, nil)
@@ -1844,12 +1864,15 @@ func (s *Server) sendShutdownNotices(delay time.Duration) {
 
 // performFinalShutdown issues QUIT and finalizes state.
 func (s *Server) performFinalShutdown() {
-	if s == nil || !s.Running || s.Proc == nil {
-		s.Running = false
-		s.Stopping = false
-		s.Starting = false
+	if s == nil || !s.IsRunning() {
+		if s != nil {
+			s.Running = false
+			s.Stopping = false
+			s.Starting = false
+		}
 		return
 	}
+	// Best-effort graceful shutdown via SCON QUIT
 	if err := s.SendCommand("console", "QUIT"); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to send QUIT command: %v", err))
@@ -1865,8 +1888,19 @@ func (s *Server) performFinalShutdown() {
 	if s.Proc == nil {
 		s.resetChat()
 	}
+	// Force-kill as a last resort if still alive
 	if s.Proc != nil {
-		s.Proc.Process.Kill()
+		_ = s.Proc.Process.Kill()
+	} else if s.pid > 0 && IsPidAlive(s.pid) {
+		if p, err := os.FindProcess(s.pid); err == nil && p != nil {
+			_ = p.Kill()
+		}
+		// Clear tracked pid regardless; liveness will update via IsRunning next check
+		s.pid = 0
+	}
+	// Cleanup PID file in case it exists from a detached start
+	if s.Paths != nil {
+		_ = os.Remove(s.Paths.ServerPIDFile(s.ID))
 	}
 	// Tear down any active port mapping after process termination.
 	if s.AutoPortForward && s.Port > 0 && s.PortForwardActive {
@@ -2326,11 +2360,17 @@ func (s *Server) Start() {
 	}
 
 	s.Proc = cmd
+	s.pid = cmd.Process.Pid
 	s.resetChat()
 	stopChan := make(chan bool)
 	s.Thrd = stopChan
 	s.Starting = true
 	s.Running = true
+
+	// If this server is detached, persist the PID so a restarted manager can discover it.
+	if s.Detached && s.Paths != nil {
+		_ = os.WriteFile(s.Paths.ServerPIDFile(s.ID), []byte(fmt.Sprintf("%d\n", s.pid)), 0o644)
+	}
 
 	var tailWG sync.WaitGroup
 	tailWG.Add(1)
@@ -2346,6 +2386,7 @@ func (s *Server) Start() {
 		s.Running = false
 		s.Starting = false
 		s.Proc = nil
+		s.pid = 0
 		// stdin fallback removed
 		close(stop)
 		if s.Thrd == stop {
@@ -2357,6 +2398,10 @@ func (s *Server) Start() {
 		s.resetChat()
 		if s.Logger != nil {
 			s.Logger.Write("Server process ended")
+		}
+		// Best-effort cleanup of PID file when process ends
+		if s.Paths != nil {
+			_ = os.Remove(s.Paths.ServerPIDFile(s.ID))
 		}
 	}(stopChan)
 	now := time.Now()
@@ -2370,6 +2415,87 @@ func (s *Server) Start() {
 			go s.managePortForwarding()
 		}
 	}
+}
+
+// AttachToRunning attaches SDSM to an already-running server process. This sets transient
+// running flags, starts a log tailer from the end of the output log to rehydrate state,
+// monitors the external PID for exit, and issues a best-effort CLIENTS query via SCON to
+// repopulate live clients.
+func (s *Server) AttachToRunning(pid int) {
+	if s == nil || s.Paths == nil {
+		return
+	}
+	if s.Logger != nil {
+		s.Logger.Write(fmt.Sprintf("Attaching to running server (PID %d)", pid))
+	}
+	s.Proc = nil
+	s.pid = pid
+	s.Starting = false
+	s.Stopping = false
+	s.Running = true
+
+	stopChan := make(chan bool)
+	s.Thrd = stopChan
+
+	// Compute rehydrate window (KB -> bytes); apply sane defaults
+	windowKB := s.LogAttachRehydrateKB
+	if windowKB <= 0 {
+		windowKB = 256
+	}
+	windowBytes := int64(windowKB) * 1024
+
+	// Start tailing from recent history to quickly rehydrate state without replaying entire log
+	go func(stop <-chan bool) {
+		s.tailServerLogFromOffset(s.Paths.ServerOutputFile(s.ID), stop, windowBytes)
+	}(stopChan)
+
+	// Monitor external PID; when it exits, update state and clean up pid file
+	go func(srv *Server, p int, pidFile string, stop chan bool) {
+		for IsPidAlive(p) {
+			time.Sleep(2 * time.Second)
+		}
+		srv.Running = false
+		srv.Starting = false
+		srv.Stopping = false
+		close(stop)
+		if srv.Thrd == stop {
+			srv.Thrd = nil
+		}
+		srv.markAllClientsDisconnected(time.Now())
+		srv.rewritePlayersLog()
+		srv.resetChat()
+		_ = os.Remove(pidFile)
+		if srv.Logger != nil {
+			srv.Logger.Write("Detached server process ended (attach monitor)")
+		}
+	}(s, pid, s.Paths.ServerPIDFile(s.ID), stopChan)
+
+	// Best-effort: issue CLIENTS query via SCON to repopulate live client list, with limited retries
+	go func(srv *Server) {
+		// Defaults
+		maxTries := srv.ClientsQueryRetryCount
+		if maxTries <= 0 {
+			maxTries = 3
+		}
+		delaySec := srv.ClientsQueryRetryDelaySeconds
+		if delaySec <= 0 {
+			delaySec = 2
+		}
+		// Initial wait to let attach tailer start
+		time.Sleep(time.Duration(delaySec) * time.Second)
+		for i := 0; i < maxTries; i++ {
+			// Early exit if we already have live clients populated
+			if len(srv.LiveClients()) > 0 {
+				return
+			}
+			_ = srv.SendCommand("console", "CLIENTS")
+			// Give the server time to respond and logs to be parsed
+			time.Sleep(time.Duration(delaySec) * time.Second)
+			if len(srv.LiveClients()) > 0 {
+				return
+			}
+		}
+	}(s)
 }
 
 func (s *Server) tailServerLog(path string, stop <-chan bool) {
@@ -2409,6 +2535,129 @@ func (s *Server) tailServerLog(path string, stop <-chan bool) {
 			}
 			// Start reading from the beginning to catch early startup errors written before the tailer attached.
 			reader = bufio.NewReader(file)
+		}
+
+		select {
+		case <-stop:
+			return
+		default:
+		}
+
+		line, err := reader.ReadString('\n')
+		if len(line) > 0 {
+			line = strings.TrimRight(line, "\r\n")
+			if len(line) > 0 {
+				s.processLine(line)
+			}
+		}
+
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				if currOffset, offsetErr := file.Seek(0, io.SeekCurrent); offsetErr == nil {
+					if info, statErr := os.Stat(path); statErr == nil && info.Size() < currOffset {
+						file.Close()
+						file = nil
+						reader = nil
+						continue
+					}
+				}
+				if waitForStop(pollInterval) {
+					return
+				}
+				continue
+			}
+
+			if s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("Error reading server log: %v", err))
+			}
+			file.Close()
+			file = nil
+			reader = nil
+			if waitForStop(pollInterval) {
+				return
+			}
+		}
+	}
+}
+
+// tailServerLogFromOffset behaves like tailServerLog but starts from near the end
+// of the file to avoid replaying the entire history. It seeks to max(0, size-window)
+// and then streams forward, processing lines and continuing to tail for new lines.
+func (s *Server) tailServerLogFromOffset(path string, stop <-chan bool, window int64) {
+	const pollInterval = 250 * time.Millisecond
+
+	if window <= 0 {
+		window = 128 * 1024 // default 128KB
+	}
+
+	waitForStop := func(d time.Duration) bool {
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		select {
+		case <-stop:
+			return true
+		case <-timer.C:
+			return false
+		}
+	}
+
+	var file *os.File
+	var reader *bufio.Reader
+	defer func() {
+		if file != nil {
+			file.Close()
+		}
+	}()
+
+	// Helper to (re)open file and position near the end
+	reopen := func() bool {
+		if file != nil {
+			file.Close()
+			file = nil
+			reader = nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			if !errors.Is(err, os.ErrNotExist) && s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("Failed to open server log: %v", err))
+			}
+			return false
+		}
+		info, err := f.Stat()
+		if err != nil {
+			f.Close()
+			return false
+		}
+		size := info.Size()
+		start := int64(0)
+		if size > window {
+			start = size - window
+		}
+		if start > 0 {
+			if _, err := f.Seek(start, io.SeekStart); err != nil {
+				// If seek fails, fallback to start of file
+				_, _ = f.Seek(0, io.SeekStart)
+			} else {
+				// Discard partial first line to start cleanly at next newline
+				br := bufio.NewReader(f)
+				if _, err := br.ReadString('\n'); err == nil || errors.Is(err, io.EOF) {
+					// position is already advanced by ReadString; reset reader below
+				}
+			}
+		}
+		file = f
+		reader = bufio.NewReader(file)
+		return true
+	}
+
+	for {
+		if file == nil {
+			if !reopen() {
+				if waitForStop(pollInterval) {
+					return
+				}
+				continue
+			}
 		}
 
 		select {
@@ -2601,7 +2850,9 @@ func (s *Server) SendRaw(line string) error {
 		}
 		return fmt.Errorf("empty command")
 	}
-	if !s.IsRunning() || s.Proc == nil {
+	// Allow sending when the server is marked running even if Proc is nil
+	// (attached-to-running case using SCON HTTP API).
+	if !s.IsRunning() {
 		if s.Logger != nil {
 			s.Logger.Write("Command send failed: server is not running")
 		}
