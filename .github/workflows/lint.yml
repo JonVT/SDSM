@@ -72,7 +72,7 @@ jobs:
           $(go env GOPATH)/bin/staticcheck -f sarif ./... > staticcheck.sarif
 
       - name: Upload staticcheck SARIF
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && hashFiles('staticcheck.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: staticcheck.sarif
@@ -98,7 +98,7 @@ jobs:
           echo "govulncheck JSON converted to SARIF (results may be empty)." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload govulncheck SARIF
-        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && hashFiles('govulncheck.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: govulncheck.sarif
