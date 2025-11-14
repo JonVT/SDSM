@@ -920,7 +920,7 @@ func (s *Server) rewritePlayersLog() {
 		return
 	}
 	if err := os.Rename(safeTempPath, safeLogPath); err != nil {
-	os.Remove(safeTempPath)
+		os.Remove(safeTempPath)
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to replace players log: %v", err))
 		}
