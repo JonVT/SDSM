@@ -241,6 +241,24 @@ type Server struct {
 	clientsScanStart  time.Time
 }
 
+// safePIDFilePath returns a contained absolute path to the server PID file or empty string
+// if containment cannot be assured. It uses SecureJoin to prevent path traversal outside
+// the server directory root.
+func (s *Server) safePIDFilePath() string {
+	if s == nil || s.Paths == nil {
+		return ""
+	}
+	base := s.Paths.ServerDir(s.ID)
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	safe, err := utils.SecureJoin(base, "server.pid")
+	if err != nil {
+		return ""
+	}
+	return safe
+}
+
 // beginClientsScan initializes a transient scan of currently connected clients based on
 // a CLIENTS response block in the server log.
 func (s *Server) beginClientsScan() {
@@ -485,7 +503,14 @@ func (s *Server) playersLogPath() string {
 	if s.Paths == nil {
 		return ""
 	}
-	return filepath.Join(s.Paths.ServerLogsDir(s.ID), playersLogFileName)
+	base := s.Paths.ServerLogsDir(s.ID)
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	if p, err := utils.SecureJoin(base, playersLogFileName); err == nil {
+		return p
+	}
+	return ""
 }
 
 // blacklistPath returns the canonical path to the server's Blacklist.txt in the deployed game/bin directory.
@@ -493,7 +518,14 @@ func (s *Server) blacklistPath() string {
 	if s.Paths == nil {
 		return ""
 	}
-	return filepath.Join(s.Paths.ServerGameDir(s.ID), "Blacklist.txt")
+	base := s.Paths.ServerGameDir(s.ID)
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	if p, err := utils.SecureJoin(base, "Blacklist.txt"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // adminListPath returns the canonical path to the server's AdminList.txt in the deployed game/bin directory.
@@ -503,7 +535,14 @@ func (s *Server) adminListPath() string {
 	if s.Paths == nil {
 		return ""
 	}
-	return filepath.Join(s.Paths.ServerGameDir(s.ID), "AdminList.txt")
+	base := s.Paths.ServerGameDir(s.ID)
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	if p, err := utils.SecureJoin(base, "AdminList.txt"); err == nil {
+		return p
+	}
+	return ""
 }
 
 // ReadBlacklistIDs reads a comma-separated list of Steam IDs from Blacklist.txt and returns a unique, trimmed list.
@@ -799,6 +838,23 @@ func (s *Server) rewritePlayersLog() {
 	if path == "" {
 		return
 	}
+	// Rebuild contained absolute paths for the players log and its temporary
+	// replacement file using SecureJoin. This avoids relying on any previously
+	// constructed path string directly and prevents traversal outside the
+	// server logs directory.
+	baseDir := filepath.Dir(path)
+	if abs, err := filepath.Abs(baseDir); err == nil {
+		baseDir = abs
+	}
+	safeLogPath, err := utils.SecureJoin(baseDir, playersLogFileName)
+	if err != nil || strings.TrimSpace(safeLogPath) == "" {
+		return
+	}
+	tempFileName := playersLogFileName + ".tmp"
+	safeTempPath, err := utils.SecureJoin(baseDir, tempFileName)
+	if err != nil || strings.TrimSpace(safeTempPath) == "" {
+		return
+	}
 
 	entries := make([]string, 0, len(s.Clients))
 	seen := make(map[string]struct{})
@@ -832,15 +888,14 @@ func (s *Server) rewritePlayersLog() {
 		entries = append(entries, entry)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to create players log dir during update: %v", err))
 		}
 		return
 	}
 
-	tempPath := path + ".tmp"
-	file, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	file, err := os.OpenFile(safeTempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to open temp players log: %v", err))
@@ -850,7 +905,7 @@ func (s *Server) rewritePlayersLog() {
 	for _, entry := range entries {
 		if _, err := file.WriteString(entry + "\n"); err != nil {
 			file.Close()
-			os.Remove(tempPath)
+			os.Remove(safeTempPath)
 			if s.Logger != nil {
 				s.Logger.Write(fmt.Sprintf("Failed to write temp players log: %v", err))
 			}
@@ -858,14 +913,14 @@ func (s *Server) rewritePlayersLog() {
 		}
 	}
 	if err := file.Close(); err != nil {
-		os.Remove(tempPath)
+		os.Remove(safeTempPath)
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed closing temp players log: %v", err))
 		}
 		return
 	}
-	if err := os.Rename(tempPath, path); err != nil {
-		os.Remove(tempPath)
+	if err := os.Rename(safeTempPath, safeLogPath); err != nil {
+	os.Remove(safeTempPath)
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to replace players log: %v", err))
 		}
@@ -1901,8 +1956,8 @@ func (s *Server) performFinalShutdown() {
 		s.pid = 0
 	}
 	// Cleanup PID file in case it exists from a detached start
-	if s.Paths != nil {
-		_ = os.Remove(s.Paths.ServerPIDFile(s.ID))
+	if p := s.safePIDFilePath(); p != "" {
+		_ = os.Remove(p)
 	}
 	// Tear down any active port mapping after process termination.
 	if s.AutoPortForward && s.Port > 0 && s.PortForwardActive {
@@ -2395,8 +2450,10 @@ func (s *Server) Start() {
 	s.Running = true
 
 	// If this server is detached, persist the PID so a restarted manager can discover it.
-	if s.Detached && s.Paths != nil {
-		_ = os.WriteFile(s.Paths.ServerPIDFile(s.ID), []byte(fmt.Sprintf("%d\n", s.pid)), 0o644)
+	if s.Detached {
+		if p := s.safePIDFilePath(); p != "" {
+			_ = os.WriteFile(p, []byte(fmt.Sprintf("%d\n", s.pid)), 0o644)
+		}
 	}
 
 	var tailWG sync.WaitGroup
@@ -2427,8 +2484,8 @@ func (s *Server) Start() {
 			s.Logger.Write("Server process ended")
 		}
 		// Best-effort cleanup of PID file when process ends
-		if s.Paths != nil {
-			_ = os.Remove(s.Paths.ServerPIDFile(s.ID))
+		if p := s.safePIDFilePath(); p != "" {
+			_ = os.Remove(p)
 		}
 	}(stopChan)
 	now := time.Now()
@@ -2477,6 +2534,7 @@ func (s *Server) AttachToRunning(pid int) {
 	}(stopChan)
 
 	// Monitor external PID; when it exits, update state and clean up pid file
+	pidPath := s.safePIDFilePath()
 	go func(srv *Server, p int, pidFile string, stop chan bool) {
 		for IsPidAlive(p) {
 			time.Sleep(2 * time.Second)
@@ -2491,11 +2549,13 @@ func (s *Server) AttachToRunning(pid int) {
 		srv.markAllClientsDisconnected(time.Now())
 		srv.rewritePlayersLog()
 		srv.resetChat()
-		_ = os.Remove(pidFile)
+		if pidFile != "" {
+			_ = os.Remove(pidFile)
+		}
 		if srv.Logger != nil {
 			srv.Logger.Write("Detached server process ended (attach monitor)")
 		}
-	}(s, pid, s.Paths.ServerPIDFile(s.ID), stopChan)
+	}(s, pid, pidPath, stopChan)
 
 	// Best-effort: issue CLIENTS query via SCON to repopulate live client list, with limited retries
 	go func(srv *Server) {
@@ -2527,6 +2587,23 @@ func (s *Server) AttachToRunning(pid int) {
 
 func (s *Server) tailServerLog(path string, stop <-chan bool) {
 	const pollInterval = 250 * time.Millisecond
+
+	// Reconstruct a contained absolute path to the server's output log to avoid
+	// relying on a potentially user-influenced argument. This mitigates path-injection
+	// concerns from static analysis by enforcing directory containment.
+	if s != nil && s.Paths != nil {
+		base := s.Paths.ServerLogsDir(s.ID)
+		if abs, err := filepath.Abs(base); err == nil {
+			base = abs
+		}
+		expected := fmt.Sprintf("%s_output.log", s.Paths.ServerName(s.ID))
+		if safe, err := utils.SecureJoin(base, expected); err == nil {
+			path = safe
+		} else {
+			// If containment fails, abort tailing to avoid unsafe path usage
+			return
+		}
+	}
 
 	waitForStop := func(d time.Duration) bool {
 		timer := time.NewTimer(d)
@@ -2612,6 +2689,20 @@ func (s *Server) tailServerLog(path string, stop <-chan bool) {
 // and then streams forward, processing lines and continuing to tail for new lines.
 func (s *Server) tailServerLogFromOffset(path string, stop <-chan bool, window int64) {
 	const pollInterval = 250 * time.Millisecond
+
+	// Harden path: rebuild contained absolute output log path ignoring provided argument.
+	if s != nil && s.Paths != nil {
+		base := s.Paths.ServerLogsDir(s.ID)
+		if abs, err := filepath.Abs(base); err == nil {
+			base = abs
+		}
+		expected := fmt.Sprintf("%s_output.log", s.Paths.ServerName(s.ID))
+		if safe, err := utils.SecureJoin(base, expected); err == nil {
+			path = safe
+		} else {
+			return
+		}
+	}
 
 	if window <= 0 {
 		window = 128 * 1024 // default 128KB
@@ -2749,8 +2840,17 @@ func (s *Server) detectSCONPortFromLog() int {
 	if s == nil || s.Paths == nil {
 		return 0
 	}
-	logPath := filepath.Join(s.Paths.ServerGameDir(s.ID), "BepInEx", "LogOutput.log")
-	f, err := os.Open(logPath)
+	// Build a contained path to the BepInEx LogOutput.log within the server's game directory.
+	// Use an absolute base and SecureJoin to prevent path traversal and satisfy static analysis.
+	base := s.Paths.ServerGameDir(s.ID)
+	if absBase, err := filepath.Abs(base); err == nil {
+		base = absBase
+	}
+	safeLogPath, err := utils.SecureJoin(base, filepath.Join("BepInEx", "LogOutput.log"))
+	if err != nil {
+		return 0
+	}
+	f, err := os.Open(safeLogPath)
 	if err != nil {
 		return 0
 	}

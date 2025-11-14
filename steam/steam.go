@@ -179,21 +179,38 @@ func (s *Steam) UpdateGame(beta bool) error {
 	} else {
 		dir = s.Paths.ReleaseDir()
 	}
+	// Defensive: ensure the chosen install directory is within the configured root path
+	root := filepath.Clean(s.Paths.RootPath)
+	cleanDir := filepath.Clean(dir)
+	if rel, err := filepath.Rel(root, cleanDir); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("invalid install dir escapes root: %s", dir)
+	}
 	s.Logger.Write(fmt.Sprintf("Starting update for Steam ID: %s to %s", s.SteamID, dir))
 	s.reportProgress("Preparing SteamCMD", 0, 0)
 
+	// Validate SteamID is numeric to satisfy command construction safety requirements
+	if !isAllDigits(strings.TrimSpace(s.SteamID)) {
+		return fmt.Errorf("invalid SteamID: %q", s.SteamID)
+	}
+
+	branch := "public"
+	if beta {
+		branch = "beta"
+	}
+
+	// Build an allow-listed argument sequence for SteamCMD. Each token is a distinct argv element,
+	// avoiding shell expansion. Tokens are validated before execution to mitigate command injection.
 	steamCmd := []string{
 		"+force_install_dir", dir,
 		"+login", "anonymous",
 		"+app_update", s.SteamID,
-		"-beta",
+		"-beta", branch,
+		"validate",
+		"+quit",
 	}
-	if beta {
-		steamCmd = append(steamCmd, "beta")
-	} else {
-		steamCmd = append(steamCmd, "public")
+	if err := validateSteamArgs(steamCmd); err != nil {
+		return err
 	}
-	steamCmd = append(steamCmd, "validate", "+quit")
 
 	steamCmdPath := filepath.Join(s.Paths.SteamDir(), s.steamCmdExecutable())
 	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", steamCmdPath, strings.Join(steamCmd, " ")))
@@ -814,4 +831,84 @@ func sanitizeBepInExVersionTag(tag string) string {
 		}
 	}
 	return tag
+}
+
+// isAllDigits returns true if s contains only ASCII digits 0-9 and is non-empty.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// validateSteamArgs performs conservative validation of the SteamCMD argv sequence.
+// It ensures only expected tokens are present and that values meet basic constraints.
+func validateSteamArgs(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no arguments provided")
+	}
+	// Allowed fixed flags/tokens
+	allowed := map[string]bool{
+		"+force_install_dir": true,
+		"+login":             true,
+		"+app_update":        true,
+		"-beta":              true,
+		"beta":               true,
+		"public":             true,
+		"validate":           true,
+		"+quit":              true,
+		"anonymous":          true,
+	}
+	// Walk tokens and ensure ordering constraints for pairs
+	for i := 0; i < len(args); i++ {
+		tok := strings.TrimSpace(args[i])
+		// First-level sanity: disallow NULs or newlines in any token
+		if strings.ContainsRune(tok, '\x00') || strings.ContainsRune(tok, '\n') || strings.ContainsRune(tok, '\r') {
+			return fmt.Errorf("invalid control characters in argument")
+		}
+		switch tok {
+		case "+force_install_dir":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for +force_install_dir")
+			}
+			// Accept any dir value; exec.Command passes argv without shell expansion.
+			i++
+		case "+login":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing value for +login")
+			}
+			if strings.TrimSpace(args[i+1]) != "anonymous" {
+				return fmt.Errorf("only anonymous login supported")
+			}
+			i++
+		case "+app_update":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing SteamID for +app_update")
+			}
+			if !isAllDigits(strings.TrimSpace(args[i+1])) {
+				return fmt.Errorf("invalid SteamID value")
+			}
+			i++
+		case "-beta":
+			if i+1 >= len(args) {
+				return fmt.Errorf("missing branch after -beta")
+			}
+			b := strings.TrimSpace(args[i+1])
+			if b != "beta" && b != "public" {
+				return fmt.Errorf("invalid branch %q", b)
+			}
+			i++
+		default:
+			if !allowed[tok] {
+				// Token not in allowlist: reject
+				return fmt.Errorf("unexpected token %q in SteamCMD args", tok)
+			}
+		}
+	}
+	return nil
 }
