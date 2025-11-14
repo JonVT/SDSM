@@ -116,8 +116,8 @@ func main() {
 		userStore:   manager.NewUserStore(mgr.Paths),
 	}
 
-    // Configure cookie settings from manager config
-    middleware.SetCookieOptions(middleware.CookieOptions{ForceSecure: mgr != nil && mgr.CookieForceSecure, SameSite: strings.TrimSpace(mgr.CookieSameSite)})
+	// Configure cookie settings from manager config
+	middleware.SetCookieOptions(middleware.CookieOptions{ForceSecure: mgr != nil && mgr.CookieForceSecure, SameSite: strings.TrimSpace(mgr.CookieSameSite)})
 
 	// If we are the detached/background process, hide the console window if present
 	if runtime.GOOS == "windows" && mgr != nil && mgr.TrayEnabled {

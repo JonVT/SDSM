@@ -11,10 +11,10 @@ import (
 // See: https://discord.com/developers/docs/resources/channel#embed-object-embed-structure
 // We intentionally keep this minimal for MVP.
 type Embed struct {
-	Title       string      `json:"title,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Color       int         `json:"color,omitempty"`
-	Timestamp   string      `json:"timestamp,omitempty"`
+	Title       string       `json:"title,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Color       int          `json:"color,omitempty"`
+	Timestamp   string       `json:"timestamp,omitempty"`
 	Footer      *EmbedFooter `json:"footer,omitempty"`
 	Fields      []EmbedField `json:"fields,omitempty"`
 }

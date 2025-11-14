@@ -67,17 +67,17 @@ func TestValidateNewServerConfig(t *testing.T) {
 	}}
 	// Valid new server
 	in := NewServerInput{
-		Name:            " Charlie ",
-		World:           "mars",
-		StartLocation:   "base",
-		StartCondition:  "normal",
-		Difficulty:      "Easy",
-		PortRaw:         "27030",
-		MaxClientsRaw:   "16",
-		SaveIntervalRaw: "300",
-		RestartDelayRaw: "10",
-		ShutdownDelayRaw:"2",
-		BetaRaw:         "true",
+		Name:             " Charlie ",
+		World:            "mars",
+		StartLocation:    "base",
+		StartCondition:   "normal",
+		Difficulty:       "Easy",
+		PortRaw:          "27030",
+		MaxClientsRaw:    "16",
+		SaveIntervalRaw:  "300",
+		RestartDelayRaw:  "10",
+		ShutdownDelayRaw: "2",
+		BetaRaw:          "true",
 	}
 	cfg, err := ValidateNewServerConfig(mgr, in)
 	if err != nil {

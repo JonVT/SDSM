@@ -365,8 +365,12 @@ func (h *ManagerHandlers) serverUpdateNeeded(s *models.Server) bool {
 	// SCON: normalize leading 'v' and case-insensitive
 	norm := func(v string) string {
 		v = strings.TrimSpace(v)
-		if v == "" { return v }
-		if v[0] == 'v' || v[0] == 'V' { v = v[1:] }
+		if v == "" {
+			return v
+		}
+		if v[0] == 'v' || v[0] == 'V' {
+			v = v[1:]
+		}
 		return strings.ToLower(v)
 	}
 	if curRaw, oldRaw := strings.TrimSpace(h.manager.SCONDeployed()), strings.TrimSpace(snap.SCONDeployed); !isSentinel(curRaw) && !isSentinel(oldRaw) {
@@ -642,7 +646,9 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 		eta := 0
 		if !s.StoppingEnds.IsZero() {
 			rem := int(time.Until(s.StoppingEnds).Seconds())
-			if rem > 0 { eta = rem }
+			if rem > 0 {
+				eta = rem
+			}
 		}
 		ToastInfo(c, "Restart Pending", s.Name+" shutdown already in progress; restart will follow.")
 		h.manager.NotifyServerEvent(s, "restart-pending", fmt.Sprintf("Shutdown already in progress; restart will follow (ETA %d seconds).", eta))
@@ -664,9 +670,13 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 			// When fully stopped, queue restart after restart delay
 			if !srv.Running && !srv.Starting {
 				restartDelay := srv.RestartDelaySeconds
-				if restartDelay < 0 { restartDelay = models.DefaultRestartDelaySeconds }
+				if restartDelay < 0 {
+					restartDelay = models.DefaultRestartDelaySeconds
+				}
 				go func(sd int, srv2 *models.Server) {
-					if sd > 0 { time.Sleep(time.Duration(sd) * time.Second) }
+					if sd > 0 {
+						time.Sleep(time.Duration(sd) * time.Second)
+					}
 					// Start server
 					srv2.Start()
 					// Notify restart execution
@@ -1050,7 +1060,11 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 	// Optional: configure adaptive probe delay (1-120s)
 	if v := strings.TrimSpace(body["port_forward_probe_delay_seconds"]); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
-			if n < 1 { n = 1 } else if n > 120 { n = 120 }
+			if n < 1 {
+				n = 1
+			} else if n > 120 {
+				n = 120
+			}
 			s.PortForwardProbeDelaySeconds = n
 		}
 	}
@@ -1250,31 +1264,31 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 	}
 	// Support both JSON and x-www-form-urlencoded bodies
 	var req struct {
-		Name                      string `json:"name"`
-		World                     string `json:"world"`
-		StartLocation             string `json:"start_location"`
-		StartCondition            string `json:"start_condition"`
-		Difficulty                string `json:"difficulty"`
-		Port                      int    `json:"port"`
-		MaxClients                int    `json:"max_clients"`
-		Password                  string `json:"password"`
-		AuthSecret                string `json:"auth_secret"`
-		SaveInterval              int    `json:"save_interval"`
-		RestartDelaySeconds       int    `json:"restart_delay_seconds"`
-		ShutdownDelaySeconds      int    `json:"shutdown_delay_seconds"`
-		Beta                      bool   `json:"beta"`
-		AutoStart                 bool   `json:"auto_start"`
-		AutoUpdate                bool   `json:"auto_update"`
-		AutoSave                  bool   `json:"auto_save"`
-		AutoPause                 bool   `json:"auto_pause"`
-		PlayerSaves               bool   `json:"player_saves"`
-		MaxAutoSaves              int    `json:"max_auto_saves"`
-		MaxQuickSaves             int    `json:"max_quick_saves"`
-		DeleteSkeletonOnDecay     bool   `json:"delete_skeleton_on_decay"`
+		Name                  string `json:"name"`
+		World                 string `json:"world"`
+		StartLocation         string `json:"start_location"`
+		StartCondition        string `json:"start_condition"`
+		Difficulty            string `json:"difficulty"`
+		Port                  int    `json:"port"`
+		MaxClients            int    `json:"max_clients"`
+		Password              string `json:"password"`
+		AuthSecret            string `json:"auth_secret"`
+		SaveInterval          int    `json:"save_interval"`
+		RestartDelaySeconds   int    `json:"restart_delay_seconds"`
+		ShutdownDelaySeconds  int    `json:"shutdown_delay_seconds"`
+		Beta                  bool   `json:"beta"`
+		AutoStart             bool   `json:"auto_start"`
+		AutoUpdate            bool   `json:"auto_update"`
+		AutoSave              bool   `json:"auto_save"`
+		AutoPause             bool   `json:"auto_pause"`
+		PlayerSaves           bool   `json:"player_saves"`
+		MaxAutoSaves          int    `json:"max_auto_saves"`
+		MaxQuickSaves         int    `json:"max_quick_saves"`
+		DeleteSkeletonOnDecay bool   `json:"delete_skeleton_on_decay"`
 		// UseSteamP2P removed; always false
-		DisconnectTimeout         int    `json:"disconnect_timeout"`
-		Visible                   bool   `json:"server_visible"`
-		BepInExInitTimeoutSeconds int    `json:"bepinex_init_timeout_seconds"`
+		DisconnectTimeout         int  `json:"disconnect_timeout"`
+		Visible                   bool `json:"server_visible"`
+		BepInExInitTimeoutSeconds int  `json:"bepinex_init_timeout_seconds"`
 	}
 	if strings.Contains(strings.ToLower(c.GetHeader("Content-Type")), "application/json") {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -1388,10 +1402,10 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		MaxQuickSaves:         ifZero(req.MaxQuickSaves, 5),
 		DeleteSkeletonOnDecay: req.DeleteSkeletonOnDecay,
 		// Force Steam P2P off
-		UseSteamP2P:           false,
-		DisconnectTimeout:     ifZero(req.DisconnectTimeout, 10000),
-		RestartDelaySeconds:   v.RestartDelay,
-		ShutdownDelaySeconds:  v.ShutdownDelay,
+		UseSteamP2P:          false,
+		DisconnectTimeout:    ifZero(req.DisconnectTimeout, 10000),
+		RestartDelaySeconds:  v.RestartDelay,
+		ShutdownDelaySeconds: v.ShutdownDelay,
 		BepInExInitTimeoutSeconds: func() int {
 			t := req.BepInExInitTimeoutSeconds
 			if t <= 0 {
@@ -2191,7 +2205,9 @@ func (h *ManagerHandlers) APIServerLogClear(c *gin.Context) {
 
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		var body struct{ Name string `json:"name"` }
+		var body struct {
+			Name string `json:"name"`
+		}
 		if err := c.ShouldBindJSON(&body); err == nil {
 			name = strings.TrimSpace(body.Name)
 		}
@@ -2238,7 +2254,9 @@ func (h *ManagerHandlers) APIPortForwardMetrics(c *gin.Context) {
 	pending := 0
 	failures := 0
 	for _, s := range h.manager.Servers {
-		if s == nil { continue }
+		if s == nil {
+			continue
+		}
 		if s.AutoPortForward {
 			totalEnabled++
 			if s.PortForwardActive {
@@ -3386,12 +3404,12 @@ func atoiSafe(s string) int {
 
 func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {
 	resp := gin.H{
-		"active":              h.manager.IsActive(),
-		"updating":            h.manager.IsUpdating(),
-		"server_count":        h.manager.ServerCount(),
-		"server_count_active": h.manager.ServerCountActive(),
-		"auto_port_forward_manager": h.manager.AutoPortForwardManager,
-		"manager_port_forward_active": h.manager.ManagerPortForwardActive,
+		"active":                             h.manager.IsActive(),
+		"updating":                           h.manager.IsUpdating(),
+		"server_count":                       h.manager.ServerCount(),
+		"server_count_active":                h.manager.ServerCountActive(),
+		"auto_port_forward_manager":          h.manager.AutoPortForwardManager,
+		"manager_port_forward_active":        h.manager.ManagerPortForwardActive,
 		"manager_port_forward_external_port": h.manager.ManagerPortForwardExternalPort,
 	}
 	if strings.TrimSpace(h.manager.ManagerPortForwardLastError) != "" {

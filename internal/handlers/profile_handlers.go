@@ -36,10 +36,11 @@ func (h *ProfileHandlers) ProfileGET(c *gin.Context) {
 // APIProfileChangePassword updates the current user's password via JSON API.
 // Request JSON: { "current_password": string, "new_password": string, "confirm_password": string }
 // Responses:
-//   200 OK on success {"status":"ok"}
-//   400 Bad Request on validation failure {"error": string}
-//   401 Unauthorized if current password is incorrect {"error": string}
-//   500 Internal Server Error if hashing/saving fails {"error": string}
+//
+//	200 OK on success {"status":"ok"}
+//	400 Bad Request on validation failure {"error": string}
+//	401 Unauthorized if current password is incorrect {"error": string}
+//	500 Internal Server Error if hashing/saving fails {"error": string}
 func (h *ProfileHandlers) APIProfileChangePassword(c *gin.Context) {
 	username := c.GetString("username")
 	type reqBody struct {

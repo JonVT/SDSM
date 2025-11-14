@@ -5,11 +5,11 @@ package models
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"context"
 	"io"
 	fs "io/fs"
 	"net/http"
@@ -129,10 +129,10 @@ type ServerConfig struct {
 // Server represents a managed dedicated server instance, including
 // runtime state, settings, logs, and client/chat history.
 type Server struct {
-	ID             int            `json:"id"`
-	Proc           *exec.Cmd      `json:"-"`
-	Thrd           chan bool      `json:"-"`
-	pid            int            `json:"-"`
+	ID   int       `json:"id"`
+	Proc *exec.Cmd `json:"-"`
+	Thrd chan bool `json:"-"`
+	pid  int       `json:"-"`
 	//lint:ignore U1000 retained for legacy JSON compatibility; stdin write path removed
 	stdin          io.WriteCloser `json:"-"` // deprecated: historical process stdin holder (unused)
 	Logger         *utils.Logger  `json:"-"`
@@ -188,8 +188,8 @@ type Server struct {
 	SCONPort                  int      `json:"scon_port"`                    // Port for SCON plugin HTTP API
 	BepInExInitTimeoutSeconds int      `json:"bepinex_init_timeout_seconds"` // Timeout for initial BepInEx bootstrap (Windows)
 	// Attach/rehydrate settings (optional; defaults applied when zero/absent)
-	LogAttachRehydrateKB         int `json:"log_attach_rehydrate_kb"`          // How many KB of the output log to replay on attach (default 256)
-	ClientsQueryRetryCount       int `json:"clients_query_retry_count"`        // How many times to issue CLIENTS after attach (default 3)
+	LogAttachRehydrateKB          int `json:"log_attach_rehydrate_kb"`           // How many KB of the output log to replay on attach (default 256)
+	ClientsQueryRetryCount        int `json:"clients_query_retry_count"`         // How many times to issue CLIENTS after attach (default 3)
 	ClientsQueryRetryDelaySeconds int `json:"clients_query_retry_delay_seconds"` // Delay between CLIENTS retries (default 2s)
 	// Detached indicates this server should start in its own process group (Unix) and remain
 	// running if the manager exits. It is derived from Manager.DetachedServers and is not
@@ -1291,17 +1291,17 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 
 func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 	s := &Server{
-		ID:                        serverID,
-		Paths:                     paths,
-		Clients:                   []*Client{},
-		Chat:                      []*Chat{},
-		Mods:                      []string{},
-		Paused:                    false,
-		Running:                   false,
-		RestartDelaySeconds:       DefaultRestartDelaySeconds,
-		ShutdownDelaySeconds:      2,
-		WelcomeDelaySeconds:       1,
-		BepInExInitTimeoutSeconds: 10,
+		ID:                           serverID,
+		Paths:                        paths,
+		Clients:                      []*Client{},
+		Chat:                         []*Chat{},
+		Mods:                         []string{},
+		Paused:                       false,
+		Running:                      false,
+		RestartDelaySeconds:          DefaultRestartDelaySeconds,
+		ShutdownDelaySeconds:         2,
+		WelcomeDelaySeconds:          1,
+		BepInExInitTimeoutSeconds:    10,
 		PortForwardProbeDelaySeconds: 10,
 	}
 

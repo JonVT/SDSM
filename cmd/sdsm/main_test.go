@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/time/rate"
 	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
-	"golang.org/x/time/rate"
 )
 
 // initMinimalApp initializes the global app with a minimal manager and services for testing.

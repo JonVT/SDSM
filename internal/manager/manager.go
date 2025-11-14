@@ -149,18 +149,18 @@ type Manager struct {
 	// Windows process discovery behavior (Windows-only); when true, WMI may be used.
 	WindowsDiscoveryWMIEnabled bool `json:"windows_discovery_wmi_enabled"`
 	// SCON overrides (optional)
-	SCONRepoOverride        string `json:"scon_repo_override"`
-	SCONURLLinuxOverride    string `json:"scon_url_linux_override"`
-	SCONURLWindowsOverride  string `json:"scon_url_windows_override"`
+	SCONRepoOverride       string `json:"scon_repo_override"`
+	SCONURLLinuxOverride   string `json:"scon_url_linux_override"`
+	SCONURLWindowsOverride string `json:"scon_url_windows_override"`
 	// Discord integration
 	// DiscordDefaultWebhook is the per-manager default webhook for notifications (servers, updates)
 	DiscordDefaultWebhook string `json:"discord_default_webhook"`
 	// DiscordBugReportWebhook routes user-submitted bug reports to the SDSM community server
 	DiscordBugReportWebhook string `json:"discord_bug_report_webhook"`
 	// Transient NAT/port forward status for manager port (not persisted)
-	ManagerPortForwardActive       bool   `json:"-"`
-	ManagerPortForwardExternalPort int    `json:"-"`
-	ManagerPortForwardLastError    string `json:"-"`
+	ManagerPortForwardActive       bool          `json:"-"`
+	ManagerPortForwardExternalPort int           `json:"-"`
+	ManagerPortForwardLastError    string        `json:"-"`
 	pfStop                         chan struct{} `json:"-"`
 	// OnServerAttached is an optional callback invoked whenever the manager
 	// attaches to an already running detached server process during initialization
@@ -235,26 +235,26 @@ func NewManager() *Manager { return NewManagerWithConfig("") }
 // No environment variables are consulted.
 func NewManagerWithConfig(configPath string) *Manager {
 	m := &Manager{
-		SteamID:        "600760",
-		SavedPath:      "",
-		Port:           5000,
-		Language:       "english",
-		Servers:        []*models.Server{},
-		UpdateTime:     time.Time{},
-		StartupUpdate:  true,
-		progressByType: make(map[DeployType]*UpdateProgress),
-		serverProgress: make(map[int]*ServerCopyProgress),
-		TrayEnabled:    runtime.GOOS == "windows", // default true on Windows, false elsewhere
-		TLSEnabled:     false,
-		TLSCertPath:    "",
-		TLSKeyPath:     "",
-		AutoPortForwardManager: false,
-		VerboseHTTP:            false,
-		VerboseUpdate:          false,
-		JWTSecret:              "your-secret-key-change-in-production",
-		CookieForceSecure:      false,
-		CookieSameSite:         "none",
-		AllowIFrame:            false,
+		SteamID:                    "600760",
+		SavedPath:                  "",
+		Port:                       5000,
+		Language:                   "english",
+		Servers:                    []*models.Server{},
+		UpdateTime:                 time.Time{},
+		StartupUpdate:              true,
+		progressByType:             make(map[DeployType]*UpdateProgress),
+		serverProgress:             make(map[int]*ServerCopyProgress),
+		TrayEnabled:                runtime.GOOS == "windows", // default true on Windows, false elsewhere
+		TLSEnabled:                 false,
+		TLSCertPath:                "",
+		TLSKeyPath:                 "",
+		AutoPortForwardManager:     false,
+		VerboseHTTP:                false,
+		VerboseUpdate:              false,
+		JWTSecret:                  "your-secret-key-change-in-production",
+		CookieForceSecure:          false,
+		CookieSameSite:             "none",
+		AllowIFrame:                false,
 		WindowsDiscoveryWMIEnabled: true,
 	}
 

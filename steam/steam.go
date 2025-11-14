@@ -28,7 +28,7 @@ const (
 	launchPadFallback  = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
 	bepInExVersionFile = "bepinex.version"
 	sconVersionFile    = "scon.version"
-	sconDefaultRepo    = "JonVT/SCON"     // default guess; can be overridden via configuration
+	sconDefaultRepo    = "JonVT/SCON" // default guess; can be overridden via configuration
 )
 
 // Steam provides helpers to query Steam APIs and deploy/update components

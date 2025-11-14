@@ -3,9 +3,9 @@
 package models
 
 import (
+	win "golang.org/x/sys/windows"
 	"os/exec"
 	"syscall"
-	win "golang.org/x/sys/windows"
 )
 
 // Windows does not support the Unix SysProcAttr.Setpgid field; this is a no-op.

@@ -162,8 +162,12 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		h.manager.Save()
 		// Update Discord webhooks after base config save (same transaction)
 		if dcDefault != "" || dcBug != "" {
-			if dcDefault != "" { h.manager.DiscordDefaultWebhook = dcDefault }
-			if dcBug != "" { h.manager.DiscordBugReportWebhook = dcBug }
+			if dcDefault != "" {
+				h.manager.DiscordDefaultWebhook = dcDefault
+			}
+			if dcBug != "" {
+				h.manager.DiscordBugReportWebhook = dcBug
+			}
 			h.manager.Save()
 		}
 		// Apply manager port forwarding changes without requiring restart

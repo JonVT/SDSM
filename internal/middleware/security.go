@@ -153,11 +153,11 @@ func RequestLoggerWithOptions(noisy bool) gin.HandlerFunc {
 	// Paths to suppress entirely unless verbose
 	suppressedPrefixes := []string{"/static/"}
 	suppressedExact := map[string]struct{}{
-		"/healthz": {},
-		"/readyz":  {},
-		"/version": {},
+		"/healthz":     {},
+		"/readyz":      {},
+		"/version":     {},
 		"/favicon.ico": {},
-		"/sdsm.png": {},
+		"/sdsm.png":    {},
 	}
 	return func(c *gin.Context) {
 		start := time.Now()

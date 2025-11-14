@@ -13,11 +13,11 @@ import (
 )
 
 type bugReportRequest struct {
-	Title             string `json:"title"`
-	Description       string `json:"description"`
-	IncludeManagerLog bool   `json:"include_manager_log"`
-	IncludeUpdateLog  bool   `json:"include_update_log"`
-	IncludeEnvironment bool  `json:"include_environment"`
+	Title              string `json:"title"`
+	Description        string `json:"description"`
+	IncludeManagerLog  bool   `json:"include_manager_log"`
+	IncludeUpdateLog   bool   `json:"include_update_log"`
+	IncludeEnvironment bool   `json:"include_environment"`
 }
 
 func (h *ManagerHandlers) BugReportPOST(c *gin.Context) {
@@ -66,9 +66,13 @@ func (h *ManagerHandlers) BugReportPOST(c *gin.Context) {
 	}
 	// For MVP, inline simple read using utils helper-like code
 	readTail := func(path string, max int) string {
-		if strings.TrimSpace(path) == "" { return "" }
+		if strings.TrimSpace(path) == "" {
+			return ""
+		}
 		bs, err := utilsTail(path, max)
-		if err != nil { return "" }
+		if err != nil {
+			return ""
+		}
 		return string(bs)
 	}
 	if req.IncludeManagerLog {
@@ -100,7 +104,9 @@ func (h *ManagerHandlers) BugReportPOST(c *gin.Context) {
 }
 
 func truncateForDiscord(s string, limit int) string {
-	if len(s) <= limit { return s }
+	if len(s) <= limit {
+		return s
+	}
 	return s[:limit-3] + "..."
 }
 
@@ -108,14 +114,24 @@ func truncateForDiscord(s string, limit int) string {
 // Not optimized for huge files; sufficient for small tails.
 func utilsTail(path string, max int) ([]byte, error) {
 	f, err := os.Open(path)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
 	fi, err := f.Stat()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	size := fi.Size()
 	start := int64(0)
-	if size > int64(max) { start = size - int64(max) }
-	if start > 0 { if _, err := f.Seek(start, 0); err != nil { return nil, err } }
+	if size > int64(max) {
+		start = size - int64(max)
+	}
+	if start > 0 {
+		if _, err := f.Seek(start, 0); err != nil {
+			return nil, err
+		}
+	}
 	buf := make([]byte, int(size-start))
 	_, _ = f.Read(buf)
 	return buf, nil

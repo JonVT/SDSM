@@ -385,21 +385,33 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 			all, assignedList, _ = h.userStore.GetAssignments(uname)
 		}
 		for _, srv := range h.manager.Servers {
-			if srv == nil { continue }
+			if srv == nil {
+				continue
+			}
 			if role == string(manager.RoleAdmin) {
 				accessible = append(accessible, srv.ID)
 			} else if role == string(manager.RoleOperator) {
 				if all {
 					accessible = append(accessible, srv.ID)
 				} else {
-					for _, id := range assignedList { if id == srv.ID { accessible = append(accessible, srv.ID); break } }
+					for _, id := range assignedList {
+						if id == srv.ID {
+							accessible = append(accessible, srv.ID)
+							break
+						}
+					}
 				}
 			}
 		}
 		if len(accessible) > 1 {
 			sort.Ints(accessible)
 			idx := -1
-			for i, id := range accessible { if id == s.ID { idx = i; break } }
+			for i, id := range accessible {
+				if id == s.ID {
+					idx = i
+					break
+				}
+			}
 			if idx >= 0 {
 				// Modular wraparound
 				prevID = accessible[(idx-1+len(accessible))%len(accessible)]
@@ -408,24 +420,28 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		}
 		// Lookup names for tooltips if IDs resolved
 		if prevID > 0 {
-			if ps := h.manager.ServerByID(prevID); ps != nil { c.Set("prev_server_name", ps.Name) }
+			if ps := h.manager.ServerByID(prevID); ps != nil {
+				c.Set("prev_server_name", ps.Name)
+			}
 		}
 		if nextID > 0 {
-			if ns := h.manager.ServerByID(nextID); ns != nil { c.Set("next_server_name", ns.Name) }
+			if ns := h.manager.ServerByID(nextID); ns != nil {
+				c.Set("next_server_name", ns.Name)
+			}
 		}
 	}
 	payload := gin.H{
-		"server":         s,
-		"liveClients":    liveSorted,
-		"historyClients": historySorted,
-		"manager":        h.manager,
-		"username":       username,
-		"role":           role,
-		"prev_server_id": prevID,
-		"next_server_id": nextID,
+		"server":           s,
+		"liveClients":      liveSorted,
+		"historyClients":   historySorted,
+		"manager":          h.manager,
+		"username":         username,
+		"role":             role,
+		"prev_server_id":   prevID,
+		"next_server_id":   nextID,
 		"prev_server_name": c.GetString("prev_server_name"),
 		"next_server_name": c.GetString("next_server_name"),
-		"worldInfo":      worldInfo,
+		"worldInfo":        worldInfo,
 		// Canonical world ID used by the client as initial selection
 		"resolved_world_id": resolvedWorldID,
 		// Stable world IDs and localized display names
@@ -511,8 +527,8 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		"auto_pause":               true,
 		"delete_skeleton_on_decay": false,
 		// Steam P2P removed; always disabled
-		"use_steam_p2p":            false,
-		"server_visible":           true,
+		"use_steam_p2p":  false,
+		"server_visible": true,
 	}
 
 	if overrides != nil {
@@ -613,7 +629,11 @@ func (h *ManagerHandlers) writeServerDeploySnapshot(s *models.Server) error {
 	}
 	// Resolve path helpers from server when available, otherwise from manager
 	var paths *utils.Paths
-	if s.Paths != nil { paths = s.Paths } else { paths = h.manager.Paths }
+	if s.Paths != nil {
+		paths = s.Paths
+	} else {
+		paths = h.manager.Paths
+	}
 	if paths == nil {
 		return fmt.Errorf("paths unavailable")
 	}
@@ -646,10 +666,13 @@ func (h *ManagerHandlers) writeServerDeploySnapshot(s *models.Server) error {
 	// Write atomically: temp file then rename
 	dst := paths.ServerDeploySnapshotFile(s.ID)
 	tmp, err := os.CreateTemp(paths.ServerSettingsDir(s.ID), "deploy-*.tmp")
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	tmpPath := tmp.Name()
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close(); _ = os.Remove(tmpPath)
+		tmp.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := tmp.Close(); err != nil {
@@ -775,29 +798,29 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 
 	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
 	data := gin.H{
-		"username":            username,
-		"role":                c.GetString("role"),
-		"steam_id":            h.manager.SteamID,
-		"root_path":           h.manager.Paths.RootPath,
-		"port":                h.manager.Port,
-		"language":            h.manager.Language,
-		"discord_default_webhook":   h.manager.DiscordDefaultWebhook,
+		"username":                   username,
+		"role":                       c.GetString("role"),
+		"steam_id":                   h.manager.SteamID,
+		"root_path":                  h.manager.Paths.RootPath,
+		"port":                       h.manager.Port,
+		"language":                   h.manager.Language,
+		"discord_default_webhook":    h.manager.DiscordDefaultWebhook,
 		"discord_bug_report_webhook": h.manager.DiscordBugReportWebhook,
-		"languages":           relLangs,
-		"release_languages":   relLangs,
-		"beta_languages":      betaLangs,
-		"auto_update":         h.manager.UpdateTime.Format("15:04:05"),
-		"start_update":        h.manager.StartupUpdate,
-		"server_count":        h.manager.ServerCount(),
-		"server_count_active": h.manager.ServerCountActive(),
-		"updating":            h.manager.IsUpdating(),
-		"detached":            h.manager.DetachedServers,
-		"tray_enabled":        h.manager.TrayEnabled,
-		"tls_enabled":         h.manager.TLSEnabled,
-		"tls_cert":            h.manager.TLSCertPath,
-		"tls_key":             h.manager.TLSKeyPath,
-		"auto_port_forward_manager": h.manager.AutoPortForwardManager,
-		"game_data_warnings":  warnings,
+		"languages":                  relLangs,
+		"release_languages":          relLangs,
+		"beta_languages":             betaLangs,
+		"auto_update":                h.manager.UpdateTime.Format("15:04:05"),
+		"start_update":               h.manager.StartupUpdate,
+		"server_count":               h.manager.ServerCount(),
+		"server_count_active":        h.manager.ServerCountActive(),
+		"updating":                   h.manager.IsUpdating(),
+		"detached":                   h.manager.DetachedServers,
+		"tray_enabled":               h.manager.TrayEnabled,
+		"tls_enabled":                h.manager.TLSEnabled,
+		"tls_cert":                   h.manager.TLSCertPath,
+		"tls_key":                    h.manager.TLSKeyPath,
+		"auto_port_forward_manager":  h.manager.AutoPortForwardManager,
+		"game_data_warnings":         warnings,
 	}
 
 	if strings.EqualFold(strings.TrimSpace(c.Query("tls")), "generated") {
