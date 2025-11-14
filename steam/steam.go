@@ -219,18 +219,19 @@ func (s *Steam) UpdateGame(beta bool) error {
 	if err := validateSteamArgs(steamCmd); err != nil {
 		return err
 	}
-	// Construct contained absolute path to steamcmd executable using SecureJoin
-	steamBase := s.Paths.SteamDir()
-	if absBase, err := filepath.Abs(steamBase); err == nil {
-		steamBase = absBase
+	// Construct contained absolute path to steamcmd executable using SecureJoin, rooted at RootPath/bin/steamcmd
+	rootAbs := s.Paths.RootPath
+	if v, err := filepath.Abs(rootAbs); err == nil {
+		rootAbs = v
+	}
+	steamDirSafe, derr := utils.SecureJoin(rootAbs, filepath.Join("bin", "steamcmd"))
+	if derr != nil {
+		return fmt.Errorf("failed to resolve steamcmd directory: %v", derr)
 	}
 	steamCmdExe := s.steamCmdExecutable()
-	execPath, jerr := utils.SecureJoin(steamBase, steamCmdExe)
+	execPath, jerr := utils.SecureJoin(steamDirSafe, steamCmdExe)
 	if jerr != nil {
 		return fmt.Errorf("steamcmd path containment failed: %v", jerr)
-	}
-	if _, statErr := os.Stat(execPath); statErr != nil {
-		return fmt.Errorf("steamcmd executable not found: %v", statErr)
 	}
 	// Log command with sanitized path (arguments already validated)
 	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", execPath, strings.Join(steamCmd, " ")))

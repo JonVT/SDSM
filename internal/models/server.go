@@ -259,6 +259,29 @@ func (s *Server) safePIDFilePath() string {
 	return safe
 }
 
+// isPathWithin returns true if candidate is within base directory after absolute/clean resolution.
+func isPathWithin(base, candidate string) bool {
+	if strings.TrimSpace(base) == "" || strings.TrimSpace(candidate) == "" {
+		return false
+	}
+	b := filepath.Clean(base)
+	c := filepath.Clean(candidate)
+	if ab, err := filepath.Abs(b); err == nil {
+		b = ab
+	}
+	if ac, err := filepath.Abs(c); err == nil {
+		c = ac
+	}
+	rel, err := filepath.Rel(b, c)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return true
+}
+
 // beginClientsScan initializes a transient scan of currently connected clients based on
 // a CLIENTS response block in the server log.
 func (s *Server) beginClientsScan() {
@@ -916,6 +939,14 @@ func (s *Server) rewritePlayersLog() {
 		os.Remove(safeTempPath)
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed closing temp players log: %v", err))
+		}
+		return
+	}
+	// Final containment guard before atomic replace to satisfy code scanning
+	if !isPathWithin(baseDir, safeTempPath) || !isPathWithin(baseDir, safeLogPath) {
+		os.Remove(safeTempPath)
+		if s.Logger != nil {
+			s.Logger.Write("Aborting players log replace due to failed path containment check")
 		}
 		return
 	}
@@ -2850,6 +2881,10 @@ func (s *Server) detectSCONPortFromLog() int {
 	if err != nil {
 		return 0
 	}
+    // Explicit containment guard to satisfy static analysis
+    if !isPathWithin(base, safeLogPath) {
+        return 0
+    }
 	f, err := os.Open(safeLogPath)
 	if err != nil {
 		return 0
