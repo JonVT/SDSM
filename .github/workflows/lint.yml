@@ -93,7 +93,7 @@ jobs:
           fi
           # Ensure SARIF exists even if converter failed
           if [[ ! -f govulncheck.sarif ]]; then
-            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck"}},"results":[]}]}'> govulncheck.sarif
+            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck","informationUri":"https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck","rules":[]}},"results":[]}]}'> govulncheck.sarif
           fi
           echo "govulncheck JSON converted to SARIF (results may be empty)." >> $GITHUB_STEP_SUMMARY
 

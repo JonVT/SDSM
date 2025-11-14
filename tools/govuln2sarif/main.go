@@ -146,8 +146,19 @@ func main() {
 		vulns = report.Vulnerabilities
 	}
 	if len(vulns) == 0 {
-		// Produce empty SARIF rather than failing
-		writeSarif(*outPath, Sarif{Version: "2.1.0", Schema: sarifSchema(), Runs: []SarifRun{{Tool: SarifTool{Driver: SarifDriver{Name: "govulncheck", InformationURI: toolURI()}}}}})
+		// Produce empty SARIF with explicit empty arrays for rules/results (not null)
+		writeSarif(*outPath, Sarif{
+			Version: "2.1.0",
+			Schema:  sarifSchema(),
+			Runs: []SarifRun{{
+				Tool: SarifTool{Driver: SarifDriver{
+					Name:           "govulncheck",
+					InformationURI: toolURI(),
+					Rules:          []SarifRule{},
+				}},
+				Results: []SarifResult{},
+			}},
+		})
 		return
 	}
 
