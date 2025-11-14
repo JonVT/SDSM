@@ -9,8 +9,8 @@ This document tracks the strategy for driving GitHub Code Scanning alerts (CodeQ
 4. Prevent regressions with PR gating and baseline comparison.
 
 ## Workflow Enhancements
-- `lint.yml` now uploads `staticcheck` SARIF (`category: staticcheck`).
-- Placeholder SARIF for `govulncheck` added; convert JSON -> SARIF for richer data (tool implementation pending).
+- `lint.yml` uploads `staticcheck` SARIF (`category: staticcheck`).
+- Real govulncheck JSON → SARIF conversion via `tools/govuln2sarif` (results uploaded as `category: govulncheck`).
 - Consider adding a baseline job to fail PRs that increase High severity count.
 
 ## Secure Coding Helpers
@@ -42,7 +42,6 @@ Won't fix: Legacy pattern; risk accepted pending refactor (target date Q1).
 ```
 
 ## Pending Improvements
-- Implement govulncheck SARIF converter script to replace placeholder empty SARIF.
 - Add `SECURITY_BASELINE.json` generation to track counts per severity.
 - Integrate PR status check failing on increased High severity.
 
@@ -57,4 +56,4 @@ govulncheck ./...
 Check GitHub Security tab after merge for alert reductions.
 
 ## Change Log
-- 2025-11-14: Added sanitizer & SecureJoin; SARIF upload for staticcheck; placeholder govulncheck SARIF.
+- 2025-11-14: Added sanitizer & SecureJoin; SARIF upload for staticcheck; govulncheck converter & SARIF upload.

@@ -82,9 +82,15 @@ jobs:
 
       - name: Run govulncheck
         run: |
+          set -euo pipefail
           $(go env GOPATH)/bin/govulncheck -json ./... > govulncheck.json || true
-          echo "{}" > govulncheck.sarif
-          echo "NOTE: govulncheck SARIF conversion placeholder; implement converter for richer results." >> $GITHUB_STEP_SUMMARY
+          # Build converter
+          go build -o govuln2sarif ./tools/govuln2sarif
+          ./govuln2sarif -in govulncheck.json -out govulncheck.sarif || {
+            echo "Converter failed; producing empty SARIF" >&2
+            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck"}},"results":[]}]}'> govulncheck.sarif
+          }
+          echo "govulncheck JSON converted to SARIF (results may be empty if no vulns or parsing fell back)." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload govulncheck SARIF (placeholder)
         if: always()
