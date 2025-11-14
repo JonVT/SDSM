@@ -3346,15 +3346,13 @@ func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
 
 	deleted := false
 	for _, d := range tryDirs {
-		target := filepath.Join(d, base)
-		cleanDir := filepath.Clean(d)
-		cleanTarget := filepath.Clean(target)
-		if rel, err := filepath.Rel(cleanDir, cleanTarget); err != nil || strings.HasPrefix(rel, "..") {
+		// Ensure target path remains within expected directory using SecureJoin
+		target, jerr := utils.SecureJoin(d, base)
+		if jerr != nil {
 			continue
 		}
-		if err := os.Remove(cleanTarget); err != nil {
+		if err := os.Remove(target); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				// Try next directory
 				continue
 			}
 			ToastError(c, "Delete Failed", err.Error())
