@@ -22,7 +22,7 @@ import (
 //      filename pattern "ServerN_output.log" where N is the server ID.
 //   3. Validate the parent directory matches Paths.ServerLogsDir(N) to avoid false positives.
 // If any step fails, the process is skipped. Best-effort only; errors are silently ignored.
-func discoverRunningServerPIDs(paths *utils.Paths, logf func(string)) map[int]int {
+func discoverRunningServerPIDs(paths *utils.Paths, _ bool, logf func(string)) map[int]int {
     result := make(map[int]int)
     if paths == nil {
         return result

@@ -33,14 +33,16 @@ func hideConsoleWindow() {
 // spawnDetachedIfNeeded starts a detached copy of the current process and returns true
 // if the parent should exit immediately. This is used to allow the console to return
 // when running with the Windows tray enabled. It will only spawn if a console window
-// is present and SDSM_BACKGROUND is not already set.
+// is present and the --background flag is not already set.
 func spawnDetachedIfNeeded(trayEnabled bool) bool {
 	if !trayEnabled {
 		return false
 	}
-	// Avoid loops
-	if os.Getenv("SDSM_BACKGROUND") == "1" {
-		return false
+	// Avoid loops: if --background flag already present, do not respawn
+	for _, a := range os.Args[1:] {
+		if a == "--background" {
+			return false
+		}
 	}
 	// Only detach if a console window exists (i.e., started from a console)
 	hwnd, _, _ := procGetConsoleWindow.Call()
@@ -52,9 +54,11 @@ func spawnDetachedIfNeeded(trayEnabled bool) bool {
 		return false
 	}
 	args := os.Args[1:]
+	// Append --background flag so the child doesn't respawn
+	args = append(args, "--background")
 	cmd := exec.Command(exe, args...)
-	env := append(os.Environ(), "SDSM_BACKGROUND=1")
-	cmd.Env = env
+	// Preserve existing environment
+	cmd.Env = os.Environ()
 	// Detach from console and hide any window on the child
 	const (
 		DETACHED_PROCESS         = 0x00000008

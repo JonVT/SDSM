@@ -4,7 +4,6 @@ package manager
 
 import (
     "context"
-    "os"
     "path/filepath"
     "regexp"
     "strconv"
@@ -24,15 +23,15 @@ type win32Process struct {
     CommandLine *string // may be nil
 }
 
-func discoverRunningServerPIDs(paths *utils.Paths, logf func(string)) map[int]int {
+func discoverRunningServerPIDs(paths *utils.Paths, wmiEnabled bool, logf func(string)) map[int]int {
     result := make(map[int]int)
     if paths == nil {
         return result
     }
-    // Allow disabling WMI-based discovery via env for environments where WMI is blocked/disabled.
-    if v := strings.TrimSpace(os.Getenv("SDSM_WINDOWS_DISCOVERY_WMI")); strings.EqualFold(v, "0") || strings.EqualFold(v, "false") {
+    // Allow disabling WMI-based discovery via configuration for environments where WMI is blocked/disabled.
+    if !wmiEnabled {
         if logf != nil {
-            logf("Process discovery (windows): WMI disabled by env SDSM_WINDOWS_DISCOVERY_WMI; relying on PID files")
+            logf("Process discovery (windows): WMI disabled by configuration; relying on PID files")
         }
         return result
     }

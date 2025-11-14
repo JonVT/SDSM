@@ -28,11 +28,7 @@ const (
 	launchPadFallback  = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
 	bepInExVersionFile = "bepinex.version"
 	sconVersionFile    = "scon.version"
-	sconRepoEnvVar     = "SDSM_SCON_REPO" // owner/repo override
-	sconDefaultRepo    = "JonVT/SCON"     // default guess; override with env var if needed
-	// Optional environment overrides for SCON URLs
-	sconLinuxURLEnv   = "SDSM_SCON_URL_LINUX"
-	sconWindowsURLEnv = "SDSM_SCON_URL_WINDOWS"
+	sconDefaultRepo    = "JonVT/SCON"     // default guess; can be overridden via configuration
 )
 
 // Steam provides helpers to query Steam APIs and deploy/update components
@@ -43,6 +39,10 @@ type Steam struct {
 	Paths             *utils.Paths
 	progressReporter  func(component, stage string, downloaded, total int64)
 	progressComponent string
+	// Optional SCON overrides supplied by manager configuration
+	SCONRepoOverride       string
+	SCONURLLinuxOverride   string
+	SCONURLWindowsOverride string
 }
 
 // NewSteam constructs a Steam helper bound to a Steam app ID and environment.
@@ -58,6 +58,13 @@ func NewSteam(steamID string, logger *utils.Logger, paths *utils.Paths) *Steam {
 func (s *Steam) SetProgressReporter(component string, reporter func(component, stage string, downloaded, total int64)) {
 	s.progressComponent = component
 	s.progressReporter = reporter
+}
+
+// SetSCONOverrides configures optional overrides for SCON downloads and repository.
+func (s *Steam) SetSCONOverrides(repo, linuxURL, windowsURL string) {
+	s.SCONRepoOverride = strings.TrimSpace(repo)
+	s.SCONURLLinuxOverride = strings.TrimSpace(linuxURL)
+	s.SCONURLWindowsOverride = strings.TrimSpace(windowsURL)
 }
 
 func (s *Steam) reportProgress(stage string, downloaded, total int64) {
@@ -407,9 +414,9 @@ func (s *Steam) resolveLaunchPadDownload() (string, string, error) {
 }
 
 // UpdateSCON downloads the latest SCON release (from GitHub) and places its contents into BepInEx/plugins.
-// The source repo can be overridden via env var SDSM_SCON_REPO (format: owner/repo).
+// The source repo can be overridden via configuration in the manager (format: owner/repo).
 func (s *Steam) UpdateSCON() error {
-	repo := strings.TrimSpace(os.Getenv(sconRepoEnvVar))
+	repo := strings.TrimSpace(s.SCONRepoOverride)
 	if repo == "" {
 		repo = sconDefaultRepo
 	}
@@ -485,14 +492,14 @@ func (s *Steam) UpdateSCON() error {
 }
 
 func (s *Steam) resolveSCONDownload(repo string) (string, string, string, error) { // returns url, name, tag
-	// Allow explicit URL overrides via env for quick pinning/testing
+	// Allow explicit URL overrides via configuration for quick pinning/testing
 	switch runtime.GOOS {
 	case "linux":
-		if v := strings.TrimSpace(os.Getenv(sconLinuxURLEnv)); v != "" {
+		if v := strings.TrimSpace(s.SCONURLLinuxOverride); v != "" {
 			return v, filepath.Base(v), "", nil
 		}
 	case "windows":
-		if v := strings.TrimSpace(os.Getenv(sconWindowsURLEnv)); v != "" {
+		if v := strings.TrimSpace(s.SCONURLWindowsOverride); v != "" {
 			return v, filepath.Base(v), "", nil
 		}
 	default:

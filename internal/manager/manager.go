@@ -133,9 +133,25 @@ type Manager struct {
 	TLSEnabled  bool   `json:"tls_enabled"`
 	TLSCertPath string `json:"tls_cert"`
 	TLSKeyPath  string `json:"tls_key"`
+	// Web and logging behavior
+	VerboseHTTP   bool `json:"verbose_http"`
+	VerboseUpdate bool `json:"verbose_update"`
+	// Security and auth
+	JWTSecret string `json:"jwt_secret"`
+	// Cookie settings
+	CookieForceSecure bool   `json:"cookie_force_secure"`
+	CookieSameSite    string `json:"cookie_samesite"`
+	// UI embedding policy
+	AllowIFrame bool `json:"allow_iframe"`
 	// AutoPortForwardManager enables automatic router port forwarding (TCP) for the
 	// manager's own HTTP(S) port via UPnP/NAT-PMP when available. Default is false.
 	AutoPortForwardManager bool `json:"auto_port_forward_manager"`
+	// Windows process discovery behavior (Windows-only); when true, WMI may be used.
+	WindowsDiscoveryWMIEnabled bool `json:"windows_discovery_wmi_enabled"`
+	// SCON overrides (optional)
+	SCONRepoOverride        string `json:"scon_repo_override"`
+	SCONURLLinuxOverride    string `json:"scon_url_linux_override"`
+	SCONURLWindowsOverride  string `json:"scon_url_windows_override"`
 	// Discord integration
 	// DiscordDefaultWebhook is the per-manager default webhook for notifications (servers, updates)
 	DiscordDefaultWebhook string `json:"discord_default_webhook"`
@@ -212,7 +228,12 @@ func (dt DeployType) displayName() string {
 	return string(dt)
 }
 
-func NewManager() *Manager {
+func NewManager() *Manager { return NewManagerWithConfig("") }
+
+// NewManagerWithConfig creates a Manager loading configuration from the provided path.
+// When configPath is empty, it defaults to ./sdsm.config in the current working directory.
+// No environment variables are consulted.
+func NewManagerWithConfig(configPath string) *Manager {
 	m := &Manager{
 		SteamID:        "600760",
 		SavedPath:      "",
@@ -228,6 +249,13 @@ func NewManager() *Manager {
 		TLSCertPath:    "",
 		TLSKeyPath:     "",
 		AutoPortForwardManager: false,
+		VerboseHTTP:            false,
+		VerboseUpdate:          false,
+		JWTSecret:              "your-secret-key-change-in-production",
+		CookieForceSecure:      false,
+		CookieSameSite:         "none",
+		AllowIFrame:            false,
+		WindowsDiscoveryWMIEnabled: true,
 	}
 
 	for _, deployType := range progressOrder {
@@ -260,31 +288,26 @@ func NewManager() *Manager {
 	// Prepare logging early so load() can report issues
 	m.startLogs()
 
+	// Resolve configuration file path: prefer provided path; otherwise ./sdsm.config
 	var config string
-	if len(os.Args) > 1 && fileExists(os.Args[1]) {
-		config = os.Args[1]
-	} else if env := os.Getenv("SDSM_CONFIG"); env != "" && fileExists(env) {
-		config = env
-	} else if fileExists("sdsm.config") {
-		config = "sdsm.config"
+	if strings.TrimSpace(configPath) != "" {
+		config = strings.TrimSpace(configPath)
 	} else {
-		executable, err := os.Executable()
+		config = "sdsm.config"
+	}
+	// Bootstrap default config if missing
+	if !fileExists(config) {
+		// Use current working directory as root for default config
+		cwd, err := os.Getwd()
 		if err != nil {
-			m.safeLog(fmt.Sprintf("No configuration file found and failed to locate executable directory: %v", err))
+			m.safeLog(fmt.Sprintf("Unable to determine current working directory for default config: %v", err))
 			return m
 		}
-		if resolved, err := filepath.EvalSymlinks(executable); err == nil && resolved != "" {
-			executable = resolved
+		if err := m.bootstrapDefaultConfig(config, cwd); err != nil {
+			m.safeLog(fmt.Sprintf("Unable to create default configuration at %s: %v", config, err))
+			return m
 		}
-		execDir := filepath.Dir(executable)
-		config = filepath.Join(execDir, "sdsm.config")
-		if !fileExists(config) {
-			if err := m.bootstrapDefaultConfig(config, execDir); err != nil {
-				m.safeLog(fmt.Sprintf("Unable to create default configuration at %s: %v", config, err))
-				return m
-			}
-			m.safeLog(fmt.Sprintf("Created default configuration at %s", config))
-		}
+		m.safeLog(fmt.Sprintf("Created default configuration at %s", config))
 	}
 
 	m.ConfigFile = config
@@ -407,9 +430,9 @@ func (m *Manager) UpdatesAvailable() bool {
 func (m *Manager) ComponentsNeedingUpdate() []DeployType {
 	var out []DeployType
 
-	// Optional verbose evaluation controlled by env var. When SDSM_VERBOSE_UPDATE is set
+	// Optional verbose evaluation controlled by configuration. When VerboseUpdate is true
 	// each component's decision path is logged (deployed/latest values, sentinel classification, mismatch).
-	verbose := os.Getenv("SDSM_VERBOSE_UPDATE") != ""
+	verbose := m.VerboseUpdate
 
 	// Helper predicates replicating UpdateAvailable logic while surfacing per-component types
 	isSentinel := func(v string) bool {
@@ -872,7 +895,7 @@ func (m *Manager) initializeServers() {
 	// Perform best-effort process discovery before per-server initialization when detached mode is enabled.
 	var discovered map[int]int
 	if m.DetachedServers {
-		discovered = discoverRunningServerPIDs(m.Paths, func(msg string) { m.safeLog(msg) })
+		discovered = discoverRunningServerPIDs(m.Paths, m.WindowsDiscoveryWMIEnabled, func(msg string) { m.safeLog(msg) })
 		if len(discovered) > 0 {
 			m.safeLog(fmt.Sprintf("Process discovery found running detached servers: %v", discovered))
 		} else {
@@ -972,6 +995,7 @@ func (m *Manager) load() (bool, error) {
 	m.SteamID = temp.SteamID
 	m.SavedPath = temp.SavedPath
 	m.Port = temp.Port
+	m.Language = strings.TrimSpace(temp.Language)
 	m.Servers = temp.Servers
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
@@ -982,6 +1006,18 @@ func (m *Manager) load() (bool, error) {
 	m.TLSKeyPath = strings.TrimSpace(temp.TLSKeyPath)
 	m.TrayEnabled = temp.TrayEnabled
 	m.AutoPortForwardManager = temp.AutoPortForwardManager
+	// Web, security, and logging behavior
+	m.VerboseHTTP = temp.VerboseHTTP
+	m.VerboseUpdate = temp.VerboseUpdate
+	m.JWTSecret = strings.TrimSpace(temp.JWTSecret)
+	m.CookieForceSecure = temp.CookieForceSecure
+	m.CookieSameSite = strings.TrimSpace(temp.CookieSameSite)
+	m.AllowIFrame = temp.AllowIFrame
+	m.WindowsDiscoveryWMIEnabled = temp.WindowsDiscoveryWMIEnabled
+	// SCON overrides
+	m.SCONRepoOverride = strings.TrimSpace(temp.SCONRepoOverride)
+	m.SCONURLLinuxOverride = strings.TrimSpace(temp.SCONURLLinuxOverride)
+	m.SCONURLWindowsOverride = strings.TrimSpace(temp.SCONURLWindowsOverride)
 	// Discord integration fields
 	m.DiscordDefaultWebhook = strings.TrimSpace(temp.DiscordDefaultWebhook)
 	m.DiscordBugReportWebhook = strings.TrimSpace(temp.DiscordBugReportWebhook)
@@ -1094,7 +1130,7 @@ func (m *Manager) StopManagerPortForwarding() {
 
 func (m *Manager) Save() {
 	if m.ConfigFile == "" {
-		m.Log.Write("No configuration file found. Please specify a configuration file on the command line or set the SDSM_CONFIG environment variable.")
+		m.Log.Write("No configuration file found. Please specify a configuration file path with --config.")
 		return
 	}
 
@@ -1437,6 +1473,7 @@ func (m *Manager) runDeploy(deployType DeployType) error {
 	m.Paths.DeployRoot(m.Log)
 
 	s := steam.NewSteam(m.SteamID, m.UpdateLog, m.Paths)
+	s.SetSCONOverrides(m.SCONRepoOverride, m.SCONURLLinuxOverride, m.SCONURLWindowsOverride)
 
 	var errs []string
 
@@ -1779,7 +1816,6 @@ func (m *Manager) getGameDataPathForVersion(beta bool) string {
 	releasePath := filepath.Join(m.Paths.ReleaseDir(), "rocketstation_DedicatedServer_Data")
 	betaPath := filepath.Join(m.Paths.BetaDir(), "rocketstation_DedicatedServer_Data")
 	rootPath := filepath.Join(m.Paths.RootPath, "rocketstation_DedicatedServer_Data")
-	steamPath := filepath.Join(os.Getenv("HOME"), ".steam", "steam", "steamapps", "common", "Stationeers Dedicated Server", "rocketstation_DedicatedServer_Data")
 
 	var candidates []string
 	if beta {
@@ -1787,7 +1823,7 @@ func (m *Manager) getGameDataPathForVersion(beta bool) string {
 	} else {
 		candidates = append(candidates, releasePath, betaPath)
 	}
-	candidates = append(candidates, rootPath, steamPath)
+	candidates = append(candidates, rootPath)
 
 	for _, path := range candidates {
 		if path == "" {
@@ -2628,6 +2664,7 @@ func (m *Manager) SteamCmdLatest() string {
 // fetchRocketStationLatestBuildIDs queries Steam for the latest public and beta build IDs
 func (m *Manager) fetchRocketStationLatestBuildIDs() (string, string, error) {
 	s := steam.NewSteam(m.SteamID, m.UpdateLog, m.Paths)
+	s.SetSCONOverrides(m.SCONRepoOverride, m.SCONURLLinuxOverride, m.SCONURLWindowsOverride)
 	versions, err := s.GetVersions()
 	if err != nil {
 		return "", "", err
@@ -2933,7 +2970,7 @@ func (m *Manager) LaunchPadDeployed() string {
 }
 
 // SCONLatest returns the latest tagged version for the SCON plugin from its GitHub repo.
-// Repo can be overridden via environment variable SDSM_SCON_REPO (format: owner/repo).
+// Repo can be overridden via configuration field SCONRepoOverride (format: owner/repo).
 func (m *Manager) SCONLatest() string {
 	m.sconLatestMu.RLock()
 	cached := m.sconLatest
@@ -3075,9 +3112,9 @@ func (m *Manager) detectSCONInstalled() (string, error) {
 }
 
 func (m *Manager) fetchSCONLatestVersion() (string, error) {
-	repo := strings.TrimSpace(os.Getenv("SDSM_SCON_REPO"))
+	repo := strings.TrimSpace(m.SCONRepoOverride)
 	if repo == "" {
-		// Default guess; override via env var if different
+		// Default repo
 		repo = "JonVT/SCON"
 	}
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)

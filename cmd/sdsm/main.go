@@ -80,12 +80,23 @@ func (w managerLogWriter) Write(p []byte) (int, error) {
 // TLS settings are now read from sdsm.config (manager fields).
 
 func main() {
-	// Set Gin mode
-	if os.Getenv("GIN_MODE") == "" {
-		gin.SetMode(gin.ReleaseMode)
+	// Always run Gin in release mode; debugging is controlled elsewhere via logs.
+	gin.SetMode(gin.ReleaseMode)
+
+	// Parse CLI flags: --config/-c <path>, --background
+	var configPath string
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		switch arg {
+		case "--config", "-c":
+			if i+1 < len(os.Args) {
+				configPath = strings.TrimSpace(os.Args[i+1])
+				i++
+			}
+		}
 	}
 
-	mgr := manager.NewManager()
+	mgr := manager.NewManagerWithConfig(configPath)
 
 	// On Windows with tray enabled, spawn a detached background instance so the
 	// launching console returns immediately. Use env guard to prevent infinite spawning.
@@ -99,11 +110,14 @@ func main() {
 	// Initialize application
 	app = &App{
 		manager:     mgr,
-		authService: middleware.NewAuthService(),
+		authService: middleware.NewAuthServiceWithSecret(strings.TrimSpace(mgr.JWTSecret)),
 		wsHub:       middleware.NewHub(mgr.Log),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Minute/100), 10),
 		userStore:   manager.NewUserStore(mgr.Paths),
 	}
+
+    // Configure cookie settings from manager config
+    middleware.SetCookieOptions(middleware.CookieOptions{ForceSecure: mgr != nil && mgr.CookieForceSecure, SameSite: strings.TrimSpace(mgr.CookieSameSite)})
 
 	// If we are the detached/background process, hide the console window if present
 	if runtime.GOOS == "windows" && mgr != nil && mgr.TrayEnabled {
@@ -277,10 +291,14 @@ func setupRouter() *gin.Engine {
 	r.Use(gin.Recovery())
 
 	// Add filtered logging middleware to reduce noise in GIN.log
-	r.Use(middleware.RequestLogger())
+	r.Use(middleware.RequestLoggerWithOptions(app != nil && app.manager != nil && app.manager.VerboseHTTP))
 
 	// Security middleware
-	r.Use(middleware.SecurityHeaders())
+	allowIFrame := false
+	if app != nil && app.manager != nil {
+		allowIFrame = app.manager.AllowIFrame
+	}
+	r.Use(middleware.SecurityHeadersWithOptions(allowIFrame))
 	r.Use(middleware.CORS())
 
 	// Rate limiting - 100 requests per minute per IP

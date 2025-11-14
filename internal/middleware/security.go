@@ -3,7 +3,6 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -89,7 +88,9 @@ func (rl *RateLimiter) Stop() {
 }
 
 // Security headers middleware
-func SecurityHeaders() gin.HandlerFunc {
+// SecurityHeadersWithOptions returns a middleware that sets security headers.
+// If allowIFrame is true, frame-ancestors is relaxed to allow any parent; otherwise same-origin only.
+func SecurityHeadersWithOptions(allowIFrame bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Enforce API-only mutation: block POSTs to non-API paths except explicit allowlist.
 		// This is a security hardening layer; legacy HTML form endpoints have been disabled,
@@ -122,10 +123,9 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
 		// Allow embedding in iframe: our app uses a same-origin iframe for the content shell.
-		// By default, permit only same-origin embedding. When SDSM_ALLOW_IFRAME=true is set,
-		// relax to allow any parent (useful for preview environments). Prefer CSP frame-ancestors
-		// and set X-Frame-Options to SAMEORIGIN (not DENY) so our own iframe works.
-		allowIFrame := strings.EqualFold(os.Getenv("SDSM_ALLOW_IFRAME"), "true")
+		// By default, permit only same-origin embedding. When allowIFrame is true, relax to allow any parent
+		// (useful for preview environments). Prefer CSP frame-ancestors and set X-Frame-Options to SAMEORIGIN
+		// (not DENY) so our own iframe works.
 		if allowIFrame {
 			// Allow any parent via CSP and omit X-Frame-Options (ALLOW-FROM is deprecated and unsupported by most browsers)
 			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors *;")
@@ -142,12 +142,14 @@ func SecurityHeaders() gin.HandlerFunc {
 	}
 }
 
+// SecurityHeaders is the default middleware (same-origin iframe policy).
+func SecurityHeaders() gin.HandlerFunc { return SecurityHeadersWithOptions(false) }
+
 // RequestLogger provides a filtered request logging middleware reducing noise in GIN.log.
 // It suppresses logs for health probes, readiness checks, version endpoint, static assets,
 // favicon, websocket upgrades, and any successful (2xx/3xx) responses to lightweight endpoints.
-// Set SDSM_VERBOSE_HTTP=1 to force full logging (similar to default gin logger).
-func RequestLogger() gin.HandlerFunc {
-	noisy := strings.EqualFold(os.Getenv("SDSM_VERBOSE_HTTP"), "1")
+// noisy=true forces full logging (similar to default gin logger).
+func RequestLoggerWithOptions(noisy bool) gin.HandlerFunc {
 	// Paths to suppress entirely unless verbose
 	suppressedPrefixes := []string{"/static/"}
 	suppressedExact := map[string]struct{}{
@@ -195,6 +197,9 @@ func RequestLogger() gin.HandlerFunc {
 		_, _ = gin.DefaultWriter.Write([]byte(line))
 	}
 }
+
+// RequestLogger is the default logger with noise reduction.
+func RequestLogger() gin.HandlerFunc { return RequestLoggerWithOptions(false) }
 
 // CORS middleware
 func CORS() gin.HandlerFunc {

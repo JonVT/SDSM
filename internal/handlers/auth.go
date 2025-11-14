@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"os"
 	"strings"
 
 	"sdsm/internal/manager"
@@ -33,13 +32,7 @@ func NewAuthHandlers(authService *middleware.AuthService, mgr *manager.Manager, 
 	return h
 }
 
-// Helper function to get environment variable or default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
+// Environment-based defaults removed; configuration is exclusively via sdsm.config.
 
 func (h *AuthHandlers) LoginGET(c *gin.Context) {
 	// If no users exist, redirect to admin setup
@@ -198,14 +191,7 @@ func (h *AuthHandlers) AdminSetupPOST(c *gin.Context) {
 		c.HTML(http.StatusInternalServerError, "admin_setup.html", gin.H{"error": "Failed to create admin user."})
 		return
 	}
-	// Optionally create a default non-admin viewer user if env provided
-	if viewer := strings.TrimSpace(getEnvOrDefault("SDSM_VIEWER_USERNAME", "")); viewer != "" {
-		if viewerPass := os.Getenv("SDSM_VIEWER_PASSWORD"); viewerPass != "" {
-			if viewerHash, err := h.authService.HashPassword(viewerPass); err == nil {
-				_, _ = h.users.CreateUser(viewer, viewerHash, manager.RoleUser)
-			}
-		}
-	}
+	// Optional viewer auto-creation via environment has been removed.
 	// Redirect to login
 	c.Redirect(http.StatusFound, "/login")
 }

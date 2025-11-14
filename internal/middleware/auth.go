@@ -5,7 +5,6 @@ package middleware
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -44,8 +43,10 @@ type apiFailure struct {
 }
 
 // NewAuthService creates an AuthService using the default JWTSecret.
-func NewAuthService() *AuthService {
-	secret := os.Getenv("SDSM_JWT_SECRET")
+func NewAuthService() *AuthService { return NewAuthServiceWithSecret("") }
+
+// NewAuthServiceWithSecret creates an AuthService using the provided secret or the default when empty.
+func NewAuthServiceWithSecret(secret string) *AuthService {
 	if strings.TrimSpace(secret) == "" {
 		secret = JWTSecret
 	}
@@ -114,9 +115,19 @@ func requestIsSecure(c *gin.Context) bool {
 }
 
 // forceSecureCookies honors SDSM_COOKIE_FORCE_SECURE=true to always mark cookies Secure.
-func forceSecureCookies() bool {
-	return strings.EqualFold(os.Getenv("SDSM_COOKIE_FORCE_SECURE"), "true")
+// CookieOptions controls how cookies are issued by UI/API helpers.
+type CookieOptions struct {
+	ForceSecure bool
+	// SameSite accepts: "lax", "strict", "default", or "none" (case-insensitive). Defaults to "none".
+	SameSite string
 }
+
+var cookieOptions = CookieOptions{ForceSecure: false, SameSite: "none"}
+
+// SetCookieOptions configures cookie behavior globally for the process.
+func SetCookieOptions(opts CookieOptions) { cookieOptions = opts }
+
+func forceSecureCookies() bool { return cookieOptions.ForceSecure }
 
 // cookieShouldBeSecure decides the Secure flag for cookies based on env and request.
 func cookieShouldBeSecure(c *gin.Context) bool {
@@ -128,7 +139,7 @@ func cookieShouldBeSecure(c *gin.Context) bool {
 
 // resolveSameSite resolves the SameSite setting from SDSM_COOKIE_SAMESITE; defaults to None.
 func resolveSameSite() http.SameSite {
-	switch strings.ToLower(os.Getenv("SDSM_COOKIE_SAMESITE")) {
+	switch strings.ToLower(strings.TrimSpace(cookieOptions.SameSite)) {
 	case "lax":
 		return http.SameSiteLaxMode
 	case "strict":

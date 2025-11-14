@@ -4,3 +4,5 @@ dist/
 builder.config.json
 -b
 temp.txt
+alert1.txt
+alert2.txt

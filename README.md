@@ -89,24 +89,72 @@ SDSM listens on port `5000` by default. Visit `http://localhost:5000/login`.
 
 ## Configuration
 
-SDSM persists state to a JSON configuration file. Point the manager at this file using the `SDSM_CONFIG` environment variable or by passing the path as the first CLI argument.
+SDSM persists state to a JSON configuration file. Use `--config` (or `-c`) to point to this file. If omitted, SDSM uses `./sdsm.config` in the current working directory and will bootstrap it on first run.
 
-The default root path is derived from the executable directory and contains `bin/*` deployments and a `logs/` directory. Key settings include the Steam app ID (`manager.SteamID`, default `600760`), root path, server inventory, HTTP port (`manager.Port`, default `5000`), and the update schedule (`manager.UpdateTime`).
-
-### Environment Variables
-
-| Variable | Purpose |
-| --- | --- |
-| `SDSM_CONFIG` | Absolute or relative path to the configuration JSON. |
-| `GIN_MODE` | Set to `release` to suppress Gin debug logging. |
-| `SDSM_ALLOW_IFRAME` | Set to `true` to permit same-origin iframe embedding. |
-
-### Sample Launch Commands
+Example launch:
 
 ```bash
-# Plain HTTP
-SDSM_CONFIG=/srv/sdsm/sdsm.config ./sdsm
+./sdsm --config /srv/sdsm/sdsm.config
 ```
+
+Key settings include the root path (where `bin/*`, `logs/`, and per-server directories live), HTTP port (`manager.Port`, default `5000`), Steam app ID (`manager.SteamID`, default `600760`), server inventory, and the update schedule (`manager.UpdateTime`).
+
+Selected config fields:
+
+- `paths.root_path`: Filesystem root for SDSM directories.
+- `port`: HTTP port for the UI/API. Default 5000.
+- `language`: Default language for world/difficulty extraction. Default `english`.
+- `startup_update`: Run selective component updates at startup. Default `true`.
+- `detached_servers`: Keep game servers running if SDSM exits. Default `false`.
+- `tray_enabled`: Windows tray integration toggle. Default `true` on Windows.
+- `tls_enabled`, `tls_cert`, `tls_key`: Optional HTTPS served directly by SDSM (paths may be relative to `root_path`).
+- `auto_port_forward_manager`: Attempt UPnP/NAT-PMP port mapping for the manager HTTP(S) port. Default `false`.
+- `verbose_http`: More verbose HTTP request logging. Default `false`.
+- `verbose_update`: Verbose update-decision logging for components. Default `false`.
+- `jwt_secret`: HMAC secret for UI/API sessions. Set this to a strong random string in production.
+- `cookie_force_secure`: Force auth cookies to be Secure. Default `false` (automatically Secure under HTTPS).
+- `cookie_samesite`: One of `none`, `lax`, `strict`, or `default`. Default `none`.
+- `allow_iframe`: Allow embedding in any parent (`frame-ancestors *`). Default `false` (same-origin only).
+- `windows_discovery_wmi_enabled`: Windows-only process discovery via WMI. Default `true`.
+- `scon_repo_override`: Alternative `owner/repo` for SCON releases.
+- `scon_url_linux_override`, `scon_url_windows_override`: Explicit SCON asset URLs per OS.
+
+See also: `docs/sdsm.config.example` for a ready-to-copy minimal config.
+
+### Minimal sdsm.config example
+
+Save this as `sdsm.config` and point SDSM to it with `--config /path/to/sdsm.config`.
+
+```json
+{
+	"steam_id": "600760",
+	"paths": { "root_path": "/srv/sdsm" },
+	"port": 5000,
+	"language": "english",
+	"startup_update": true,
+	"detached_servers": false,
+	"tray_enabled": false,
+	"tls_enabled": false,
+	"tls_cert": "",
+	"tls_key": "",
+	"auto_port_forward_manager": false,
+	"verbose_http": false,
+	"verbose_update": false,
+	"jwt_secret": "change-me-32+chars",
+	"cookie_force_secure": false,
+	"cookie_samesite": "none",
+	"allow_iframe": false,
+	"windows_discovery_wmi_enabled": true,
+	"scon_repo_override": "",
+	"scon_url_linux_override": "",
+	"scon_url_windows_override": "",
+	"discord_default_webhook": "",
+	"discord_bug_report_webhook": "",
+	"servers": []
+}
+```
+
+Tip: On first run, SDSM will create directories under `paths.root_path` and download/update components as needed. Set a strong `jwt_secret` for production.
 
 ## Operating The Manager
 
@@ -301,8 +349,7 @@ Type=simple
 User=sdsm
 Group=sdsm
 WorkingDirectory=/srv/sdsm
-Environment=SDSM_CONFIG=/srv/sdsm/sdsm.config
-ExecStart=/srv/sdsm/sdsm
+ExecStart=/srv/sdsm/sdsm --config /srv/sdsm/sdsm.config
 Restart=on-failure
 RestartSec=5s
 NoNewPrivileges=true
@@ -337,7 +384,7 @@ Build from source
 git clone https://github.com/JonVT/SDSM.git
 cd SDSM
 go build -o dist/sdsm ./cmd/sdsm
-SDSM_CONFIG=/path/to/sdsm.config ./dist/sdsm
+./dist/sdsm --config /path/to/sdsm.config
 ```
 
 ### Architecture Decision Records (ADRs)
