@@ -1799,30 +1799,34 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	if strings.TrimSpace(worldIDForDefaults) == "" {
 		worldIDForDefaults = world
 	}
-	// Default start location/condition from first available options for world
-	if locs := h.manager.GetStartLocationsForWorldVersion(worldIDForDefaults, beta); len(locs) > 0 {
-		startLocation = locs[0].ID
+	// Default start location/condition from first available options for world. Update validated struct.
+	if strings.TrimSpace(v.StartLocation) == "" {
+		if locs := h.manager.GetStartLocationsForWorldVersion(worldIDForDefaults, beta); len(locs) > 0 {
+			v.StartLocation = locs[0].ID
+		}
 	}
-	if conds := h.manager.GetStartConditionsForWorldVersion(worldIDForDefaults, beta); len(conds) > 0 {
-		startCondition = conds[0].ID
+	if strings.TrimSpace(v.StartCondition) == "" {
+		if conds := h.manager.GetStartConditionsForWorldVersion(worldIDForDefaults, beta); len(conds) > 0 {
+			v.StartCondition = conds[0].ID
+		}
 	}
-	// Default difficulty only if not provided by user (helper prefers "Normal")
-	if strings.TrimSpace(difficulty) == "" {
+	// Default difficulty only if not provided by user (helper prefers "Normal"). Update validated struct.
+	if strings.TrimSpace(v.Difficulty) == "" {
 		if pick := DefaultDifficulty(h.manager, beta); pick != "" {
-			difficulty = pick
+			v.Difficulty = pick
 		} else {
-			difficulty = "Normal"
+			v.Difficulty = "Normal"
 		}
 	}
 
-	// Validate/adjust port
-	if port == 0 {
+	// Validate/adjust port (apply to validated struct)
+	if v.Port == 0 {
 		if p, err := middleware.ValidatePort("26017"); err == nil {
-			port = p
+			v.Port = p
 		}
 	}
-	if !h.manager.IsPortAvailable(port, -1) {
-		port = h.manager.GetNextAvailablePort(port)
+	if !h.manager.IsPortAvailable(v.Port, -1) {
+		v.Port = h.manager.GetNextAvailablePort(v.Port)
 	}
 	// Validate remaining numeric ranges
 	if maxClients < 1 || maxClients > 100 {
@@ -3326,7 +3330,7 @@ func (h *ManagerHandlers) APIServerSaveDelete(c *gin.Context) {
 
 	// Compute target directory for delete (strict per-type directory)
 	// For manual/named, allow delete from either <server>/manualsave or <server>/ root
-	tryDirs := []string{}
+	var tryDirs []string
 	switch sub {
 	case "autosave":
 		tryDirs = []string{filepath.Join(savesDir, s.Name, "autosave")}

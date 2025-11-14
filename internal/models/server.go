@@ -132,7 +132,8 @@ type Server struct {
 	Proc           *exec.Cmd      `json:"-"`
 	Thrd           chan bool      `json:"-"`
 	pid            int            `json:"-"`
-	stdin          io.WriteCloser `json:"-"` // deprecated: stdin fallback removed; retained for struct compatibility
+	//lint:ignore U1000 retained for legacy JSON compatibility; stdin write path removed
+	stdin          io.WriteCloser `json:"-"` // deprecated: historical process stdin holder (unused)
 	Logger         *utils.Logger  `json:"-"`
 	Paths          *utils.Paths   `json:"-"`
 	Name           string         `json:"name"`

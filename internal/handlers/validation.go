@@ -93,26 +93,26 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 	}
 	name := middleware.SanitizeString(in.Name)
 	if name == "" {
-		return nil, fmt.Errorf("Server name is required.")
+		return nil, fmt.Errorf("server name is required")
 	}
 	if !mgr.IsServerNameAvailable(name, -1) {
-		return nil, fmt.Errorf("Server name '%s' already exists. Please choose a unique name.", name)
+		return nil, fmt.Errorf("server name %q already exists", name)
 	}
 	world := middleware.SanitizeString(in.World)
 	if world == "" {
-		return nil, fmt.Errorf("World selection is required.")
+		return nil, fmt.Errorf("world selection is required")
 	}
 	startLoc := middleware.SanitizeString(in.StartLocation)
 	if startLoc == "" {
-		return nil, fmt.Errorf("Start location is required.")
+		return nil, fmt.Errorf("start location is required")
 	}
 	startCond := middleware.SanitizeString(in.StartCondition)
 	if startCond == "" {
-		return nil, fmt.Errorf("Start condition is required.")
+		return nil, fmt.Errorf("start condition is required")
 	}
 	difficulty := middleware.SanitizeString(in.Difficulty)
 	if difficulty == "" {
-		return nil, fmt.Errorf("Difficulty selection is required.")
+		return nil, fmt.Errorf("difficulty selection is required")
 	}
 	beta := strings.TrimSpace(in.BetaRaw) == "true"
 	// Port
@@ -121,9 +121,9 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 		// Provide suggested port if conflict
 		if port > 0 && !mgr.IsPortAvailable(port, -1) {
 			suggested := mgr.GetNextAvailablePort(port)
-			return nil, fmt.Errorf("Port %d is not available. Ports must be unique and at least 3 apart. Try port %d.", port, suggested)
+			return nil, fmt.Errorf("port %d not available; ports must be unique and at least 3 apart; try %d", port, suggested)
 		}
-		return nil, fmt.Errorf("Invalid port number: %s", in.PortRaw)
+		return nil, fmt.Errorf("invalid port number: %s", in.PortRaw)
 	}
 	// Max clients
 	maxClients := 10
@@ -133,7 +133,7 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 		}
 	}
 	if maxClients < 1 || maxClients > 100 {
-		return nil, fmt.Errorf("Invalid max players (1-100)")
+		return nil, fmt.Errorf("invalid max players (1-100)")
 	}
 	// Save interval
 	saveInterval := 300
@@ -143,7 +143,7 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 		}
 	}
 	if saveInterval < 60 || saveInterval > 3600 {
-		return nil, fmt.Errorf("Invalid save interval (60-3600)")
+		return nil, fmt.Errorf("invalid save interval (60-3600)")
 	}
 	// Restart delay
 	restartDelay := models.DefaultRestartDelaySeconds
@@ -153,7 +153,7 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 		}
 	}
 	if restartDelay < 0 || restartDelay > 3600 {
-		return nil, fmt.Errorf("Invalid restart delay (0-3600)")
+		return nil, fmt.Errorf("invalid restart delay (0-3600)")
 	}
 	// Shutdown delay
 	shutdownDelay := 2
@@ -163,7 +163,7 @@ func ValidateNewServerConfig(mgr *manager.Manager, in NewServerInput) (*Validate
 		}
 	}
 	if shutdownDelay < 0 || shutdownDelay > 3600 {
-		return nil, fmt.Errorf("Invalid shutdown delay (0-3600)")
+		return nil, fmt.Errorf("invalid shutdown delay (0-3600)")
 	}
 	validated := &ValidatedServerCreation{
 		Name:           name,
