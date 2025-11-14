@@ -1611,6 +1611,7 @@
                 </div>
             </div>
             
+            {{ if eq .role "admin" }}
             <div class="glass-card" id="userMgmtCard">
                 <div class="card-header">
                     <h3 class="card-title m-0">User Management</h3>
@@ -1666,6 +1667,7 @@
                     </div>
                 </div>
             </div>
+            {{ end }}
             <script>
                 // Robust, localized toggle for User Management card
                 (function(){

@@ -1433,6 +1433,21 @@ code.token-ref.copied {
     border-radius: var(--radius-full);
 }
 
+/* Ultra-compact navigation buttons (Prev/Next server) */
+/* Slightly larger than .btn-icon for accessibility (32px tap target) */
+.btn-nav {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    line-height: 32px; /* vertically center glyph if text-based */
+    font-size: var(--text-sm);
+    font-weight: 600;
+}
+/* Ensure SVG inside keeps consistent sizing */
+.btn-nav svg { width: 16px; height: 16px; }
+
 /* Global modal styles (confirm/prompt/info) */
 .confirm-modal { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(2, 6, 23, 0.65); z-index: 10000; backdrop-filter: blur(10px); }
 .confirm-modal.active { display: flex; }

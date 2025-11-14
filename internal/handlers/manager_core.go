@@ -372,6 +372,48 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	sconURL := fmt.Sprintf("http://localhost:%d/", sconPort)
 
 	role := c.GetString("role")
+
+	// Compute previous/next server IDs for navigation with wraparound.
+	prevID := 0
+	nextID := 0
+	if h.manager != nil {
+		uname, _ := username.(string)
+		accessible := make([]int, 0, len(h.manager.Servers))
+		var all bool
+		var assignedList []int
+		if role == string(manager.RoleOperator) && h.userStore != nil {
+			all, assignedList, _ = h.userStore.GetAssignments(uname)
+		}
+		for _, srv := range h.manager.Servers {
+			if srv == nil { continue }
+			if role == string(manager.RoleAdmin) {
+				accessible = append(accessible, srv.ID)
+			} else if role == string(manager.RoleOperator) {
+				if all {
+					accessible = append(accessible, srv.ID)
+				} else {
+					for _, id := range assignedList { if id == srv.ID { accessible = append(accessible, srv.ID); break } }
+				}
+			}
+		}
+		if len(accessible) > 1 {
+			sort.Ints(accessible)
+			idx := -1
+			for i, id := range accessible { if id == s.ID { idx = i; break } }
+			if idx >= 0 {
+				// Modular wraparound
+				prevID = accessible[(idx-1+len(accessible))%len(accessible)]
+				nextID = accessible[(idx+1)%len(accessible)]
+			}
+		}
+		// Lookup names for tooltips if IDs resolved
+		if prevID > 0 {
+			if ps := h.manager.ServerByID(prevID); ps != nil { c.Set("prev_server_name", ps.Name) }
+		}
+		if nextID > 0 {
+			if ns := h.manager.ServerByID(nextID); ns != nil { c.Set("next_server_name", ns.Name) }
+		}
+	}
 	payload := gin.H{
 		"server":         s,
 		"liveClients":    liveSorted,
@@ -379,6 +421,10 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		"manager":        h.manager,
 		"username":       username,
 		"role":           role,
+		"prev_server_id": prevID,
+		"next_server_id": nextID,
+		"prev_server_name": c.GetString("prev_server_name"),
+		"next_server_name": c.GetString("next_server_name"),
 		"worldInfo":      worldInfo,
 		// Canonical world ID used by the client as initial selection
 		"resolved_world_id": resolvedWorldID,
@@ -730,6 +776,7 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
 	data := gin.H{
 		"username":            username,
+		"role":                c.GetString("role"),
 		"steam_id":            h.manager.SteamID,
 		"root_path":           h.manager.Paths.RootPath,
 		"port":                h.manager.Port,

@@ -100,6 +100,20 @@ Benefits:
 
 Upgrade Note: If you had automation calling deprecated HTML endpoints, update them to use the corresponding `/api` routes. Deprecated endpoints now respond with 410 and an explanatory JSON error.
 
+### Recent Server Status Navigation Enhancements
+
+Focused quality-of-life improvements were added to the Server Status page to reduce page hops and accelerate multi-server administration:
+
+- Prev/Next server navigation buttons now appear in the header (next to global actions) instead of inside the status card for consistent placement.
+- Wraparound navigation: moving past the first or last accessible server cycles to the other end (based on your role + assignments).
+- Keyboard shortcuts: use ← / → (ArrowLeft / ArrowRight) to move between servers without clicking (ignored while typing in inputs/textareas).
+- Tooltips show the target server name and shortcut hint for quick discovery.
+- Compact button style: new `.btn-nav` 32px circular outline buttons keep the header uncluttered while preserving a comfortable focus target.
+- Rename action styling: the server rename button now uses the `btn-info` semantic variant for clearer affordance.
+- Role-based visibility: user management controls remain admin-only; operators see only permitted server actions and navigation.
+
+These improvements are incremental and do not alter existing API endpoints; they refine the UI layer for faster operator workflows.
+
 ### Networking updates
 
 - Steam P2P networking has been removed and is now always disabled at server startup. The UI no longer exposes it.
@@ -124,12 +138,13 @@ New/updated files of note
 - **One-click deployments** – SteamCMD, Release/Beta servers, BepInEx, LaunchPad, SCON, and per-server file sync.
 - **Secure access** – Auth, security headers, per-IP rate limiting, optional HTTPS.
 - **No telemetry** – SDSM runs locally and does not collect or transmit your data.
+- **Fast server-to-server navigation** – Header Prev/Next buttons with wraparound and ArrowLeft/ArrowRight shortcuts accelerate multi-server management; tooltips surface target names and shortcuts.
 
 ## UI Preview
 
-| Dashboard Overview | Server Status Deep Dive |
-| --- | --- |
-| ![Dashboard preview](docs/media/dashboard.svg) | ![Server status preview](docs/media/server-status.svg) |
+| Manager | Dashboard | Server Control |
+| --- | --- | --- |
+| ![Manager](docs/media/SDSM%20Manager.png) | ![Dashboard](docs/media/SDSM%20Dashboard.png) | ![Server Control](docs/media/SDSM%20Server%20Control.png) |
 
 ## Architecture At A Glance
 
