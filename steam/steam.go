@@ -179,11 +179,19 @@ func (s *Steam) UpdateGame(beta bool) error {
 	} else {
 		dir = s.Paths.ReleaseDir()
 	}
-	// Defensive: ensure the chosen install directory is within the configured root path
+	// Defensive: ensure the chosen install directory is within the configured root path and
+	// produce a sanitized absolute path for SteamCMD (+force_install_dir) usage.
 	root := filepath.Clean(s.Paths.RootPath)
 	cleanDir := filepath.Clean(dir)
+	if absDir, err := filepath.Abs(cleanDir); err == nil {
+		cleanDir = absDir
+	}
 	if rel, err := filepath.Rel(root, cleanDir); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return fmt.Errorf("invalid install dir escapes root: %s", dir)
+	}
+	// Prevent control characters/newlines in path passed to SteamCMD
+	if strings.ContainsAny(cleanDir, "\n\r\x00") {
+		return fmt.Errorf("invalid characters in install dir path")
 	}
 	s.Logger.Write(fmt.Sprintf("Starting update for Steam ID: %s to %s", s.SteamID, dir))
 	s.reportProgress("Preparing SteamCMD", 0, 0)
@@ -201,7 +209,7 @@ func (s *Steam) UpdateGame(beta bool) error {
 	// Build an allow-listed argument sequence for SteamCMD. Each token is a distinct argv element,
 	// avoiding shell expansion. Tokens are validated before execution to mitigate command injection.
 	steamCmd := []string{
-		"+force_install_dir", dir,
+		"+force_install_dir", cleanDir,
 		"+login", "anonymous",
 		"+app_update", s.SteamID,
 		"-beta", branch,
@@ -211,10 +219,22 @@ func (s *Steam) UpdateGame(beta bool) error {
 	if err := validateSteamArgs(steamCmd); err != nil {
 		return err
 	}
-
-	steamCmdPath := filepath.Join(s.Paths.SteamDir(), s.steamCmdExecutable())
-	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", steamCmdPath, strings.Join(steamCmd, " ")))
-	cmd := exec.Command(steamCmdPath, steamCmd...)
+	// Construct contained absolute path to steamcmd executable using SecureJoin
+	steamBase := s.Paths.SteamDir()
+	if absBase, err := filepath.Abs(steamBase); err == nil {
+		steamBase = absBase
+	}
+	steamCmdExe := s.steamCmdExecutable()
+	execPath, jerr := utils.SecureJoin(steamBase, steamCmdExe)
+	if jerr != nil {
+		return fmt.Errorf("steamcmd path containment failed: %v", jerr)
+	}
+	if _, statErr := os.Stat(execPath); statErr != nil {
+		return fmt.Errorf("steamcmd executable not found: %v", statErr)
+	}
+	// Log command with sanitized path (arguments already validated)
+	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", execPath, strings.Join(steamCmd, " ")))
+	cmd := exec.Command(execPath, steamCmd...)
 
 	// Stream output to update log if available, otherwise capture
 	var captureOutput bool
