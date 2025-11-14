@@ -14,7 +14,7 @@ env:
 
 jobs:
   lint:
-    name: Go fmt + vet
+    name: Style & Static Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,3 +48,32 @@ jobs:
 
       - name: Run go vet
         run: go vet ./...
+
+      - name: Verify go.mod is tidy
+        shell: bash
+        run: |
+          set -euo pipefail
+          before=$(git status --porcelain -- go.mod go.sum)
+          go mod tidy
+          after=$(git status --porcelain -- go.mod go.sum)
+          if [[ -n "$after" && -z "$before" ]]; then
+            echo "go.mod/go.sum not tidy. Run 'go mod tidy' and commit changes:" >&2
+            git --no-pager diff -- go.mod go.sum >&2 || true
+            exit 1
+          fi
+
+      - name: Install staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: |
+          $(go env GOPATH)/bin/staticcheck ./...
+
+      - name: Install govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: |
+          $(go env GOPATH)/bin/govulncheck ./...
