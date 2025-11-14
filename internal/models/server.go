@@ -2565,8 +2565,7 @@ func (s *Server) AttachToRunning(pid int) {
 	}(stopChan)
 
 	// Monitor external PID; when it exits, update state and clean up pid file
-	pidPath := s.safePIDFilePath()
-	go func(srv *Server, p int, pidFile string, stop chan bool) {
+	go func(srv *Server, p int, stop chan bool) {
 		for IsPidAlive(p) {
 			time.Sleep(2 * time.Second)
 		}
@@ -2580,13 +2579,23 @@ func (s *Server) AttachToRunning(pid int) {
 		srv.markAllClientsDisconnected(time.Now())
 		srv.rewritePlayersLog()
 		srv.resetChat()
-		if pidFile != "" {
-			_ = os.Remove(pidFile)
+		// Recompute and validate PID file path prior to removal to satisfy static analysis
+		if srv != nil && srv.Paths != nil {
+			base := srv.Paths.ServerDir(srv.ID)
+			if abs, err := filepath.Abs(base); err == nil {
+				base = abs
+			}
+			pf := srv.safePIDFilePath()
+			if pf != "" && isPathWithin(base, pf) {
+				_ = os.Remove(pf)
+			} else if srv.Logger != nil && pf != "" {
+				srv.Logger.Write("Skipped PID file cleanup due to failed path containment check")
+			}
 		}
 		if srv.Logger != nil {
 			srv.Logger.Write("Detached server process ended (attach monitor)")
 		}
-	}(s, pid, pidPath, stopChan)
+	}(s, pid, stopChan)
 
 	// Best-effort: issue CLIENTS query via SCON to repopulate live client list, with limited retries
 	go func(srv *Server) {
