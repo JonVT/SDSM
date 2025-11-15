@@ -461,6 +461,28 @@ LICENSE               # MIT License
 - **Logs:** `logs/sdsm.log` and `logs/updates.log` are under the configured root path and are truncated on startup.
 - **Player history:** `ServerN/logs/players.log` is deduplicated and rewritten automatically on stop/restart.
 
+#### Formatting
+
+This repository enforces `gofmt -s`. Use these helpers:
+
+- Auto-format everything:
+
+```bash
+make fmt
+```
+
+- Check for unformatted files (fails if any):
+
+```bash
+make fmt-check
+```
+
+Optional: install local Git hooks to auto-format and stage changes on commit:
+
+```bash
+bash tools/install-git-hooks.sh
+```
+
 ### Linting
 
 - Run all linters: `make lint`

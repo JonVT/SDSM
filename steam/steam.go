@@ -824,11 +824,12 @@ func (s *Steam) steamCmdExecutable() string {
 // safeSteamCmdExec constructs the path to the steamcmd executable under the configured
 // root path using SecureJoin and performs additional validation to reduce the risk
 // of executing a user-controlled binary:
-//   * root path must be absolute
-//   * no control characters in root path
-//   * steamcmd directory and executable path are contained via SecureJoin
-//   * the executable itself must not be a symlink
-//   * symlink evaluation of the containing directory must remain within root
+//   - root path must be absolute
+//   - no control characters in root path
+//   - steamcmd directory and executable path are contained via SecureJoin
+//   - the executable itself must not be a symlink
+//   - symlink evaluation of the containing directory must remain within root
+//
 // If any check fails an error is returned.
 func (s *Steam) safeSteamCmdExec() (string, error) {
 	root := strings.TrimSpace(s.Paths.RootPath)

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Auto-format Go code before commit to reduce CI failures.
+# This hook formats files and stages any changes.
+set -euo pipefail
+
+# Run from repo root
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Format in place
+if command -v gofmt >/dev/null 2>&1; then
+  BEFORE=$(gofmt -l .)
+  gofmt -s -w .
+  AFTER=$(gofmt -l .)
+  # Re-stage any modified files (ignore errors if nothing changed)
+  if [[ -n "$BEFORE" ]] || [[ -n "$AFTER" ]]; then
+    git add -A || true
+    echo "Applied gofmt to repository (pre-commit)." >&2
+  fi
+fi
+
+exit 0
