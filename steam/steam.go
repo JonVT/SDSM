@@ -219,19 +219,10 @@ func (s *Steam) UpdateGame(beta bool) error {
 	if err := validateSteamArgs(steamCmd); err != nil {
 		return err
 	}
-	// Construct contained absolute path to steamcmd executable using SecureJoin, rooted at RootPath/bin/steamcmd
-	rootAbs := s.Paths.RootPath
-	if v, err := filepath.Abs(rootAbs); err == nil {
-		rootAbs = v
-	}
-	steamDirSafe, derr := utils.SecureJoin(rootAbs, filepath.Join("bin", "steamcmd"))
-	if derr != nil {
-		return fmt.Errorf("failed to resolve steamcmd directory: %v", derr)
-	}
-	steamCmdExe := s.steamCmdExecutable()
-	execPath, jerr := utils.SecureJoin(steamDirSafe, steamCmdExe)
-	if jerr != nil {
-		return fmt.Errorf("steamcmd path containment failed: %v", jerr)
+	// Resolve and validate the steamcmd executable path using strict containment rules.
+	execPath, perr := s.safeSteamCmdExec()
+	if perr != nil {
+		return perr
 	}
 	// Log command with sanitized path (arguments already validated)
 	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", execPath, strings.Join(steamCmd, " ")))
@@ -828,6 +819,58 @@ func (s *Steam) steamCmdExecutable() string {
 		return "steamcmd.exe"
 	}
 	return "steamcmd.sh"
+}
+
+// safeSteamCmdExec constructs the path to the steamcmd executable under the configured
+// root path using SecureJoin and performs additional validation to reduce the risk
+// of executing a user-controlled binary:
+//   * root path must be absolute
+//   * no control characters in root path
+//   * steamcmd directory and executable path are contained via SecureJoin
+//   * the executable itself must not be a symlink
+//   * symlink evaluation of the containing directory must remain within root
+// If any check fails an error is returned.
+func (s *Steam) safeSteamCmdExec() (string, error) {
+	root := strings.TrimSpace(s.Paths.RootPath)
+	if root == "" {
+		return "", fmt.Errorf("empty root path")
+	}
+	if strings.ContainsAny(root, "\n\r\x00") {
+		return "", fmt.Errorf("invalid characters in root path")
+	}
+	// Ensure absolute
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("unable to resolve absolute root: %v", err)
+	}
+	// Build steamcmd directory securely
+	steamDir, err := utils.SecureJoin(absRoot, filepath.Join("bin", "steamcmd"))
+	if err != nil {
+		return "", fmt.Errorf("steamcmd directory containment failed: %v", err)
+	}
+	exeName := s.steamCmdExecutable()
+	execPath, err := utils.SecureJoin(steamDir, exeName)
+	if err != nil {
+		return "", fmt.Errorf("steamcmd executable containment failed: %v", err)
+	}
+	// Directory symlink evaluation: ensure still inside absRoot after resolving
+	evalSteamDir, err := filepath.EvalSymlinks(steamDir)
+	if err == nil { // non-fatal if symlink resolution fails; treat original path as authoritative
+		// Ensure evaluated path is still within root
+		rel, rerr := filepath.Rel(absRoot, evalSteamDir)
+		if rerr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return "", fmt.Errorf("steamcmd directory escapes root after symlink resolution")
+		}
+	}
+	// The executable itself must not be a symlink (prevent substitution attacks)
+	fi, statErr := os.Lstat(execPath)
+	if statErr != nil {
+		return "", fmt.Errorf("steamcmd executable missing: %v", statErr)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("steamcmd executable is a symlink: %s", execPath)
+	}
+	return execPath, nil
 }
 
 func sanitizeBepInExVersionTag(tag string) string {
