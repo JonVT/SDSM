@@ -149,6 +149,21 @@ func main() {
 		_ = os.MkdirAll(app.manager.Paths.ConfigDir(), 0o755)
 	}
 	_ = app.userStore.Load()
+	// Log diagnostics to help when UI shows admin setup unexpectedly
+	if app.userStore.IsEmpty() {
+		cfg := strings.TrimSpace(app.manager.ConfigFile)
+		root := ""
+		if app.manager.Paths != nil {
+			root = strings.TrimSpace(app.manager.Paths.RootPath)
+		}
+		path := app.userStore.Path()
+		exists := "missing"
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			exists = "present"
+		}
+		logStuff(fmt.Sprintf("User store appears empty. Config=%s | root_path=%s | users.json=%s (%s)", cfg, root, path, exists))
+		logStuff("If you previously had accounts, copy your old users.json into the current root_path/config/users.json, or start SDSM with --config pointing to your original sdsm.config.")
+	}
 
 	if !app.manager.IsActive() {
 		logStuff("Manager failed to initialize")

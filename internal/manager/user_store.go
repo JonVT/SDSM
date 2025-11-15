@@ -45,6 +45,11 @@ func NewUserStore(paths *utils.Paths) *UserStore {
 	return &UserStore{path: p, users: make(map[string]*User)}
 }
 
+// Path returns the absolute path to the users.json backing file used by this store.
+func (s *UserStore) Path() string {
+	return s.path
+}
+
 // Load reads users from disk; missing file is treated as empty store.
 func (s *UserStore) Load() error {
 	s.mu.Lock()
