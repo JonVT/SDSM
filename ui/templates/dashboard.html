@@ -1,169 +1,74 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Stationeers Server Dashboard - Monitor and manage your servers">
-    <title>Dashboard - Stationeers Server Manager</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-    <link rel="icon" href="/sdsm.png" type="image/png">
-    <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(_){}})();</script>
-    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
-    <script src="/static/app.js?v={{buildTime}}" defer></script>
-</head>
-<body class="page-shell">
-    <a href="#main-content" class="sr-only">Skip to main content</a>
-    <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
-        <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
-        <button type="button" id="connection-banner-action">Reload</button>
+{{define "title"}}Dashboard{{end}}
+{{define "page"}}dashboard{{end}}
+
+{{define "dashboard.html"}}
+<!-- Dashboard Content - loaded into frame.html via HTMX -->
+<section class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" id="total-servers">{{ len .servers }}</div>
+        <div class="stat-label">Total Servers</div>
     </div>
-
-    <div class="container">
-        <header class="hero-card">
-            <div class="hero-main">
-                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-                <div class="hero-heading">
-                    <h1 class="hero-title">Server Dashboard</h1>
-                    <p class="hero-subtitle">Monitor and manage your Stationeers servers in real time.</p>
-                </div>
-            </div>
-            <div class="hero-meta">
-                <div class="hero-meta-title">Fleet Overview</div>
-                <p class="hero-meta-text">
-                    <span id="header-total-servers">--</span> server<span id="header-total-servers-suffix">s</span> tracked •
-                    <span id="header-active-servers">--</span> active •
-                    <span id="header-total-players">--</span> players
-                </p>
-                <span class="pill">Last refresh: <span id="last-refresh">just now</span></span>
-            </div>
-            <div class="hero-actions flex-col items-end">
-                <div class="row">
-                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                    <span id="theme-icon">🌙</span>
-                </button>
-                <button type="button" id="bugReportBtn" class="btn btn-info" title="Report a bug" aria-label="Report a bug">
-                    {{ template "icon_bug" . }}
-                    <span class="ml-6">Report Bug</span>
-                </button>
-                <button
-                    class="btn btn-primary"
-                    hx-get="/api/refresh"
-                    hx-trigger="click"
-                    hx-indicator="#refresh-indicator"
-                    hx-swap="none"
-                >
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <polyline points="1 20 1 14 7 14"></polyline>
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-                        <path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                    </svg>
-                    <span id="refresh-indicator" class="hidden">⟳</span>
-                    Refresh
-                </button>
-                <a href="/manager" class="btn btn-primary">
-                    {{ template "icon_manager" . }}
-                    Manager
-                </a>
-                {{ template "user_menu" . }}
-                </div>
-                <span class="build-meta">{{buildTime}}</span>
-            </div>
-        </header>
+    <div class="stat-card">
+        <div class="stat-value" id="active-servers">
+            {{ $active := 0 }}
+            {{ range .servers }}
+                {{ if .IsRunning }}{{ $active = add $active 1 }}{{ end }}
+            {{ end }}
+            {{ $active }}
+        </div>
+        <div class="stat-label">Active Servers</div>
     </div>
+    <div class="stat-card">
+        <div class="stat-value" id="total-players">
+            {{ $players := 0 }}
+            {{ range .servers }}
+                {{ $players = add $players .ClientCount }}
+            {{ end }}
+            {{ $players }}
+        </div>
+        <div class="stat-label">Connected Players</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">100%</div>
+        <div class="stat-label">System Health</div>
+    </div>
+</section>
 
-    <main id="main-content" class="container dashboard-content">
-           <section class="stats-grid"
-               hx-get="/api/stats"
-               hx-trigger="load, every 30s, refresh"
-               hx-headers='{"Accept":"text/html"}'
-               hx-swap="innerHTML">
-            <span class="htmx-indicator pill" aria-hidden="true">Refreshing…</span>
-            <div class="stat-card">
-                <div class="stat-value" id="total-servers">{{ len .servers }}</div>
-                <div class="stat-label">Total Servers</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="active-servers">
-                    {{ $active := 0 }}
-                    {{ range .servers }}
-                        {{ if .IsRunning }}{{ $active = add $active 1 }}{{ end }}
-                    {{ end }}
-                    {{ $active }}
-                </div>
-                <div class="stat-label">Active Servers</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="total-players">
-                    {{ $players := 0 }}
-                    {{ range .servers }}
-                        {{ $players = add $players .ClientCount }}
-                    {{ end }}
-                    {{ $players }}
-                </div>
-                <div class="stat-label">Connected Players</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">100%</div>
-                <div class="stat-label">System Health</div>
-            </div>
-        </section>
+<section id="server-grid" class="grid-split">
+    {{ template "server_cards.html" . }}
+</section>
 
-        <section id="server-grid"
-                 class="grid-split"
-                 hx-get="/api/servers"
-                 hx-trigger="load, every 10s, refresh"
-                 hx-headers='{"Accept":"text/html"}'
-                 hx-swap="innerHTML">
-            <span class="htmx-indicator pill" aria-hidden="true">Refreshing…</span>
-            {{ template "server_cards.html" . }}
-        </section>
-    </main>
+{{ if .servers }}
+<button class="floating-action" onclick="createNewServer()" aria-label="Add new server">+</button>
+{{ end }}
 
-    {{ if .servers }}
-    <button class="floating-action" onclick="createNewServer()" aria-label="Add new server">+</button>
-    {{ end }}
+<script>
+    // Dashboard-specific initialization
+    function createNewServer(){ window.location.href='/server/new'; }
 
-    {{ template "footer" . }}
-    {{ template "rename_modal" . }}
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
-    {{ template "bug_report_modal" . }}
-
-    <script>
-        // Dashboard-specific initialization
-        function ensureRenameHandler(){ if(document.__renameHandlerBound) return; document.__renameHandlerBound=true; document.addEventListener('click', e=>{ const btn=e.target.closest('button[data-action="rename-server"]'); if(!btn) return; e.preventDefault(); btn.disabled=true; const card=btn.closest('.server-card'); const sid=card && card.getAttribute('data-server-id'); const current=(card && card.querySelector('[data-server-name]')?.textContent || '').trim(); if(!sid){ btn.disabled=false; return; } const tpl=document.getElementById('renameModalTemplate'); let modal; if(tpl){ modal=tpl.cloneNode(true); modal.id=''; modal.style.display=''; modal.classList.add('active'); } else { modal=document.createElement('div'); modal.className='confirm-modal active'; modal.innerHTML='<div class="modal-card"><div class="modal-header"><h3 class="modal-title">Rename Server</h3></div><div class="modal-body"><label for="rename-input">New Name</label><input id="rename-input" class="form-input" style="margin-top:8px;width:100%;" /></div><div class="modal-actions"><button type="button" class="btn btn-ghost" data-action="cancel">Cancel</button><button type="button" class="btn btn-primary" data-action="apply">Save</button></div></div>'; } document.body.appendChild(modal); const input=modal.querySelector('#rename-input'); if(input) input.value=current; const cleanup=()=>{ try{ btn.disabled=false; }catch(_){} }; modal.addEventListener('click', function onBg(ev){ if(ev.target===modal){ modal.removeEventListener('click', onBg); modal.remove(); cleanup(); }}); const cancelBtn=modal.querySelector('[data-action="cancel"]'); const applyBtn=modal.querySelector('[data-action="apply"]'); if(cancelBtn) cancelBtn.addEventListener('click', ()=>{ modal.remove(); cleanup(); }); if(applyBtn) applyBtn.addEventListener('click', ()=>{ const val=(input && input.value || '').trim(); if(!val || val===current){ modal.remove(); cleanup(); return; } fetch(`/server/${sid}`, { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/x-www-form-urlencoded','Accept':'application/json'}, body:new URLSearchParams({update:'true', name:val}) }).then(res=>{ try{ const type=res.headers.get('X-Toast-Type'); const title=res.headers.get('X-Toast-Title')||'Server Renamed'; const msg=res.headers.get('X-Toast-Message')||'Server name updated.'; if(typeof window.showToast==='function' && msg){ window.showToast({type:type||'success', title, message:msg}); } }catch(_){} if(res.ok && card){ const nm=card.querySelector('[data-server-name]'); if(nm) nm.textContent=val; } }).catch(()=>{}).finally(()=>{ modal.remove(); cleanup(); }); }); }); }
-
-        function createNewServer(){ window.location.href='/server/new'; }
-
-        document.addEventListener('DOMContentLoaded', ()=>{
-            // Initialize WebSocket and health monitoring
+    document.addEventListener('DOMContentLoaded', ()=>{
+        if (window.SDSM) {
             SDSM.ws.connect();
             SDSM.health.start();
             SDSM.ui.bindServerCardNavigation();
             SDSM.ui.startStatsPoll();
-            ensureRenameHandler();
+        }
 
-            // Auto-refresh every 30 seconds
-            setInterval(()=>{
-                if (typeof htmx !== 'undefined') {
-                    htmx.trigger('#server-grid','refresh');
-                    htmx.trigger('.stats-grid','refresh');
-                }
-            }, 30000);
-        });
-
-        document.addEventListener('htmx:afterSwap', e=>{
-            if(e.target && e.target.closest('#server-grid')){
-                SDSM.ui.bindServerCardNavigation(e.target.closest('#server-grid'));
-                ensureRenameHandler();
+        // Auto-refresh every 30 seconds
+        setInterval(()=>{
+            if (typeof htmx !== 'undefined') {
+                htmx.trigger('#server-grid','refresh');
+                htmx.trigger('.stats-grid','refresh');
             }
-        });
-    </script>
-    
-    {{ template "toast.html" . }}
-</body>
-</html>
+        }, 30000);
+    });
+
+    document.addEventListener('htmx:afterSwap', e=>{
+        if(e.target && e.target.closest('#server-grid')){
+            if (window.SDSM && SDSM.ui) {
+                SDSM.ui.bindServerCardNavigation(e.target.closest('#server-grid'));
+            }
+        }
+    });
+</script>
+{{end}}

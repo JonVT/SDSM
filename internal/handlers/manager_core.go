@@ -4,9 +4,11 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -747,41 +749,42 @@ func (h *ManagerHandlers) Frame(c *gin.Context) {
 
 // Dashboard renders the main dashboard page, showing a list of servers.
 func (h *ManagerHandlers) Dashboard(c *gin.Context) {
-	username, _ := c.Get("username")
+	log.Printf("Dashboard handler called for user: %s, role: %s", c.GetString("username"), c.GetString("role"))
+	user, _ := c.Get("user")
 	role := c.GetString("role")
-
+	username, _ := c.Get("username")
+	
 	servers := h.manager.Servers
 	if role != "admin" {
-		user, _ := username.(string)
+		uname, _ := username.(string)
 		filtered := make([]*models.Server, 0, len(servers))
 		for _, s := range servers {
-			if h.userStore != nil && h.userStore.CanAccess(user, s.ID) {
+			if h.userStore != nil && h.userStore.CanAccess(uname, s.ID) {
 				filtered = append(filtered, s)
 			}
 		}
 		servers = filtered
 	}
 
-	// If the request is from HTMX, render the partial view
-	if c.GetHeader("HX-Request") == "true" {
-		c.HTML(http.StatusOK, "dashboard.html", gin.H{
-			"servers":  servers,
-			"username": username,
-			"role":     role,
-		})
-		return
-	}
-
-	// Otherwise, render the full frame, which will load the correct content via htmx
-	c.HTML(http.StatusOK, "frame.html", gin.H{
+	data := gin.H{
 		"servers":   servers,
+		"user":      user,
 		"username":  username,
 		"role":      role,
 		"buildTime": h.manager.BuildTime(),
 		"active":    h.manager.IsActive(),
 		"page":      "dashboard",
 		"title":     "Dashboard",
-	})
+	}
+
+	// If this is an HTMX request, render only the content
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "dashboard.html", data)
+		return
+	}
+
+	// Otherwise, render the full frame
+	c.HTML(http.StatusOK, "frame.html", data)
 }
 
 // ManagerGET renders the manager settings/status page with version info,
@@ -1094,4 +1097,50 @@ func (h *ManagerHandlers) UpdateLogGET(c *gin.Context) {
 		"page":      "logs/update",
 		"title":     "Update Logs",
 	})
+}
+
+// render wraps c.HTML with a panic-recovery mechanism to log template execution errors.
+// This helps diagnose blank-page issues where a template error causes a panic.
+func (h *ManagerHandlers) render(c *gin.Context, name string, data gin.H) {
+	defer func() {
+		if r := recover(); r != nil {
+			// Log the panic
+			err := fmt.Errorf("panic recovered while rendering template %s: %v", name, r)
+			if h.manager != nil && h.manager.Log != nil {
+				h.manager.Log.Write(err.Error())
+			} else {
+				log.Println(err)
+			}
+			// Also log stack trace for more context
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			stackTrace := string(buf[:n])
+			if h.manager != nil && h.manager.Log != nil {
+				h.manager.Log.Write(fmt.Sprintf("Stack trace:\n%s", stackTrace))
+			} else {
+				log.Printf("Stack trace:\n%s", stackTrace)
+			}
+
+			// Return an error to the user.
+			// Avoid re-rendering another template here to prevent recursive panics.
+			c.String(http.StatusInternalServerError, "An internal error occurred while rendering the page. Please check the SDSM logs for details.")
+		}
+	}()
+
+	// Add common data to every render call that uses the frame
+	if name == "frame.html" {
+		if _, ok := data["active"]; !ok {
+			data["active"] = h.manager.IsActive()
+		}
+		if _, ok := data["buildTime"]; !ok {
+			data["buildTime"] = h.manager.BuildTime()
+		}
+		if _, ok := data["servers"]; !ok {
+			// This is a simplified server list for the frame navigation.
+			// The specific page handler should provide the fully filtered list if needed.
+			data["servers"] = h.manager.Servers
+		}
+	}
+
+	c.HTML(http.StatusOK, name, data)
 }

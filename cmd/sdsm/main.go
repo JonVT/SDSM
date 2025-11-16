@@ -313,6 +313,21 @@ func setupRouter() *gin.Engine {
 	// Rate limiting - 100 requests per minute per IP
 	r.Use(app.rateLimiter.Middleware())
 
+	// Initialize handlers first, so they are available for all route registrations.
+	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
+	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log, app.manager)
+	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
+	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
+	// Wire realtime broadcast for servers that are attached on startup (detached mode)
+	if app != nil && app.manager != nil {
+		app.manager.OnServerAttached = func(s *models.Server) {
+			if s == nil {
+				return
+			}
+			managerHandlers.BroadcastStatusAndStats(s)
+		}
+	}
+
 	// Load templates from embedded filesystem
 	funcMap := htmltmpl.FuncMap{
 		"add": func(a, b int) int { return a + b },
@@ -348,20 +363,14 @@ func setupRouter() *gin.Engine {
 		"buildTime": func() string { return version.String() },
 	}
 	r.SetFuncMap(funcMap)
-	// Build a combined template set from embedded assets so both root and subdir files are available by name
-	t := htmltmpl.New("").Funcs(funcMap)
-	// Parse templates from embedded FS
-	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/*.html"))
-	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/partials/*.html"))
-	// Validate presence of critical templates
-	requiredTemplates := []string{"login.html", "manager.html", "frame.html", "dashboard.html", "setup.html", "error.html"}
-	for _, name := range requiredTemplates {
-		if t.Lookup(name) == nil {
-			logStuff(fmt.Sprintf("FATAL: embedded template missing: %s", name))
-			os.Exit(1)
-		}
+
+	// Load templates from embedded filesystem using a glob pattern for simplicity.
+	t, err := htmltmpl.New("").Funcs(funcMap).ParseFS(ui.Assets, "templates/*.html", "templates/partials/*.html")
+	if err != nil {
+		log.Fatalf("FATAL: failed to parse templates: %v", err)
 	}
 	r.SetHTMLTemplate(t)
+
 	// Static assets from embedded FS (no disk fallback)
 	staticFS, err := fs.Sub(ui.Assets, "static")
 	if err != nil {
@@ -419,21 +428,6 @@ func setupRouter() *gin.Engine {
 		c.HTML(http.StatusOK, "privacy.html", gin.H{"title": "Privacy"})
 	})
 
-	// Initialize handlers
-	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
-	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log, app.manager)
-	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
-	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
-	// Wire realtime broadcast for servers that are attached on startup (detached mode)
-	if app != nil && app.manager != nil {
-		app.manager.OnServerAttached = func(s *models.Server) {
-			if s == nil {
-				return
-			}
-			managerHandlers.BroadcastStatusAndStats(s)
-		}
-	}
-
 	// Authentication routes
 	auth := r.Group("/")
 	{
@@ -449,10 +443,10 @@ func setupRouter() *gin.Engine {
 			c.Redirect(http.StatusFound, "/admin/setup")
 			return
 		}
-		// Try auth cookie; if valid, route to frame which will handle content loading
+		// Try auth cookie; if valid, route to dashboard
 		if token, _ := c.Cookie(middleware.CookieName); token != "" {
 			if _, err := app.authService.ValidateToken(token); err == nil {
-				c.Redirect(http.StatusFound, "/frame")
+				c.Redirect(http.StatusFound, "/dashboard")
 				return
 			}
 		}

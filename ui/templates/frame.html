@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .title }} - SDSM</title>
-    <link rel="icon" href="/sdsm.png" type="image/png">
+    <link rel="icon" href="/static/sdsm.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -30,7 +30,7 @@
     
     <aside class="sidebar">
         <div class="sidebar-header">
-            <img src="/sdsm.png" alt="SDSM" class="sidebar-logo">
+            <img src="/static/sdsm.png" alt="SDSM" class="sidebar-logo">
             <div class="sidebar-title">
                 <h1>SDSM</h1>
                 <p>Server Manager</p>
@@ -49,7 +49,7 @@
                 <span>Manager</span>
             </a>
             <a href="/users" class="nav-item" data-target="/users" hx-get="/users" hx-push-url="/users">
-                {{ template "icon_users" . }}
+                {{ template "icon_user" . }}
                 <span>Users</span>
             </a>
             {{ end }}
@@ -86,7 +86,7 @@
         {{end}}
         
         <div class="sidebar-footer">
-            {{ template "user_menu" . }}
+            {{ template "user_menu.html" . }}
         </div>
     </aside>
     
@@ -97,12 +97,58 @@
             </div>
             <div class="datetime-display" id="datetime"></div>
         </header>
-        <main id="content-area" class="content-area" hx-get="/{{.page}}" hx-trigger="load" hx-swap="innerHTML">
-            <!-- HTMX content will be loaded here -->
+        <main id="content-area" class="content-area">
+            {{if eq .page "dashboard"}}
+                {{template "dashboard.html" .}}
+            {{else if eq .page "manager"}}
+                {{template "manager.html" .}}
+            {{else if eq .page "users"}}
+                {{template "users.html" .}}
+            {{else if eq .page "profile"}}
+                {{template "profile.html" .}}
+            {{else if eq .page "tokens"}}
+                {{template "tokens.html" .}}
+            {{else if eq .page "server_status"}}
+                {{template "server_status.html" .}}
+            {{else if eq .page "server_new"}}
+                {{template "server_new.html" .}}
+            {{else if eq .page "commands"}}
+                {{template "commands.html" .}}
+            {{else if eq .page "logs"}}
+                {{template "logs.html" .}}
+            {{else if eq .page "logs/sdsm"}}
+                {{template "logs.html" .}}
+            {{else if eq .page "logs/update"}}
+                {{template "logs.html" .}}
+            {{else if eq .page "help/tokens"}}
+                {{template "tokens.html" .}}
+            {{else if eq .page "help/commands"}}
+                {{template "commands.html" .}}
+            {{else if eq .page "license"}}
+                {{template "license.html" .}}
+            {{else if eq .page "privacy"}}
+                {{template "privacy.html" .}}
+            {{else if eq .page "terms"}}
+                {{template "terms.html" .}}
+            {{else if eq .page "error"}}
+                {{template "error.html" .}}
+            {{end}}
         </main>
     </div>
 
-    {{ template "modal_templates" . }}
-    {{ template "toast" . }}
+    {{ template "modal_templates.html" . }}
+    {{ template "modal_scripts.html" . }}
+    {{ template "toast.html" . }}
+    
+    <script>
+        // Initialize SDSM when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.SDSM) {
+                SDSM.theme.init();
+                SDSM.health.start();
+                SDSM.nav.init();
+            }
+        });
+    </script>
 </body>
 </html>
