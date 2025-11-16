@@ -1,170 +1,28 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SDSM - Server Manager</title>
+    <title>{{ .title }} - SDSM</title>
     <link rel="icon" href="/sdsm.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-    <script>
-        const HEALTH_ENDPOINT = '/healthz';
-        const HEALTH_POLL_OK = 15000;
-        const HEALTH_POLL_LOST = 5000;
-        const HEALTH_TIMEOUT = 4000;
-
-        let connectionTimer = null;
-        let connectionLost = false;
-        let currentTarget = 'dashboard';
-
-        const pageTitles = {
-            'dashboard': 'Dashboard',
-            'manager': 'Manager Settings',
-            'help/tokens': 'Chat Tokens',
-        };
-
-        function navigateTo(target, event) {
-            if (event) {
-                event.preventDefault();
-            }
-
-            currentTarget = target;
-            
-            // Update active state
-            document.querySelectorAll('.nav-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            const activeItem = document.querySelector(`.nav-item[data-target="${target}"]`);
-            if (activeItem) {
-                activeItem.classList.add('active');
-            }
-
-            // Update page title
-            const titleEl = document.getElementById('page-title');
-            if (titleEl) {
-                titleEl.textContent = pageTitles[target] || target.replace(/server(\d+)/, 'Server $1');
-            }
-
-            // Load content
-            document.getElementById('frame').src = target;
-        }
-
-        function updateDateTime() {
-            const now = new Date();
-            const element = document.getElementById('datetime');
-            if (element) {
-                element.textContent = now.toLocaleString('en-US', {
-                    weekday: 'short',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                });
-            }
-        }
-
-        function setConnectionBanner(active, message) {
-            const banner = document.getElementById('connection-banner');
-            const text = document.getElementById('connection-banner-text');
-            if (!banner) return;
-
-            if (active) {
-                banner.classList.add('active');
-                if (text && message) {
-                    text.textContent = message;
-                }
-                document.body.style.paddingTop = '3.5rem';
-            } else {
-                banner.classList.remove('active');
-                document.body.style.paddingTop = '';
-            }
-        }
-
-        function scheduleConnectionCheck(delay) {
-            if (connectionTimer) {
-                clearTimeout(connectionTimer);
-            }
-            connectionTimer = setTimeout(runConnectionCheck, delay);
-        }
-
-        function runConnectionCheck() {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), HEALTH_TIMEOUT);
-
-            fetch(HEALTH_ENDPOINT, {
-                cache: 'no-store',
-                credentials: 'same-origin',
-                signal: controller.signal
-            })
-                .then(response => {
-                    clearTimeout(timeoutId);
-                    if (!response.ok) throw new Error('Health check failed');
-                    
-                    if (connectionLost) {
-                        connectionLost = false;
-                        setConnectionBanner(true, 'Connection restored. Reloading...');
-                        setTimeout(() => {
-                            setConnectionBanner(false);
-                            window.location.reload();
-                        }, 1200);
-                        return;
-                    }
-                    setConnectionBanner(false);
-                })
-                .catch(() => {
-                    clearTimeout(timeoutId);
-                    if (!connectionLost) {
-                        connectionLost = true;
-                        setConnectionBanner(true, 'Connection lost. Attempting to reconnect...');
-                    }
-                })
-                .finally(() => {
-                    scheduleConnectionCheck(connectionLost ? HEALTH_POLL_LOST : HEALTH_POLL_OK);
-                });
-        }
-
-        function getStoredTheme() {
-            return localStorage.getItem('theme') || 'dark';
-        }
-
-        function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const textEl = document.getElementById('theme-text');
-            if (textEl) {
-                textEl.textContent = theme === 'dark' ? 'Light Mode' : 'Dark Mode';
-            }
-        }
-
-        function toggleTheme() {
-            const current = getStoredTheme();
-            const next = current === 'dark' ? 'light' : 'dark';
-            setTheme(next);
-        }
-
-        function startConnectionMonitor() {
-            const reloadButton = document.getElementById('connection-banner-action');
-            if (reloadButton) {
-                reloadButton.addEventListener('click', () => window.location.reload());
-            }
-            runConnectionCheck();
-        }
-
-        // Initialize
-        window.addEventListener('load', () => {
-            setTheme(getStoredTheme());
-            updateDateTime();
-            setInterval(updateDateTime, 1000);
-            navigateTo('dashboard');
-            startConnectionMonitor();
-        });
-    </script>
+    <link rel="stylesheet" href="/static/ui-theme.css?v={{.buildTime}}">
+    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+    <script src="/static/app.js?v={{.buildTime}}" defer></script>
 </head>
-<body class="frame-shell">
+<body 
+    class="frame-shell" 
+    hx-boost="true" 
+    hx-target="#content-area" 
+    hx-swap="innerHTML"
+    data-username="{{.username}}"
+    data-role="{{.role}}"
+    data-build-time="{{.buildTime}}"
+>
+    <a href="#main-content" class="sr-only">Skip to main content</a>
+
     <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
         <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
         <button type="button" id="connection-banner-action">Reload</button>
@@ -181,27 +39,35 @@
         
         <nav class="nav-section">
             <div class="nav-section-title">Main</div>
-            <a href="#" class="nav-item" data-target="dashboard" onclick="navigateTo('dashboard', event)">
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                </svg>
+            <a href="/dashboard" class="nav-item" data-target="/dashboard" hx-get="/dashboard" hx-push-url="/dashboard">
+                {{ template "icon_dashboard" . }}
                 <span>Dashboard</span>
             </a>
-            <a href="#" class="nav-item" data-target="manager" onclick="navigateTo('manager', event)">
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                </svg>
+            {{ if eq .role "admin" }}
+            <a href="/manager" class="nav-item" data-target="/manager" hx-get="/manager" hx-push-url="/manager">
+                {{ template "icon_manager" . }}
                 <span>Manager</span>
             </a>
+            <a href="/users" class="nav-item" data-target="/users" hx-get="/users" hx-push-url="/users">
+                {{ template "icon_users" . }}
+                <span>Users</span>
+            </a>
+            {{ end }}
         </nav>
         
         {{if .active}}
         <div class="nav-servers">
-            <div class="nav-section-title">Servers</div>
+            <div class="nav-section-title row justify-between">
+                <span>Servers</span>
+                {{ if eq .role "admin" }}
+                <a href="/server/new" class="btn btn-ghost btn-min-sm" hx-get="/server/new" hx-push-url="/server/new" title="Create new server">
+                    {{ template "icon_add" . }}
+                </a>
+                {{ end }}
+            </div>
             {{if .servers}}
             {{range .servers}}
-            <a href="#" class="nav-item" data-target="server{{.ID}}" onclick="navigateTo('server{{.ID}}', event)">
+            <a href="/server/{{.ID}}" class="nav-item" data-target="/server/{{.ID}}" hx-get="/server/{{.ID}}" hx-push-url="/server/{{.ID}}">
                 <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
                 </svg>
@@ -220,37 +86,23 @@
         {{end}}
         
         <div class="sidebar-footer">
-            <button class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle theme">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
-                </svg>
-                <span id="theme-text">Light Mode</span>
-            </button>
-            <a href="#" class="nav-item" data-target="help/tokens" onclick="navigateTo('help/tokens', event)">
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l.8-4A8.86 8.86 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-                </svg>
-                <span>Chat Tokens</span>
-            </a>
-            <a href="/logout" class="nav-item m-0">
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                </svg>
-                <span>Logout</span>
-            </a>
+            {{ template "user_menu" . }}
         </div>
     </aside>
     
-    <main class="main-content">
+    <div class="main-content-shell">
         <header class="topbar">
             <div class="topbar-left">
-                <h1 class="page-title" id="page-title">Dashboard</h1>
+                <h1 class="page-title" id="page-title">{{ .title }}</h1>
             </div>
             <div class="datetime-display" id="datetime"></div>
         </header>
-        <iframe id="frame" class="content-frame" src=""></iframe>
-    </main>
+        <main id="content-area" class="content-area" hx-get="/{{.page}}" hx-trigger="load" hx-swap="innerHTML">
+            <!-- HTMX content will be loaded here -->
+        </main>
+    </div>
+
     {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
+    {{ template "toast" . }}
 </body>
 </html>

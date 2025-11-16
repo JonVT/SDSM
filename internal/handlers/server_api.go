@@ -1133,6 +1133,35 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		s.PlayerSaves = v == "on" || v == "true" || v == "1"
 	}
 
+	// Discord notifications: server-specific webhook and preferences
+	s.DiscordWebhook = strings.TrimSpace(body["discord_webhook"])
+	s.NotifyUseManagerDefaults = body["notify_use_manager_defaults"] == "on" || body["notify_use_manager_defaults"] == "true" || body["notify_use_manager_defaults"] == "1"
+	s.NotifyEnable = body["notify_enable"] == "on" || body["notify_enable"] == "true" || body["notify_enable"] == "1"
+	s.NotifyOnStart = body["notify_on_start"] == "on" || body["notify_on_start"] == "true" || body["notify_on_start"] == "1"
+	s.NotifyOnStopping = body["notify_on_stopping"] == "on" || body["notify_on_stopping"] == "true" || body["notify_on_stopping"] == "1"
+	s.NotifyOnStopped = body["notify_on_stopped"] == "on" || body["notify_on_stopped"] == "true" || body["notify_on_stopped"] == "1"
+	s.NotifyOnRestart = body["notify_on_restart"] == "on" || body["notify_on_restart"] == "true" || body["notify_on_restart"] == "1"
+	s.NotifyOnUpdateStarted = body["notify_on_update_started"] == "on" || body["notify_on_update_started"] == "true" || body["notify_on_update_started"] == "1"
+	s.NotifyOnUpdateCompleted = body["notify_on_update_completed"] == "on" || body["notify_on_update_completed"] == "true" || body["notify_on_update_completed"] == "1"
+	s.NotifyOnUpdateFailed = body["notify_on_update_failed"] == "on" || body["notify_on_update_failed"] == "true" || body["notify_on_update_failed"] == "1"
+	// Templates (store raw; trimming already done implicitly above)
+	s.NotifyMsgStart = strings.TrimSpace(body["notify_msg_start"])
+	s.NotifyMsgStopping = strings.TrimSpace(body["notify_msg_stopping"])
+	s.NotifyMsgStopped = strings.TrimSpace(body["notify_msg_stopped"])
+	s.NotifyMsgRestart = strings.TrimSpace(body["notify_msg_restart"])
+	s.NotifyMsgUpdateStarted = strings.TrimSpace(body["notify_msg_update_started"])
+	s.NotifyMsgUpdateCompleted = strings.TrimSpace(body["notify_msg_update_completed"])
+	s.NotifyMsgUpdateFailed = strings.TrimSpace(body["notify_msg_update_failed"])
+	// Colors (#RRGGBB basic validation; invalid kept empty to inherit)
+	validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
+	if validColor(body["notify_color_start"]) { s.NotifyColorStart = strings.TrimSpace(body["notify_color_start"]) } else { s.NotifyColorStart = strings.TrimSpace(s.NotifyColorStart) }
+	if validColor(body["notify_color_stopping"]) { s.NotifyColorStopping = strings.TrimSpace(body["notify_color_stopping"]) } else { s.NotifyColorStopping = strings.TrimSpace(s.NotifyColorStopping) }
+	if validColor(body["notify_color_stopped"]) { s.NotifyColorStopped = strings.TrimSpace(body["notify_color_stopped"]) } else { s.NotifyColorStopped = strings.TrimSpace(s.NotifyColorStopped) }
+	if validColor(body["notify_color_restart"]) { s.NotifyColorRestart = strings.TrimSpace(body["notify_color_restart"]) } else { s.NotifyColorRestart = strings.TrimSpace(s.NotifyColorRestart) }
+	if validColor(body["notify_color_update_started"]) { s.NotifyColorUpdateStarted = strings.TrimSpace(body["notify_color_update_started"]) } else { s.NotifyColorUpdateStarted = strings.TrimSpace(s.NotifyColorUpdateStarted) }
+	if validColor(body["notify_color_update_completed"]) { s.NotifyColorUpdateCompleted = strings.TrimSpace(body["notify_color_update_completed"]) } else { s.NotifyColorUpdateCompleted = strings.TrimSpace(s.NotifyColorUpdateCompleted) }
+	if validColor(body["notify_color_update_failed"]) { s.NotifyColorUpdateFailed = strings.TrimSpace(body["notify_color_update_failed"]) } else { s.NotifyColorUpdateFailed = strings.TrimSpace(s.NotifyColorUpdateFailed) }
+
 	s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
 
 	// Apply core parameter change effects + possible redeploy

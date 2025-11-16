@@ -4,9 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin Setup - SDSM</title>
-  <link rel="stylesheet" href="/static/modern.css" />
   <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
   <link rel="icon" href="/sdsm.png" type="image/png" />
+  <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(_){}})();</script>
+  <script src="/static/app.js?v={{buildTime}}" defer></script>
   
   <script>
     function validateForm(e){
@@ -96,22 +97,20 @@
   {{ template "modal_scripts" . }}
   {{ template "footer" . }}
   <script>
-    function getStoredTheme(){ return localStorage.getItem('theme') || 'dark'; }
-    function setTheme(theme){ document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); const icon=document.getElementById('theme-icon'); if(icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙'; }
-    function toggleTheme(){ const cur=document.documentElement.getAttribute('data-theme')||getStoredTheme(); setTheme(cur==='dark'?'light':'dark'); }
-    setTheme(getStoredTheme());
+    document.addEventListener('DOMContentLoaded', function() {
+      SDSM.theme.init();
 
-    // If server rendered an error, surface as modal in addition to inline
-    try {
-      const inlineErr = document.querySelector('.error[role="alert"]');
-      if (inlineErr) {
-        const msg = (inlineErr.textContent || '').trim();
-        if (msg) {
-          if (window.askInfo) window.askInfo({ title: 'Setup Error', message: msg, confirmText: 'Close' });
-          else if (window.openInfo) window.openInfo({ title: 'Setup Error', message: msg, confirmText: 'Close' });
+      // If server rendered an error, surface as modal in addition to inline
+      try {
+        const inlineErr = document.querySelector('.error[role="alert"]');
+        if (inlineErr) {
+          const msg = (inlineErr.textContent || '').trim();
+          if (msg && window.openInfo) {
+            window.openInfo({ title: 'Setup Error', message: msg, confirmText: 'Close' });
+          }
         }
-      }
-    } catch(_) {}
+      } catch(_) {}
+    });
   </script>
 </body>
 </html>

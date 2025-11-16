@@ -1,287 +1,194 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.server.Name}} - SDSM</title>
-    <meta name="description" content="Stationeers Server Status - Monitor live state, players, and logs">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css">
-    <link rel="icon" href="/sdsm.png" type="image/png">
-    {{ template "server_status_styles.html" . }}
-    
-    </head>
-    <body class="page-shell" data-server-running="{{if .server.Running}}true{{else}}false{{end}}" data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}" data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}" data-server-id="{{.server.ID}}" data-world="{{.server.World}}" data-start-location="{{.server.StartLocation}}" data-start-condition="{{.server.StartCondition}}" data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}" data-shutdown-delay="{{.server.ShutdownDelaySeconds}}">
-        <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
-            <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
-            <button type="button" id="connection-banner-action" title="Reload the page">Reload</button>
-        </div>
-        <div class="container">
-            
-            <header class="hero-card">
-                <div class="hero-main">
-                    <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-                    <div class="hero-heading">
-                        <h1 class="hero-title">Server Control</h1>
-                        <p class="hero-subtitle">Manage and monitor your Stationeers server.</p>
-                    </div>
-                </div>
-                <div class="hero-meta">
-                    <div class="hero-meta-title">Controls &amp; Status</div>
-                    <p class="hero-meta-text">Use the sections below configure and control your server.</p>
-                    <div class="row">
-                        <span class="pill">Real-time</span>
-                        <span id="scon-health-pill" class="pill" title="Stationeers Console HTTP health">
-                            <span id="scon-health-dot" aria-hidden="true">●</span>
-                            <span id="scon-health-text" class="ml-6">SCON: {{ .scon_port }}</span>
-                        </span>
-                    </div>
-                </div>
-                <div class="hero-actions flex-col items-end">
-                    <div class="row">
-                        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
-                        <a href="/dashboard" class="btn btn-primary">
-                            {{ template "icon_dashboard" . }}
-                            Dashboard
-                        </a>
-                        <a href="/manager" class="btn btn-primary">
-                            {{ template "icon_manager" . }}
-                            Manager
-                        </a>
-                        {{ if .prev_server_id }}
-                        <a href="/server/{{.prev_server_id}}" id="nav-prev-server" class="btn btn-outline btn-nav" title="Previous: {{if .prev_server_name}}{{.prev_server_name}}{{else}}ID {{.prev_server_id}}{{end}} (Shortcut: ←)" aria-label="Previous server {{if .prev_server_name}}{{.prev_server_name}}{{end}}">◀</a>
-                        {{ end }}
-                        {{ if .next_server_id }}
-                        <a href="/server/{{.next_server_id}}" id="nav-next-server" class="btn btn-outline btn-nav" title="Next: {{if .next_server_name}}{{.next_server_name}}{{else}}ID {{.next_server_id}}{{end}} (Shortcut: →)" aria-label="Next server {{if .next_server_name}}{{.next_server_name}}{{end}}">▶</a>
-                        {{ end }}
-                        {{ template "user_menu" . }}
-                    </div>
-                    <span class="build-meta">{{buildTime}}</span>
-                </div>
-            </header>
+{{define "title"}}{{.server.Name}}{{end}}
 
-            
-            <div class="server-content">
-            {{ if .server.LastError }}
-            <div id="server-error-banner" class="alert alert-danger" role="alert" aria-live="polite">
-                <div class="alert-icon" aria-hidden="true">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12" y2="16"></line>
-                    </svg>
-                </div>
-                <div class="alert-content">
-                    <div class="alert-title">Startup error detected</div>
-                    <div class="alert-message" id="server-error-text">{{ .server.LastError }}</div>
-                    {{ if .server.LastErrorAt }}
-                    <div class="alert-meta">Occurred at <span id="server-error-time">{{ .server.LastErrorAt.Format "01/02/2006 15:04:05" }}</span></div>
-                    {{ end }}
-                </div>
-            </div>
-            {{ else }}
-            <div id="server-error-banner" class="alert alert-danger hidden" role="alert" aria-live="polite">
-                <div class="alert-icon" aria-hidden="true">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12" y2="16"></line>
-                    </svg>
-                </div>
-                <div class="alert-content">
-                    <div class="alert-title">Startup error detected</div>
-                    <div class="alert-message" id="server-error-text"></div>
-                    <div class="alert-meta">Occurred at <span id="server-error-time"></span></div>
-                </div>
-            </div>
+{{define "content"}}
+<div class="server-content">
+    {{ if .server.LastError }}
+    <div id="server-error-banner" class="alert alert-danger" role="alert" aria-live="polite">
+        <div class="alert-icon" aria-hidden="true">
+            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12" y2="16"></line>
+            </svg>
+        </div>
+        <div class="alert-content">
+            <div class="alert-title">Startup error detected</div>
+            <div class="alert-message" id="server-error-text">{{ .server.LastError }}</div>
+            {{ if .server.LastErrorAt }}
+            <div class="alert-meta">Occurred at <span id="server-error-time">{{ .server.LastErrorAt.Format "01/02/2006 15:04:05" }}</span></div>
             {{ end }}
-            <div class="glass-card">
-                <div class="server-title-bar row justify-between">
-                    <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}">
-                        {{ if .server.Beta }}
-                        <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
-                            <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
-                            <path d="M7 14h10"/>
-                        </svg>
-                        {{ else }}
-                        <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
-                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                        </svg>
-                        {{ end }}
-                        <span id="server-name">{{.server.Name}}</span>
-                    </h3>
-                    <div class="right-title-actions">
-                        {{ if eq .role "admin" }}
-                        <button type="button" id="btn-rename-server" class="btn btn-info btn-min-sm" title="Rename server" aria-label="Rename server">
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
-                                <path d="M14.06 4.94l3.75 3.75"></path>
-                            </svg>
-                            <span class="ml-6">Rename</span>
-                        </button>
-                        {{ end }}
-                        <div class="lang-control relative">
-                            <button type="button" id="btn-language" class="btn btn-ghost btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
-                                <span aria-hidden="true">🌐</span>
-                                <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
-                            </button>
-                            <div id="language-menu" class="lang-dropdown dropdown-panel" role="menu" aria-label="Languages"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="server-info-row">
-                    <img 
-                        class="world-thumb" 
-                        src="/server/{{.server.ID}}/world-image?v={{.server.WorldID}}" 
-                        alt="World image for {{.server.World}}" 
-                        data-world-image="{{ if .worldInfo }}{{ .worldInfo.Image }}{{ end }}"
-                        onerror="this.style.display='none'">
-
-                    <div class="server-info">
-                        {{ if .worldInfo }}
-                        <p class="card-subtitle">
-                            {{.worldInfo.Name}} — {{.worldInfo.Description}}
-                        </p>
-                        {{ end }}
-                        <div class="info-inline-row">
-                            <span class="info-label">World</span>
-                            <span class="info-value world" title="{{.server.WorldID}}">{{ if .worldInfo }}{{ .worldInfo.Name }}{{ else }}{{ .server.WorldID }}{{ end }}</span>
-                            <span class="info-sep" aria-hidden="true">•</span>
-                            <span class="info-label">Port</span>
-                            <span id="server-port-value" class="info-value port">{{.server.Port}}</span>
-                            <span class="info-sep" aria-hidden="true">•</span>
-                            <span class="info-label">Max Players</span>
-                            <span id="server-max-value" class="info-value max">{{ .server.MaxClients }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            
-            {{ template "server_status_control.html" . }}
-
-        
-        <div class="main-grid">
-            
-            {{ $live := .server.LiveClients }}
-            {{ $liveCount := len $live }}
-            {{ $history := .server.Clients }}
-            {{ $historyCount := len $history }}
-            {{ template "server_status_players.html" . }}
-
-            
-            {{ template "server_status_chat.html" . }}
-
-            
-            <div class="card card-saves">
-                <div class="card-header">
-                    <h2 class="card-title">Saves</h2>
-                </div>
-                
-                <div class="tabs" id="saves-tabs" role="tablist" aria-label="Save types">
-                    <button class="tab tab-all active" role="tab" aria-selected="true" data-save-filter="all">All</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="auto">Auto</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="quick">Quick</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="manual">Named</button>
-                    <button class="tab tab-player" role="tab" aria-selected="false" data-save-filter="player">Player</button>
-                </div>
-                <div id="saves-empty" class="empty-state">Select a tab to view saves.</div>
-                <div id="saves-list" role="region" aria-label="Saves list" class="hidden"></div>
-            </div>
-
-            
-            {{ template "server_status_config.html" . }}
-
-            
         </div>
-        
-        
-        <div class="card" id="server-logs-card">
-            <div class="card-header">
-                <h2 class="card-title m-0">Logs</h2>
-                <button type="button" id="serverLogsToggle" class="btn btn-ghost btn-min-sm" aria-expanded="true" aria-controls="serverLogsContent" title="Collapse or expand logs">
-                    <svg id="serverLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    <span id="serverLogsToggleLabel" class="ml-6">Less</span>
+    </div>
+    {{ else }}
+    <div id="server-error-banner" class="alert alert-danger hidden" role="alert" aria-live="polite">
+        <div class="alert-icon" aria-hidden="true">
+            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12" y2="16"></line>
+            </svg>
+        </div>
+        <div class="alert-content">
+            <div class="alert-title">Startup error detected</div>
+            <div class="alert-message" id="server-error-text"></div>
+            <div class="alert-meta">Occurred at <span id="server-error-time"></span></div>
+        </div>
+    </div>
+    {{ end }}
+    <div class="glass-card">
+        <div class="server-title-bar row justify-between">
+            <h3 class="server-title" title="{{ if .server.Beta }}Beta channel{{ else }}Release channel{{ end }}">
+                {{ if .server.Beta }}
+                <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
+                    <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
+                    <path d="M7 14h10"/>
+                </svg>
+                {{ else }}
+                <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
+                    <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                    <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                    <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                    <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                </svg>
+                {{ end }}
+                <span id="server-name">{{.server.Name}}</span>
+            </h3>
+            <div class="right-title-actions">
+                {{ if eq .role "admin" }}
+                <button type="button" id="btn-rename-server" class="btn btn-info btn-min-sm" title="Rename server" aria-label="Rename server">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
+                        <path d="M14.06 4.94l3.75 3.75"></path>
+                    </svg>
+                    <span class="ml-6">Rename</span>
                 </button>
-            </div>
-            <div id="serverLogsContent" class="card-body" aria-hidden="false">
-                <div class="control-actions mb-3">
-                    <div class="button-group">
-                        <button type="button" id="sl-refresh" class="btn btn-info">
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
-                                <path d="M21 3v5h-5"/>
-                            </svg>
-                            <span class="ml-6">Refresh</span>
-                        </button>
-                        <button type="button" id="sl-download" class="btn btn-info">
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7 10 12 15 17 10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
-                            </svg>
-                            <span class="ml-6">Download</span>
-                        </button>
-                        {{ if eq .role "admin" }}
-                        <button type="button" id="sl-clear" class="btn btn-danger">
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                <path d="M10 11v6"/>
-                                <path d="M14 11v6"/>
-                                <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
-                            </svg>
-                            <span class="ml-6">Clear</span>
-                        </button>
-                        {{ end }}
-                    </div>
+                {{ end }}
+                <div class="lang-control relative">
+                    <button type="button" id="btn-language" class="btn btn-ghost btn-min-sm" title="Change language" aria-haspopup="menu" aria-expanded="false">
+                        <span aria-hidden="true">🌐</span>
+                        <span id="current-language" class="ml-6">{{ if .server.Language }}{{ .server.Language }}{{ else }}Default{{ end }}</span>
+                    </button>
+                    <div id="language-menu" class="lang-dropdown dropdown-panel" role="menu" aria-label="Languages"></div>
                 </div>
-                <div class="logs-grid">
-                    <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
-                    <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">
-                        <div class="empty-state" id="log-tabs-empty">No log files found</div>
-                    </div>
+            </div>
+        </div>
+
+        <div class="server-info-row">
+            <img 
+                class="world-thumb" 
+                src="/server/{{.server.ID}}/world-image?v={{.server.WorldID}}" 
+                alt="World image for {{.server.World}}" 
+                data-world-image="{{ if .worldInfo }}{{ .worldInfo.Image }}{{ end }}"
+                onerror="this.style.display='none'">
+
+            <div class="server-info">
+                {{ if .worldInfo }}
+                <p class="card-subtitle">
+                    {{.worldInfo.Name}} — {{.worldInfo.Description}}
+                </p>
+                {{ end }}
+                <div class="info-inline-row">
+                    <span class="info-label">World</span>
+                    <span class="info-value world" title="{{.server.WorldID}}">{{ if .worldInfo }}{{ .worldInfo.Name }}{{ else }}{{ .server.WorldID }}{{ end }}</span>
+                    <span class="info-sep" aria-hidden="true">•</span>
+                    <span class="info-label">Port</span>
+                    <span id="server-port-value" class="info-value port">{{.server.Port}}</span>
+                    <span class="info-sep" aria-hidden="true">•</span>
+                    <span class="info-label">Max Players</span>
+                    <span id="server-max-value" class="info-value max">{{ .server.MaxClients }}</span>
                 </div>
             </div>
         </div>
     </div>
+
+    
+    {{ template "server_status_control.html" . }}
+
+
+<div class="main-grid">
+    
+    {{ $live := .server.LiveClients }}
+    {{ $liveCount := len $live }}
+    {{ $history := .server.Clients }}
+    {{ $historyCount := len $history }}
+    {{ template "server_status_players.html" . }}
+
+    
+    {{ template "server_status_chat.html" . }}
+
+    
+    <div class="card card-saves">
+        <div class="card-header">
+            <h2 class="card-title">Saves</h2>
+        </div>
+        
+        <div class="tabs" id="saves-tabs" role="tablist" aria-label="Save types">
+            <button class="tab tab-all active" role="tab" aria-selected="true" data-save-filter="all">All</button>
+            <button class="tab" role="tab" aria-selected="false" data-save-filter="auto">Auto</button>
+            <button class="tab" role="tab" aria-selected="false" data-save-filter="quick">Quick</button>
+            <button class="tab" role="tab" aria-selected="false" data-save-filter="manual">Named</button>
+            <button class="tab tab-player" role="tab" aria-selected="false" data-save-filter="player">Player</button>
+        </div>
+        <div id="saves-empty" class="empty-state">Select a tab to view saves.</div>
+        <div id="saves-list" role="region" aria-label="Saves list" class="hidden"></div>
     </div>
 
-    {{ template "server_status_modals.html" . }}
-    {{ template "rename_modal" . }}
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
+    
+    {{ template "server_status_config.html" . }}
 
-    {{ template "server_status_scripts.html" . }}
-    <script>
-    // Keyboard shortcuts for server navigation: ArrowLeft / ArrowRight
-    (function(){
-        try {
-            const prevLink = document.getElementById('nav-prev-server');
-            const nextLink = document.getElementById('nav-next-server');
-            function isTypingContext(el){
-                if(!el) return false;
-                const tag = el.tagName.toLowerCase();
-                return tag === 'input' || tag === 'textarea' || el.isContentEditable;
-            }
-            document.addEventListener('keydown', (e) => {
-                if (isTypingContext(document.activeElement)) return; // do not hijack while typing
-                if (e.key === 'ArrowLeft' && prevLink) {
-                    e.preventDefault(); prevLink.click();
-                } else if (e.key === 'ArrowRight' && nextLink) {
-                    e.preventDefault(); nextLink.click();
-                }
-            });
-        } catch(_) {}
-    })();
-    </script>
-    {{ template "toast.html" . }}
-    {{ template "footer" . }}
-</body>
-</html>
+    
+</div>
+
+
+<div class="card" id="server-logs-card">
+    <div class="card-header">
+        <h2 class="card-title m-0">Logs</h2>
+        <button type="button" id="serverLogsToggle" class="btn btn-ghost btn-min-sm" aria-expanded="true" aria-controls="serverLogsContent" title="Collapse or expand logs">
+            <svg id="serverLogsChevron" class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            <span id="serverLogsToggleLabel" class="ml-6">Less</span>
+        </button>
+    </div>
+    <div id="serverLogsContent" class="card-body" aria-hidden="false">
+        <div class="control-actions mb-3">
+            <div class="button-group">
+                <button type="button" id="sl-refresh" class="btn btn-info">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                    </svg>
+                    <span class="ml-6">Refresh</span>
+                </button>
+                <button type="button" id="sl-download" class="btn btn-info">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span class="ml-6">Download</span>
+                </button>
+                {{ if eq .role "admin" }}
+                <button type="button" id="sl-clear" class="btn btn-danger">
+                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6"/>
+                        <path d="M14 11v6"/>
+                        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    <span class="ml-6">Clear</span>
+                </button>
+                {{ end }}
+            </div>
+        </div>
+        <div class="logs-grid">
+            <div class="log-viewer" id="log-viewer" aria-live="polite" aria-label="Log output" role="region"></div>
+            <div class="log-tabs" id="log-tabs" role="tablist" aria-label="Log files">
+                <div class="empty-state" id="log-tabs-empty">No log files found</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ template "server_status_modals.html" . }}
+{{ template "rename_modal" . }}
+{{end}}

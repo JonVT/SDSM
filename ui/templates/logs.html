@@ -1,61 +1,41 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Logs - SDSM</title>
-    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
-    
-</head>
-<body class="page-shell">
-    <main class="container">
-        <div class="glass-card">
-            <h3>Logs</h3>
-            <div class="logs-shell" id="logsShell" data-files='{{.filesJSON}}'>
-                <div class="tabs" id="logTabs"></div>
-                <div class="actions">
-                    <button id="refreshBtn" class="btn btn-info" title="Reload current log">Refresh</button>
-                    <button id="downloadBtn" class="btn btn-info" title="Download current log">Download</button>
-                </div>
-                <div class="log-meta" id="logMeta"></div>
-                <div class="log-view" id="logContent" aria-live="polite" role="region">Select a log file.</div>
-            </div>
+{{define "title"}}Manager Logs{{end}}
+
+{{define "content"}}
+<div class="glass-card">
+    <h3>Manager Logs</h3>
+    <div class="logs-shell" id="logsShell">
+        <div class="log-tabs" id="logTabs" role="tablist" aria-label="Log files">
+            <div class="empty-state" id="log-tabs-empty">Loading logs...</div>
         </div>
-    </main>
-    <script>
-    (function(){
-        const shell = document.getElementById('logsShell');
-        if(!shell) return;
-        let files=[];
-        try { files = JSON.parse(shell.getAttribute('data-files')||'[]'); } catch(_) {}
-        const tabs = document.getElementById('logTabs');
-        const content = document.getElementById('logContent');
-        const meta = document.getElementById('logMeta');
-        const refreshBtn = document.getElementById('refreshBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        let active = null;
-        function renderTabs(){
-            tabs.innerHTML='';
-            files.forEach(f=>{
-                const btn=document.createElement('button');
-                btn.type='button'; btn.className='tab-btn'+(f.name===active?' active':'');
-                btn.textContent=f.name; btn.addEventListener('click',()=>selectFile(f.name));
-                tabs.appendChild(btn);
-            });
-        }
-        function selectFile(name){ active=name; renderTabs(); loadFile(name); }
-        function loadFile(name){
-            if(!name){ content.textContent='Select a log file.'; return; }
-            content.textContent='Loading '+name+'...'; meta.textContent='';
-            fetch('/logs/view/'+encodeURIComponent(name),{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error(); return r.text(); })
-              .then(txt=>{ content.textContent=txt||'(empty)'; meta.textContent=name+' ('+txt.length+' bytes)'; })
-              .catch(()=>{ content.textContent='Unable to load '+name; });
-        }
-        refreshBtn.addEventListener('click',()=>{ if(active) loadFile(active); });
-        downloadBtn.addEventListener('click',()=>{ if(active) window.location='/logs/download/'+encodeURIComponent(active); });
-        renderTabs();
-        if(files.length) selectFile(files[0].name);
-    })();
-    </script>
-</body>
-</html>
+        <div class="actions mt-3">
+            <button id="refreshBtn" class="btn btn-info" title="Reload current log">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                    <path d="M21 3v5h-5"></path>
+                </svg>
+                <span class="ml-6">Refresh</span>
+            </button>
+            <button id="downloadBtn" class="btn btn-info" title="Download current log">
+                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span class="ml-6">Download</span>
+            </button>
+            <button id="clearBtn" class="btn btn-danger" title="Clear current log">
+                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
+                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
+                </svg>
+                <span class="ml-6">Clear</span>
+            </button>
+        </div>
+        <div class="log-meta mt-3" id="logMeta"></div>
+        <div class="log-view mt-3" id="logContent" aria-live="polite" role="region">Select a log file.</div>
+    </div>
+</div>
+{{end}}

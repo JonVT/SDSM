@@ -1,231 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Profile - Stationeers Server Manager</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/ui-theme.css">
-  <link rel="icon" href="/sdsm.png" type="image/png">
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  
-</head>
-<body class="page-shell">
-  <div class="container">
-    <header class="hero-card">
-      <div class="hero-main">
-        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-        <div class="hero-heading">
-          <h1 class="hero-title">Your Profile</h1>
-          <p class="hero-subtitle">Manage your account and password.</p>
-        </div>
-      </div>
-      <div class="hero-meta">
-        <div class="hero-meta-title">Signed in</div>
-        <p class="hero-meta-text">
-          <strong>{{ .username }}</strong> • <span class="pill">{{ if .role }}{{ .role }}{{ else }}user{{ end }}</span>
-        </p>
-      </div>
-      <div class="hero-actions flex-col items-end">
-        <div class="row">
-          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-            <span id="theme-icon">🌙</span>
-          </button>
-          <a href="/dashboard" class="btn btn-primary" title="Go to Dashboard">
-            {{ template "icon_dashboard" . }}
-            Dashboard
-          </a>
-          <a href="/manager" class="btn btn-primary" title="Go to Manager">
-            {{ template "icon_manager" . }}
-            Manager
-          </a>
-          {{ template "user_menu" . }}
-        </div>
-        <span class="build-meta">{{buildTime}}</span>
-      </div>
-    </header>
-  </div>
+{{define "title"}}Profile{{end}}
 
-  <main class="container">
-    <div class="glass-card profile-form">
-      <h3>Change Password</h3>
-      <div id="profile-flags" data-success="{{ if .success }}{{ .success }}{{ end }}" data-error="{{ if .error }}{{ .error }}{{ end }}" hidden></div>
-      {{ if .error }}
-        <div class="alert alert-error mb-3" role="alert">
-          <div class="alert-content">
+{{define "content"}}
+<div class="glass-card profile-form">
+    <h3>Change Password</h3>
+    <div id="profile-flags" data-success="{{ if .success }}{{ .success }}{{ end }}" data-error="{{ if .error }}{{ .error }}{{ end }}" hidden></div>
+    {{ if .error }}
+    <div class="alert alert-error mb-3" role="alert">
+        <div class="alert-content">
             <div class="alert-title">Update Failed</div>
             <div class="alert-message">{{ .error }}</div>
-          </div>
         </div>
-      {{ end }}
-      {{ if .success }}
-        <div class="alert alert-success mb-3" role="status">
-          <div class="alert-content">
+    </div>
+    {{ end }}
+    {{ if .success }}
+    <div class="alert alert-success mb-3" role="status">
+        <div class="alert-content">
             <div class="alert-title">Success</div>
             <div class="alert-message">{{ .success }}</div>
-          </div>
         </div>
-      {{ end }}
-      <form id="profile-form" action="javascript:void(0)" method="dialog">
+    </div>
+    {{ end }}
+    <form id="profile-form" action="javascript:void(0)" method="dialog">
         <div class="form-row form-row-160">
-          <label>Username</label>
-          <input type="text" value="{{ .username }}" disabled>
-        </div>
-        <div class="form-row form-row-160">
-          <label>Role</label>
-          <input type="text" value="{{ if .role }}{{ .role }}{{ else }}user{{ end }}" disabled>
+            <label>Username</label>
+            <input type="text" value="{{ .username }}" disabled>
         </div>
         <div class="form-row form-row-160">
-          <label for="current_password">Current Password</label>
-          <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
+            <label>Role</label>
+            <input type="text" value="{{ if .role }}{{ .role }}{{ else }}user{{ end }}" disabled>
         </div>
         <div class="form-row form-row-160">
-          <label for="new_password">New Password</label>
-          <input id="new_password" name="new_password" type="password" minlength="8" required autocomplete="new-password">
+            <label for="current_password">Current Password</label>
+            <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
         </div>
         <div class="form-row form-row-160">
-          <label for="confirm_password">Confirm Password</label>
-          <input id="confirm_password" name="confirm_password" type="password" minlength="8" required autocomplete="new-password">
+            <label for="new_password">New Password</label>
+            <input id="new_password" name="new_password" type="password" minlength="8" required autocomplete="new-password">
         </div>
         <div class="form-row form-row-160">
-          <label></label>
-          <div id="password-hint" class="hint" aria-live="polite"></div>
+            <label for="confirm_password">Confirm Password</label>
+            <input id="confirm_password" name="confirm_password" type="password" minlength="8" required autocomplete="new-password">
+        </div>
+        <div class="form-row form-row-160">
+            <label></label>
+            <div id="password-hint" class="hint" aria-live="polite"></div>
         </div>
         <div class="form-row form-row-one">
-          <button id="btn-update-password" type="button" class="btn btn-primary">Update Password</button>
+            <button id="btn-update-password" type="button" class="btn btn-primary">Update Password</button>
         </div>
-      </form>
-    </div>
-  </main>
-
-  <script>
-    function getStoredTheme() { return localStorage.getItem('theme') || 'dark'; }
-    function setTheme(theme) {
-      const html = document.documentElement; html.setAttribute('data-theme', theme); localStorage.setItem('theme', theme);
-      const icon = document.getElementById('theme-icon'); if (icon) { icon.textContent = theme === 'dark' ? '☀️' : '🌙'; }
-    }
-    function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); const next = current === 'dark' ? 'light' : 'dark'; setTheme(next); }
-    setTheme(getStoredTheme());
-
-    // Password match hint + success toast (modal if available)
-    document.addEventListener('DOMContentLoaded', function(){
-      const np = document.getElementById('new_password');
-      const cp = document.getElementById('confirm_password');
-      const hint = document.getElementById('password-hint');
-      const flags = document.getElementById('profile-flags');
-      const form = document.getElementById('profile-form');
-      const btn = document.getElementById('btn-update-password');
-
-      function updateHint(){
-        if (!np || !cp || !hint) return;
-        const a = np.value || '';
-        const b = cp.value || '';
-        hint.classList.remove('ok','bad');
-        if (!a && !b) { hint.textContent = ''; return; }
-        if (b.length === 0) { hint.textContent = ''; return; }
-        if (a === b) { hint.textContent = 'Passwords match'; hint.classList.add('ok'); }
-        else { hint.textContent = 'Passwords do not match'; hint.classList.add('bad'); }
-      }
-      if (np) np.addEventListener('input', updateHint);
-      if (cp) cp.addEventListener('input', updateHint);
-      updateHint();
-
-      // Modalize inline error/success banners (still keep them for accessibility)
-      try {
-        const errBanner = document.querySelector('.alert.alert-error[role="alert"] .alert-message');
-        if (errBanner) {
-          const emsg = (errBanner.textContent||'').trim();
-          if (emsg) {
-            if (window.askInfo) window.askInfo({ title:'Update Failed', message: emsg, confirmText:'Close' });
-            else if (window.openInfo) window.openInfo({ title:'Update Failed', message: emsg, confirmText:'Close' });
-          }
-        }
-        const okBanner = document.querySelector('.alert.alert-success[role="status"] .alert-message');
-        if (okBanner) {
-          const smsg = (okBanner.textContent||'').trim();
-          if (smsg) {
-            if (window.askInfo) window.askInfo({ title:'Profile Updated', message: smsg, confirmText:'OK' });
-            else if (window.openInfo) window.openInfo({ title:'Profile Updated', message: smsg, confirmText:'OK' });
-          }
-        }
-      } catch(_) {}
-
-      // Success info after POST (flags from redirect)
-      try {
-        const success = flags && flags.dataset ? (flags.dataset.success || '').trim() : '';
-        if (success) {
-          if (window.openInfo) {
-            window.openInfo({ title: 'Profile Updated', message: success, confirmText: 'OK' });
-          } else if (window.showToast) {
-            window.showToast({ type: 'success', title: 'Profile Updated', message: success });
-          }
-        }
-      } catch(_) {}
-
-      // Intercept submit and call JSON API instead of HTML POST
-      function submitPasswordChange(ev){
-        if (ev) ev.preventDefault();
-        const current = (document.getElementById('current_password') || {}).value || '';
-        const n1 = (np || {}).value || '';
-        const n2 = (cp || {}).value || '';
-        // Basic client-side validation
-        if (!current || !n1 || !n2) {
-          if (window.showToast) window.showToast({ type:'error', title:'Missing fields', message:'Please fill in all fields.' });
-          return;
-        }
-        if (n1.length < 8) {
-          if (window.showToast) window.showToast({ type:'error', title:'Weak password', message:'New password must be at least 8 characters.' });
-          return;
-        }
-        if (n1 !== n2) {
-          if (window.showToast) window.showToast({ type:'error', title:'Mismatch', message:'Passwords do not match.' });
-          return;
-        }
-        // Disable button while submitting
-        if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); }
-        fetch('/api/profile/password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({ current_password: current, new_password: n1, confirm_password: n2 })
-        }).then(async (res) => {
-          // Surface toast headers if provided
-          try {
-            if (typeof window.showToast === 'function') {
-              const type = res.headers.get('X-Toast-Type');
-              const title = res.headers.get('X-Toast-Title');
-              const message = res.headers.get('X-Toast-Message');
-              if (message) window.showToast({ type: type || (res.ok ? 'success' : 'error'), title: title || (res.ok ? 'Profile Updated' : 'Update Failed'), message });
-            }
-          } catch(_) {}
-          if (res.ok) {
-            // Clear fields on success
-            try { (document.getElementById('current_password')||{}).value = ''; } catch(_) {}
-            if (np) np.value = '';
-            if (cp) cp.value = '';
-            updateHint();
-          } else {
-            // Optionally read error to show inline alert fallback
-            try {
-              const data = await res.json();
-              if (data && data.error && !window.showToast) alert('Update failed: ' + data.error);
-            } catch(_) {}
-          }
-        }).catch(() => {
-          if (window.showToast) window.showToast({ type:'error', title:'Network Error', message:'Failed to contact server.' });
-        }).finally(() => {
-          if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); }
-        });
-      }
-      if (form) form.addEventListener('submit', submitPasswordChange);
-      if (btn) btn.addEventListener('click', submitPasswordChange);
-    });
-  </script>
-
-  {{ template "modal_templates" . }}
-  {{ template "modal_scripts" . }}
-  {{ template "toast.html" . }}
-</body>
-</html>
+    </form>
+</div>
+{{end}}

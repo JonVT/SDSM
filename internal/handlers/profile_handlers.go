@@ -24,10 +24,19 @@ func NewProfileHandlers(store *manager.UserStore, auth *middleware.AuthService) 
 func (h *ProfileHandlers) ProfileGET(c *gin.Context) {
 	username := c.GetString("username")
 	role := c.GetString("role")
-	c.HTML(http.StatusOK, "profile.html", gin.H{
+
+	data := gin.H{
 		"username": username,
 		"role":     role,
-	})
+		"title":    "Profile",
+		"page":     "profile",
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "profile.html", data)
+	} else {
+		c.HTML(http.StatusOK, "frame.html", data)
+	}
 }
 
 // ProfilePOST handles updating the current user's password

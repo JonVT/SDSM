@@ -44,7 +44,38 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		language := middleware.SanitizeString(c.PostForm("language"))
 		// Discord webhooks
 		dcDefault := strings.TrimSpace(c.PostForm("discord_default_webhook"))
-		dcBug := strings.TrimSpace(c.PostForm("discord_bug_report_webhook"))
+		// Notification prefs (booleans)
+		notifyEnableDeploy := c.PostForm("notify_enable_deploy") == "on"
+		notifyEnableServer := c.PostForm("notify_enable_server") == "on"
+		notifyOnStart := c.PostForm("notify_on_start") == "on"
+		notifyOnStopping := c.PostForm("notify_on_stopping") == "on"
+		notifyOnStopped := c.PostForm("notify_on_stopped") == "on"
+		notifyOnRestart := c.PostForm("notify_on_restart") == "on"
+		notifyOnUpdateStarted := c.PostForm("notify_on_update_started") == "on"
+		notifyOnUpdateCompleted := c.PostForm("notify_on_update_completed") == "on"
+		notifyOnUpdateFailed := c.PostForm("notify_on_update_failed") == "on"
+		// Message templates & colors (accept raw; validated minimally at load/use)
+		notifyMsgStart := strings.TrimSpace(c.PostForm("notify_msg_start"))
+		notifyMsgStopping := strings.TrimSpace(c.PostForm("notify_msg_stopping"))
+		notifyMsgStopped := strings.TrimSpace(c.PostForm("notify_msg_stopped"))
+		notifyMsgRestart := strings.TrimSpace(c.PostForm("notify_msg_restart"))
+		notifyMsgUpdateStarted := strings.TrimSpace(c.PostForm("notify_msg_update_started"))
+		notifyMsgUpdateCompleted := strings.TrimSpace(c.PostForm("notify_msg_update_completed"))
+		notifyMsgUpdateFailed := strings.TrimSpace(c.PostForm("notify_msg_update_failed"))
+		notifyColorStart := strings.TrimSpace(c.PostForm("notify_color_start"))
+		notifyColorStopping := strings.TrimSpace(c.PostForm("notify_color_stopping"))
+		notifyColorStopped := strings.TrimSpace(c.PostForm("notify_color_stopped"))
+		notifyColorRestart := strings.TrimSpace(c.PostForm("notify_color_restart"))
+		notifyColorUpdateStarted := strings.TrimSpace(c.PostForm("notify_color_update_started"))
+		notifyColorUpdateCompleted := strings.TrimSpace(c.PostForm("notify_color_update_completed"))
+		notifyColorUpdateFailed := strings.TrimSpace(c.PostForm("notify_color_update_failed"))
+		// Deploy templates/colors
+		notifyMsgDeployStarted := strings.TrimSpace(c.PostForm("notify_msg_deploy_started"))
+		notifyMsgDeployCompleted := strings.TrimSpace(c.PostForm("notify_msg_deploy_completed"))
+		notifyMsgDeployCompletedError := strings.TrimSpace(c.PostForm("notify_msg_deploy_completed_error"))
+		notifyColorDeployStarted := strings.TrimSpace(c.PostForm("notify_color_deploy_started"))
+		notifyColorDeployCompleted := strings.TrimSpace(c.PostForm("notify_color_deploy_completed"))
+		notifyColorDeployCompletedError := strings.TrimSpace(c.PostForm("notify_color_deploy_completed_error"))
 		detachedServers := c.PostForm("detached_servers") == "on"
 		trayEnabled := c.PostForm("tray_enabled") == "on"
 		tlsEnabled := c.PostForm("tls_enabled") == "on"
@@ -160,16 +191,46 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			}
 		}
 		h.manager.Save()
-		// Update Discord webhooks after base config save (same transaction)
-		if dcDefault != "" || dcBug != "" {
-			if dcDefault != "" {
-				h.manager.DiscordDefaultWebhook = dcDefault
-			}
-			if dcBug != "" {
-				h.manager.DiscordBugReportWebhook = dcBug
-			}
+		// Update Discord default webhook (bug report webhook is immutable)
+		if dcDefault != "" {
+			h.manager.DiscordDefaultWebhook = dcDefault
 			h.manager.Save()
 		}
+		// Apply notification preferences
+		h.manager.NotifyEnableDeploy = notifyEnableDeploy
+		h.manager.NotifyEnableServer = notifyEnableServer
+		h.manager.NotifyOnStart = notifyOnStart
+		h.manager.NotifyOnStopping = notifyOnStopping
+		h.manager.NotifyOnStopped = notifyOnStopped
+		h.manager.NotifyOnRestart = notifyOnRestart
+		h.manager.NotifyOnUpdateStarted = notifyOnUpdateStarted
+		h.manager.NotifyOnUpdateCompleted = notifyOnUpdateCompleted
+		h.manager.NotifyOnUpdateFailed = notifyOnUpdateFailed
+		// Templates (empty preserves prior value)
+		if notifyMsgStart != "" { h.manager.NotifyMsgStart = notifyMsgStart }
+		if notifyMsgStopping != "" { h.manager.NotifyMsgStopping = notifyMsgStopping }
+		if notifyMsgStopped != "" { h.manager.NotifyMsgStopped = notifyMsgStopped }
+		if notifyMsgRestart != "" { h.manager.NotifyMsgRestart = notifyMsgRestart }
+		if notifyMsgUpdateStarted != "" { h.manager.NotifyMsgUpdateStarted = notifyMsgUpdateStarted }
+		if notifyMsgUpdateCompleted != "" { h.manager.NotifyMsgUpdateCompleted = notifyMsgUpdateCompleted }
+		if notifyMsgUpdateFailed != "" { h.manager.NotifyMsgUpdateFailed = notifyMsgUpdateFailed }
+		// Colors (#RRGGBB)
+		validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
+		if validColor(notifyColorStart) { h.manager.NotifyColorStart = notifyColorStart }
+		if validColor(notifyColorStopping) { h.manager.NotifyColorStopping = notifyColorStopping }
+		if validColor(notifyColorStopped) { h.manager.NotifyColorStopped = notifyColorStopped }
+		if validColor(notifyColorRestart) { h.manager.NotifyColorRestart = notifyColorRestart }
+		if validColor(notifyColorUpdateStarted) { h.manager.NotifyColorUpdateStarted = notifyColorUpdateStarted }
+		if validColor(notifyColorUpdateCompleted) { h.manager.NotifyColorUpdateCompleted = notifyColorUpdateCompleted }
+		if validColor(notifyColorUpdateFailed) { h.manager.NotifyColorUpdateFailed = notifyColorUpdateFailed }
+		// Deploy templates/colors
+		if notifyMsgDeployStarted != "" { h.manager.NotifyMsgDeployStarted = notifyMsgDeployStarted }
+		if notifyMsgDeployCompleted != "" { h.manager.NotifyMsgDeployCompleted = notifyMsgDeployCompleted }
+		if notifyMsgDeployCompletedError != "" { h.manager.NotifyMsgDeployCompletedError = notifyMsgDeployCompletedError }
+		if validColor(notifyColorDeployStarted) { h.manager.NotifyColorDeployStarted = notifyColorDeployStarted }
+		if validColor(notifyColorDeployCompleted) { h.manager.NotifyColorDeployCompleted = notifyColorDeployCompleted }
+		if validColor(notifyColorDeployCompletedError) { h.manager.NotifyColorDeployCompletedError = notifyColorDeployCompletedError }
+		h.manager.Save()
 		// Apply manager port forwarding changes without requiring restart
 		if !prevPF && h.manager.AutoPortForwardManager {
 			go h.manager.StartManagerPortForwarding()
@@ -387,34 +448,6 @@ func (h *ManagerHandlers) UpdateStream(c *gin.Context) {
 	}
 }
 
-func (h *ManagerHandlers) UpdateLogGET(c *gin.Context) {
-	logPath := h.manager.Paths.UpdateLogFile()
-	if logPath == "" {
-		c.String(http.StatusNotFound, "Update log is not available.")
-		return
-	}
-
-	file, err := os.Open(logPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			c.String(http.StatusOK, "Update log is empty.")
-			return
-		}
-		c.String(http.StatusInternalServerError, "Unable to open update log.")
-		return
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Unable to read update log.")
-		return
-	}
-
-	c.Header("Content-Type", "text/plain; charset=utf-8")
-	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
-}
-
 // --- TLS PEM validation helpers (UI-side double check) ---
 func validatePEMCertificate(path string) error {
 	data, err := os.ReadFile(path)
@@ -438,6 +471,7 @@ func validatePEMCertificate(path string) error {
 	}
 	return nil
 }
+
 
 func validatePEMKey(path string) (any, error) {
 	data, err := os.ReadFile(path)
@@ -500,32 +534,4 @@ func keysMatch(certPath string, priv any) bool {
 		return true
 	}
 	return false
-}
-
-func (h *ManagerHandlers) ManagerLogGET(c *gin.Context) {
-	logPath := h.manager.Paths.LogFile()
-	if logPath == "" {
-		c.String(http.StatusNotFound, "Application log is not available.")
-		return
-	}
-
-	file, err := os.Open(logPath)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			c.String(http.StatusOK, "Application log is empty.")
-			return
-		}
-		c.String(http.StatusInternalServerError, "Unable to open application log.")
-		return
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Unable to read application log.")
-		return
-	}
-
-	c.Header("Content-Type", "text/plain; charset=utf-8")
-	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
 }

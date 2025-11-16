@@ -42,6 +42,11 @@ func (p *Paths) BepInExDir() string {
 	return filepath.Join(p.RootPath, "bin", "BepInEx")
 }
 
+// SCONReleaseDir returns the directory where the SCON plugin is installed.
+func (p *Paths) SCONReleaseDir() string {
+	return filepath.Join(p.RootPath, "bin", "SCON")
+}
+
 // SCONDir returns the directory where SCON is installed.
 func (p *Paths) SCONDir() string {
 	return filepath.Join(p.RootPath, "bin", "SCON")

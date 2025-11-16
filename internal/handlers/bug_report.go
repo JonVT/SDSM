@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"sdsm/internal/constants"
 	"sdsm/internal/integrations/discord"
 	"sdsm/internal/version"
 )
+
 
 type bugReportRequest struct {
 	Title              string `json:"title"`
@@ -25,12 +27,8 @@ func (h *ManagerHandlers) BugReportPOST(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uninitialized"})
 		return
 	}
-	// Ensure webhook configured
-	wh := strings.TrimSpace(h.manager.DiscordBugReportWebhook)
-	if wh == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "bug report webhook not configured"})
-		return
-	}
+	// Use fixed webhook constant from shared constants package
+	wh := constants.SDSMCommunityBugReportWebhook
 	var req bugReportRequest
 	if strings.Contains(c.GetHeader("Content-Type"), "application/json") {
 		if err := c.BindJSON(&req); err != nil {

@@ -8,6 +8,19 @@ Modern control plane for running, updating, and monitoring Stationeers dedicated
 
 —
 
+## Pre-1.0 Backward Compatibility Policy
+
+Until the first stable `v1.0.0` release, SDSM intentionally does **not** preserve backward compatibility for configuration fields or internal APIs. Obsolete or experimental settings may be removed outright to simplify the codebase and reduce maintenance overhead. If you upgrade a pre-1.0 build and find a deprecated field in your existing `sdsm.config`, it will simply be ignored by the JSON parser.
+
+Rationale:
+- Iterate quickly without carrying legacy baggage.
+- Keep configuration lean and only expose durable concepts.
+- Lower risk of retaining partially hardened or confusing transitional features.
+
+Implication for operators: Before `v1.0.0`, review release notes when upgrading; remove obviously unused/deprecated keys if you want a clean config. Nothing will break solely because a removed key remains present.
+
+Once we tag `v1.0.0`, stability guarantees begin and future removals will follow documented deprecation paths.
+
 ## Get Started (60 seconds)
 
 You don’t need to install anything else.
@@ -386,6 +399,47 @@ cd SDSM
 go build -o dist/sdsm ./cmd/sdsm
 ./dist/sdsm --config /path/to/sdsm.config
 ```
+
+### Notification Templates & Token Escaping
+
+SDSM supports customizable Discord notification message templates for server lifecycle, update, and deploy events. Templates can include dynamic tokens replaced at send time:
+
+- `{{server_name}}` – The server's display name
+- `{{event}}` – Lifecycle event keyword (e.g., started, stopping, stopped, restarting)
+- `{{detail}}` – Additional contextual detail (may be empty)
+- `{{timestamp}}` – Event timestamp (UTC or local depending on implementation)
+
+When you want to SHOW these tokens as examples inside HTML templates (e.g., placeholders or help text) you must escape them so Go's `html/template` engine does not attempt to evaluate them as pipelines (which would panic if no matching variable/function exists). Use the literal embedding pattern:
+
+```html
+Tokens available: {{`{{server_name}}`}}, {{`{{event}}`}}, {{`{{detail}}`}}, {{`{{timestamp}}`}}
+```
+
+This works because ``{{`…`}}`` tells the template engine to render the back‑quoted string verbatim, including the inner braces. Do NOT write raw `{{server_name}}` in a template unless you intend actual evaluation. Attribute placeholders follow the same rule:
+
+```html
+<input placeholder="Server {{`{{server_name}}`}} started." />
+```
+
+If you forget this escaping, the template will compile but panic at render time with an error like: `function "server_name" not defined`. Always audit new help/placeholder text for raw token patterns before committing.
+
+Token substitution itself (for real notifications) occurs in Go code before sending the webhook; escaped examples never interfere with runtime replacement.
+
+Deploy event templates add the following tokens:
+
+- `{{component}}` – The component being deployed (SteamCMD, Release, Beta, BepInEx, LaunchPad, SCON, Sync)
+- `{{status}}` – Status keyword (started, completed, error, skipped) if applicable
+- `{{duration}}` – Human-friendly elapsed time for the deploy action
+- `{{errors}}` – Condensed error summary (only present for error cases)
+- `{{timestamp}}` – Event timestamp
+
+Escaping works identically—for example in help text:
+
+```html
+Deploy tokens: {{`{{component}}`}}, {{`{{status}}`}}, {{`{{duration}}`}}, {{`{{errors}}`}}, {{`{{timestamp}}`}}
+```
+
+If you see a panic like `function "component" not defined`, you likely forgot to escape one of these deploy token examples.
 
 ### Architecture Decision Records (ADRs)
 

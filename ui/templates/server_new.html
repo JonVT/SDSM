@@ -1,963 +1,334 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Create New Server - SDSM">
-    <title>Create New Server - SDSM</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css">
-    <link rel="icon" href="/sdsm.png" type="image/png">
-</head>
+{{define "title"}}Create New Server{{end}}
 
-<body class="page-shell">
-    {{ $form := .form }}
-    <div class="container">
-        
-        <header class="hero-card">
-            <div class="hero-main">
-                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-                <div class="hero-heading">
-                    <h1 class="hero-title">Create New Server</h1>
-                    <p class="hero-subtitle">Configure and deploy a new Stationeers server.</p>
+{{define "content"}}
+<div class="main-grid">
+    <div class="card">
+        {{ if .error }}
+        <div class="alert alert-error" role="alert">{{ .error }}</div>
+        {{ end }}
+        <!-- API-only: neutralize legacy action; JS submit handler calls /api endpoints -->
+        <form method="POST" action="#" id="serverForm" enctype="multipart/form-data" data-api-only="true">
+            <div class="form-section">
+                <h3 class="section-title">Create From Save (optional)</h3>
+                <div id="saveDropzone" class="dropzone border border-dashed rounded-md p-4 bg-surface-secondary flex items-center gap-3">
+                    <div class="flex-1">
+                        <div class="fw-600 mb-1">Drop a Stationeers .save file here</div>
+                        <div class="text-secondary text-0_9">We'll read the save to set name and world, and import it.</div>
+                        <div id="saveFileName" class="mt-2 text-0_9 text-primary"></div>
+                    </div>
+                    <div>
+                        <label for="save_file" class="btn btn-neutral">Choose File</label>
+                        <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
+                    </div>
                 </div>
-            </div>
-            <div class="hero-meta">
-                <div class="hero-meta-title">Setup Wizard</div>
-                <p class="hero-meta-text">Fill in the basic, network, and advanced settings below.</p>
-                <span class="pill">Step 1</span>
-            </div>
-            <div class="hero-actions flex-col items-end">
-                <div class="row">
-                    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-icon">🌙</span></button>
-                    <a href="/dashboard" class="btn btn-ghost">
-                        {{ template "icon_dashboard" . }}
-                        Dashboard
-                    </a>
-                    {{ template "user_menu" . }}
+                <div id="saveAnalysis" class="hidden mt-3 p-3 rounded-md bg-surface-tertiary">
+                    <div class="fw-600 mb-2">Detected From Save</div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label">World</label>
+                            <div id="detectedWorld" class="p-3 border rounded-md bg-surface-subtle"></div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">World File Name (Server Name)</label>
+                            <div id="detectedName" class="p-3 border rounded-md bg-surface-subtle"></div>
+                        </div>
+                    </div>
+                    <!-- Hidden fields to carry through to server in case needed -->
+                    <input type="hidden" id="name" name="name" value="{{ index .form "name" }}">
+                    <input type="hidden" id="world" name="world" value="{{ index .form "world" }}">
                 </div>
-                <span class="build-meta">{{buildTime}}</span>
+                
             </div>
-        </header>
-
-        
-        <div class="main-grid">
             
-            <div class="card">
-                {{ if .error }}
-                <div class="alert alert-error" role="alert">{{ .error }}</div>
-                {{ end }}
-                <!-- API-only: neutralize legacy action; JS submit handler calls /api endpoints -->
-                <form method="POST" action="#" id="serverForm" enctype="multipart/form-data" data-api-only="true">
-                    <div class="form-section">
-                        <h3 class="section-title">Create From Save (optional)</h3>
-                        <div id="saveDropzone" class="dropzone border border-dashed rounded-md p-4 bg-surface-secondary flex items-center gap-3">
-                            <div class="flex-1">
-                                <div class="fw-600 mb-1">Drop a Stationeers .save file here</div>
-                                <div class="text-secondary text-0_9">We'll read the save to set name and world, and import it.</div>
-                                <div id="saveFileName" class="mt-2 text-0_9 text-primary"></div>
-                            </div>
-                            <div>
-                                <label for="save_file" class="btn btn-neutral">Choose File</label>
-                                <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
-                            </div>
-                        </div>
-                        <div id="saveAnalysis" class="hidden mt-3 p-3 rounded-md bg-surface-tertiary">
-                            <div class="fw-600 mb-2">Detected From Save</div>
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label class="form-label">World</label>
-                                    <div id="detectedWorld" class="p-3 border rounded-md bg-surface-subtle"></div>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">World File Name (Server Name)</label>
-                                    <div id="detectedName" class="p-3 border rounded-md bg-surface-subtle"></div>
-                                </div>
-                            </div>
-                            <!-- Hidden fields to carry through to server in case needed -->
-                            <input type="hidden" id="name" name="name" value="{{ index $form "name" }}">
-                            <input type="hidden" id="world" name="world" value="{{ index $form "world" }}">
-                        </div>
-                        
-                    </div>
+            <div class="form-section">
+                <h3 class="section-title">Basic Settings</h3>
+                <div class="form-grid">
                     
-                    <div class="form-section">
-                        <h3 class="section-title">Basic Settings</h3>
-                        <div class="form-grid">
-                            
-                            <!-- Name and World inputs are moved to detected section when save is selected -->
-                            <div class="form-group form-grid-full" id="basicNameGroup">
-                                <label class="form-label" for="name_text">Server Name *</label>
-                                    <input type="text" id="name_text" name="name" class="form-control" required
-                                       value="{{ index $form "name" }}"
-                                       placeholder="Enter server name">
-                                <p class="help-text">The name that will appear in the server list</p>
-                                <div class="row items-center gap-2 mt-2">
-                                    <label class="checkbox-label mb-0">
-                                        <input type="checkbox" id="server_visible" name="server_visible" {{ if index $form "server_visible" }}checked{{ end }}>
-                                        <span>Server Visible</span>
-                                    </label>
-                                    <p class="help-text mb-0">Visible in public server browser</p>
-                                </div>
-                            </div>
-
-                            <div class="form-group" id="basicWorldGroup">
-                                <label class="form-label" for="world_select">World *</label>
-                                <select id="world_select" name="world" class="form-control" required>
-                                    <option value="">Loading...</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" for="start_location">Start Location *</label>
-                                <select name="start_location" id="start_location" class="form-control" required>
-                                    <option value="">Loading...</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" for="start_condition">Start Condition *</label>
-                                <select name="start_condition" id="start_condition" class="form-control" required>
-                                    <option value="">Loading...</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label" for="beta">Game Version *</label>
-                                <select id="beta" name="beta" class="form-control" required>
-                                    <option value="false" {{ if ne (index $form "beta") "true" }}selected{{ end }}>Release</option>
-                                    <option value="true" {{ if eq (index $form "beta") "true" }}selected{{ end }}>Beta</option>
-                                </select>
-                                <p class="help-text">Choose Release (stable) or Beta (experimental)</p>
-                            </div>
-                            {{ $selectedDifficulty := index $form "difficulty" }}
-                            <div class="form-group">
-                                <label class="form-label" for="difficulty">Difficulty *</label>
-                                <select id="difficulty" name="difficulty" class="form-control" required>
-                                    {{ range .difficulties }}
-                                    <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
-                                    {{ end }}
-                                </select>
-                                <p class="help-text">Game difficulty level</p>
-                            </div>
+                    <!-- Name and World inputs are moved to detected section when save is selected -->
+                    <div class="form-group form-grid-full" id="basicNameGroup">
+                        <label class="form-label" for="name_text">Server Name *</label>
+                            <input type="text" id="name_text" name="name" class="form-control" required
+                               value="{{ index .form "name" }}"
+                               placeholder="Enter server name">
+                        <p class="help-text">The name that will appear in the server list</p>
+                        <div class="row items-center gap-2 mt-2">
+                            <label class="checkbox-label mb-0">
+                                <input type="checkbox" id="server_visible" name="server_visible" {{ if index .form "server_visible" }}checked{{ end }}>
+                                <span>Server Visible</span>
+                            </label>
+                            <p class="help-text mb-0">Visible in public server browser</p>
                         </div>
                     </div>
-                    
-                    
-                    <div class="form-section">
-                        <h3 class="section-title">Network Settings</h3>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label class="form-label" for="port">Port *</label>
-                                <input type="number" id="port" name="port" class="form-control" required 
-                                       value="{{ index $form "port" }}" min="1024" max="65535"
-                                       placeholder="27016">
-                                <p class="help-text">Server port (1024-65535)</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label" for="max_clients">Max Players *</label>
-                                <input type="number" id="max_clients" name="max_clients" class="form-control" required 
-                                       value="{{ index $form "max_clients" }}" min="1" max="100"
-                                       placeholder="10">
-                                <p class="help-text">Maximum number of players</p>
-                            </div>
-                            
-                            <div class="form-group form-grid-full">
-                                <label class="form-label" for="password">Server Password</label>
-                                <input type="text" id="password" name="password" class="form-control"
-                                    value="{{ index $form "password" }}"
-                                    placeholder="Leave empty for no password">
-                                <p class="help-text">Optional password to join the server</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    
-                    <div class="form-section">
-                        <h3 class="section-title row">
-                            Advanced Settings
-                            <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                            </button>
-                        </h3>
-                        <div class="help-box hidden" id="advanced-help">
-                            <div class="help-content">
-                                <h4>Advanced Settings Guide</h4>
-                                <ul>
-                                    <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
-                                    <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
-                                    <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
-                                    <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label class="form-label" for="save_interval">Save Interval (seconds) *</label>
-                                <input type="number" id="save_interval" name="save_interval" class="form-control" required 
-                                       value="{{ index $form "save_interval" }}" min="60" max="3600"
-                                       placeholder="300">
-                                <p class="help-text">How often to save the world (60-3600)</p>
-                            </div>
 
-                            <div class="form-group">
-                                <label class="form-label" for="restart_delay_seconds">Restart Delay (seconds)</label>
-                                <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" min="0" max="3600"
-                                       value="{{ index $form "restart_delay_seconds" }}" placeholder="10">
-                                <p class="help-text">Wait time between stop and restart (0-3600)</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (seconds)</label>
-                                <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" min="0" max="3600"
-                                       value="{{ or (index $form "shutdown_delay_seconds") 2 }}" placeholder="2">
-                                <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
-                                <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
-                                       value="{{ or (index $form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
-                                <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
-                                <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120"
-                                       value="{{ or (index $form "bepinex_init_timeout_seconds") 10 }}" placeholder="10">
-                                <p class="help-text">Max wait for initial BepInEx bootstrap (Windows). Default 10.</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="form-label" for="auth_secret">Auth Secret</label>
-                                <input type="text" id="auth_secret" name="auth_secret" class="form-control"
-                                       value="{{ index $form "auth_secret" }}"
-                                       placeholder="Optional authentication secret">
-                                <p class="help-text">Steam authentication secret (optional)</p>
-                            </div>
-                        </div>
+                    <div class="form-group" id="basicWorldGroup">
+                        <label class="form-label" for="world_select">World *</label>
+                        <select id="world_select" name="world" class="form-control" required>
+                            <option value="">Loading...</option>
+                        </select>
                     </div>
-                    
-                    
-                    <div class="form-section">
-                        <h3 class="section-title">Startup Options</h3>
-                        <div class="form-grid">
-                            <div class="form-group form-grid-full">
-                                <label class="form-label" for="welcome_message">Welcome Message</label>
-                                <input type="text" id="welcome_message" name="welcome_message" class="form-control"
-                                       value="{{ index $form "welcome_message" }}"
-                                       placeholder="Optional message sent to chat when a player connects">
-                                <p class="help-text">If set, this message will be broadcast to chat on player connect.</p>
-                            </div>
-                            <div class="form-group form-grid-full">
-                                <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
-                                <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control"
-                                       value="{{ index $form "welcome_back_message" }}"
-                                       placeholder="Optional message sent to chat when a returning player connects">
-                                <p class="help-text">If set, this message will be sent instead for players that have connected before.</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
-                                <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index $form "welcome_delay_seconds") 1 }}" placeholder="1">
-                                <p class="help-text">Seconds to wait after player connects before sending welcome / welcome back.</p>
-                            </div>
 
-                            <div class="form-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="auto_save" name="auto_save" {{ if index $form "auto_save" }}checked{{ end }}>
-                                    <span>Auto Save</span>
-                                </label>
-                                <p class="help-text">Toggle the dedicated server's autosave feature</p>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="checkbox-label" for="player_saves" title="Save the game automatically when a player connects (issues 'FILE saveas' with a timestamped filename).">
-                                    <input type="checkbox" id="player_saves" name="player_saves" {{ if index $form "player_saves" }}checked{{ end }}>
-                                    <span>Player Saves</span>
-                                </label>
-                                <p class="help-text">When enabled, a save will be created automatically on player connect.</p>
-                            </div>
-
-                            <div class="form-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index $form "auto_pause" }}checked{{ end }}>
-                                    <span>Auto Pause</span>
-                                </label>
-                                <p class="help-text">Pause server simulation when no players are connected</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
-                                <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" title="Maximum number of autosaves to retain on disk (default 5)"
-                                       value="{{ or (index $form "max_auto_saves") 5 }}" min="1" max="1000" placeholder="5">
-                                <p class="help-text">Maximum number of autosaves to retain (default 5)</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
-                                <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" title="Maximum number of quicksaves to retain on disk (default 5)"
-                                       value="{{ or (index $form "max_quick_saves") 5 }}" min="1" max="1000" placeholder="5">
-                                <p class="help-text">Maximum number of quicksaves to retain (default 5)</p>
-                            </div>
-                            <div class="form-group">
-                                <label class="checkbox-label" for="delete_skeleton_on_decay" title="When enabled, skeleton corpses are deleted when they decay (default off)">
-                                    <input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{ if index $form "delete_skeleton_on_decay" }}checked{{ end }} title="Delete skeleton corpses when they decay">
-                                    <span>Delete Skeleton On Decay</span>
-                                </label>
-                                <p class="help-text">When enabled, delete skeletons on decay (default off)</p>
-                            </div>
-                            <!-- Steam P2P removed/disabled -->
-                            <div class="form-group">
-                                <label class="form-label" for="disconnect_timeout" title="Milliseconds before clients are disconnected due to inactivity (default 10000)">Disconnect Timeout (ms)</label>
-                                <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
-                                       value="{{ or (index $form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
-                                <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="auto_start" name="auto_start" {{ if index $form "auto_start" }}checked{{ end }}>
-                                    <span>Auto Start</span>
-                                </label>
-                                <p class="help-text">Start server automatically when SDSM starts</p>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="auto_update" name="auto_update" {{ if index $form "auto_update" }}checked{{ end }}>
-                                    <span>Auto Update</span>
-                                </label>
-                                <p class="help-text">Update server files before starting</p>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label class="form-label" for="start_location">Start Location *</label>
+                        <select name="start_location" id="start_location" class="form-control" required>
+                            <option value="">Loading...</option>
+                        </select>
                     </div>
-                    
-                    
-                    <div class="update-button-container">
-                        <a href="/dashboard" class="btn btn-ghost">
-                            {{ template "icon_dashboard" . }}
-                            <span class="ml-4">Cancel</span>
-                        </a>
-                        <button type="submit" class="btn btn-primary btn-min-lg">
-                            {{ template "icon_add" . }}
-                            <span class="ml-4">Create Server</span>
-                        </button>
+
+                    <div class="form-group">
+                        <label class="form-label" for="start_condition">Start Condition *</label>
+                        <select name="start_condition" id="start_condition" class="form-control" required>
+                            <option value="">Loading...</option>
+                        </select>
                     </div>
-                </form>
+
+                    <div class="form-group">
+                        <label class="form-label" for="beta">Game Version *</label>
+                        <select id="beta" name="beta" class="form-control" required>
+                            <option value="false" {{ if ne (index .form "beta") "true" }}selected{{ end }}>Release</option>
+                            <option value="true" {{ if eq (index .form "beta") "true" }}selected{{ end }}>Beta</option>
+                        </select>
+                        <p class="help-text">Choose Release (stable) or Beta (experimental)</p>
+                    </div>
+                    {{ $selectedDifficulty := index .form "difficulty" }}
+                    <div class="form-group">
+                        <label class="form-label" for="difficulty">Difficulty *</label>
+                        <select id="difficulty" name="difficulty" class="form-control" required>
+                            {{ range .difficulties }}
+                            <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
+                            {{ end }}
+                        </select>
+                        <p class="help-text">Game difficulty level</p>
+                    </div>
+                </div>
             </div>
-
             
-            <aside class="card" id="progressAside">
-                <div class="card-header">
-                    <h2 class="card-title">Form Progress</h2>
-                </div>
-                <div class="status-info mt-0">
-                    <div class="status-row">
-                        <span class="status-label">Completion</span>
-                        <span><span id="completedCount">0</span> of <span id="totalCount">5</span> required</span>
+            
+            <div class="form-section">
+                <h3 class="section-title">Network Settings</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="port">Port *</label>
+                        <input type="number" id="port" name="port" class="form-control" required 
+                               value="{{ index .form "port" }}" min="1024" max="65535"
+                               placeholder="27016">
+                        <p class="help-text">Server port (1024-65535)</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="max_clients">Max Players *</label>
+                        <input type="number" id="max_clients" name="max_clients" class="form-control" required 
+                               value="{{ index .form "max_clients" }}" min="1" max="100"
+                               placeholder="10">
+                        <p class="help-text">Maximum number of players</p>
+                    </div>
+                    
+                    <div class="form-group form-grid-full">
+                        <label class="form-label" for="password">Server Password</label>
+                        <input type="text" id="password" name="password" class="form-control"
+                            value="{{ index .form "password" }}"
+                            placeholder="Leave empty for no password">
+                        <p class="help-text">Optional password to join the server</p>
                     </div>
                 </div>
-                <div class="update-progress active" id="form-progress">
-                    <div class="update-progress-bar">
-                        <div class="update-progress-fill w-0" id="progressFill"></div>
+            </div>
+            
+            
+            <div class="form-section">
+                <h3 class="section-title row">
+                    Advanced Settings
+                    <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </button>
+                </h3>
+                <div class="help-box hidden" id="advanced-help">
+                    <div class="help-content">
+                        <h4>Advanced Settings Guide</h4>
+                        <ul>
+                            <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
+                            <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
+                            <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
+                            <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
+                        </ul>
                     </div>
-                    <div class="update-progress-text">Idle</div>
                 </div>
-                <ul class="mt-3 pl-5 text-secondary">
-                    <li class="progress-item" data-field="name">Server Name</li>
-                    <li class="progress-item" data-field="world">World</li>
-                    <li class="progress-item" data-field="start_location">Start Location</li>
-                    <li class="progress-item" data-field="start_condition">Start Condition</li>
-                    <li class="progress-item" data-field="difficulty">Difficulty</li>
-                </ul>
-            </aside>
-        </div>
-    
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="save_interval">Save Interval (seconds) *</label>
+                        <input type="number" id="save_interval" name="save_interval" class="form-control" required 
+                               value="{{ index .form "save_interval" }}" min="60" max="3600"
+                               placeholder="300">
+                        <p class="help-text">How often to save the world (60-3600)</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="restart_delay_seconds">Restart Delay (seconds)</label>
+                        <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" min="0" max="3600"
+                               value="{{ index .form "restart_delay_seconds" }}" placeholder="10">
+                        <p class="help-text">Wait time between stop and restart (0-3600)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (seconds)</label>
+                        <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" min="0" max="3600"
+                               value="{{ or (index .form "shutdown_delay_seconds") 2 }}" placeholder="2">
+                        <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
+                        <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
+                               value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
+                        <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
+                        <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120"
+                               value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" placeholder="10">
+                        <p class="help-text">Max wait for initial BepInEx bootstrap (Windows). Default 10.</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="auth_secret">Auth Secret</label>
+                        <input type="text" id="auth_secret" name="auth_secret" class="form-control"
+                               value="{{ index .form "auth_secret" }}"
+                               placeholder="Optional authentication secret">
+                        <p class="help-text">Steam authentication secret (optional)</p>
+                    </div>
+                </div>
+            </div>
+            
+            
+            <div class="form-section">
+                <h3 class="section-title">Startup Options</h3>
+                <div class="form-grid">
+                    <div class="form-group form-grid-full">
+                        <label class="form-label" for="welcome_message">Welcome Message</label>
+                        <input type="text" id="welcome_message" name="welcome_message" class="form-control"
+                               value="{{ index .form "welcome_message" }}"
+                               placeholder="Optional message sent to chat when a player connects">
+                        <p class="help-text">If set, this message will be broadcast to chat on player connect.</p>
+                    </div>
+                    <div class="form-group form-grid-full">
+                        <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
+                        <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control"
+                               value="{{ index .form "welcome_back_message" }}"
+                               placeholder="Optional message sent to chat when a returning player connects">
+                        <p class="help-text">If set, this message will be sent instead for players that have connected before.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
+                        <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index .form "welcome_delay_seconds") 1 }}" placeholder="1">
+                        <p class="help-text">Seconds to wait after player connects before sending welcome / welcome back.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto_save" name="auto_save" {{ if index .form "auto_save" }}checked{{ end }}>
+                            <span>Auto Save</span>
+                        </label>
+                        <p class="help-text">Toggle the dedicated server's autosave feature</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label" for="player_saves" title="Save the game automatically when a player connects (issues 'FILE saveas' with a timestamped filename).">
+                            <input type="checkbox" id="player_saves" name="player_saves" {{ if index .form "player_saves" }}checked{{ end }}>
+                            <span>Player Saves</span>
+                        </label>
+                        <p class="help-text">When enabled, a save will be created automatically on player connect.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index .form "auto_pause" }}checked{{ end }}>
+                            <span>Auto Pause</span>
+                        </label>
+                        <p class="help-text">Pause server simulation when no players are connected</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
+                        <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" title="Maximum number of autosaves to retain on disk (default 5)"
+                               value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000" placeholder="5">
+                        <p class="help-text">Maximum number of autosaves to retain (default 5)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
+                        <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" title="Maximum number of quicksaves to retain on disk (default 5)"
+                               value="{{ or (index .form "max_quick_saves") 5 }}" min="1" max="1000" placeholder="5">
+                        <p class="help-text">Maximum number of quicksaves to retain (default 5)</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label" for="delete_skeleton_on_decay" title="When enabled, skeleton corpses are deleted when they decay (default off)">
+                            <input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{ if index .form "delete_skeleton_on_decay" }}checked{{ end }} title="Delete skeleton corpses when they decay">
+                            <span>Delete Skeleton On Decay</span>
+                        </label>
+                        <p class="help-text">When enabled, delete skeletons on decay (default off)</p>
+                    </div>
+                    <!-- Steam P2P removed/disabled -->
+                    <div class="form-group">
+                        <label class="form-label" for="disconnect_timeout" title="Milliseconds before clients are disconnected due to inactivity (default 10000)">Disconnect Timeout (ms)</label>
+                        <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
+                               value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
+                        <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto_start" name="auto_start" {{ if index .form "auto_start" }}checked{{ end }}>
+                            <span>Auto Start</span>
+                        </label>
+                        <p class="help-text">Start server automatically when SDSM starts</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="auto_update" name="auto_update" {{ if index .form "auto_update" }}checked{{ end }}>
+                            <span>Auto Update</span>
+                        </label>
+                        <p class="help-text">Update server files before starting</p>
+                    </div>
+                </div>
+            </div>
+            
+            
+            <div class="update-button-container">
+                <a href="/dashboard" class="btn btn-ghost">
+                    {{ template "icon_dashboard" . }}
+                    <span class="ml-4">Cancel</span>
+                </a>
+                <button type="submit" class="btn btn-primary btn-min-lg">
+                    {{ template "icon_add" . }}
+                    <span class="ml-4">Create Server</span>
+                </button>
+            </div>
+        </form>
     </div>
 
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
-
-    <script>
-        function getStoredTheme() {
-            return localStorage.getItem('theme') || 'dark';
-        }
-
-        function setTheme(theme) {
-            const html = document.documentElement;
-            html.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = document.getElementById('theme-icon');
-            if (icon) {
-                icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-            }
-        }
-
-        function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
-            const next = current === 'dark' ? 'light' : 'dark';
-            setTheme(next);
-        }
-
-        // Initialize theme
-        setTheme(getStoredTheme());
-
-        let worldLists = {"release": [], "beta": []};
-        let worldDataByVersion = {"release": {}, "beta": {}};
-        let selectedWorld = "{{ js (index $form "world") }}";
-        let selectedStartLocation = "{{ js (index $form "start_location") }}";
-        let selectedStartCondition = "{{ js (index $form "start_condition") }}";
-        let selectedDifficulty = "{{ js (index $form "difficulty") }}";
-        const defaultVersion = "{{ index $form "beta" }}";
-
-        {{- if and .worldLists .worldData }}
-        {{- $worldLists := .worldLists -}}
-        {{- $worldData := .worldData -}}
-        worldLists = {
-            "release": [
-                {{- $release := index $worldLists "release" -}}
-                {{- range $idx, $world := $release -}}
-                {{- if $idx}}, {{- end -}}
-                "{{js $world}}"
-                {{- end -}}
-            ],
-            "beta": [
-                {{- $beta := index $worldLists "beta" -}}
-                {{- range $idx, $world := $beta -}}
-                {{- if $idx}}, {{- end -}}
-                "{{js $world}}"
-                {{- end -}}
-            ]
-        };
-
-        worldDataByVersion = {
-            "release": {
-                {{- $releaseData := index $worldData "release" -}}
-                {{- $releaseList := index $worldLists "release" -}}
-                {{- range $idx, $world := $releaseList -}}
-                {{- if $idx}}, {{- end -}}
-                "{{js $world}}": {
-                    "locations": [
-                        {{- with index $releaseData $world -}}
-                        {{- range $locIdx, $loc := index . "locations" -}}
-                        {{- if $locIdx}}, {{- end -}}
-                        {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
-                        {{- end -}}
-                        {{- end -}}
-                    ],
-                    "conditions": [
-                        {{- with index $releaseData $world -}}
-                        {{- range $condIdx, $cond := index . "conditions" -}}
-                        {{- if $condIdx}}, {{- end -}}
-                        {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
-                        {{- end -}}
-                        {{- end -}}
-                    ]
-                }
-                {{- end -}}
-            },
-            "beta": {
-                {{- $betaData := index $worldData "beta" -}}
-                {{- $betaList := index $worldLists "beta" -}}
-                {{- range $idx, $world := $betaList -}}
-                {{- if $idx}}, {{- end -}}
-                "{{js $world}}": {
-                    "locations": [
-                        {{- with index $betaData $world -}}
-                        {{- range $locIdx, $loc := index . "locations" -}}
-                        {{- if $locIdx}}, {{- end -}}
-                        {"ID": "{{js $loc.ID}}", "Name": "{{js $loc.Name}}", "Description": "{{js $loc.Description}}"}
-                        {{- end -}}
-                        {{- end -}}
-                    ],
-                    "conditions": [
-                        {{- with index $betaData $world -}}
-                        {{- range $condIdx, $cond := index . "conditions" -}}
-                        {{- if $condIdx}}, {{- end -}}
-                        {"ID": "{{js $cond.ID}}", "Name": "{{js $cond.Name}}", "Description": "{{js $cond.Description}}"}
-                        {{- end -}}
-                        {{- end -}}
-                    ]
-                }
-                {{- end -}}
-            }
-        };
-        {{- end }}
-
-        // Difficulties per version from server payload
-        const releaseDifficulties = [
-            {{- range $idx, $d := .release_difficulties -}}
-            {{- if $idx}}, {{- end -}}
-            "{{ js $d }}"
-            {{- end -}}
-        ];
-        const betaDifficulties = [
-            {{- range $idx, $d := .beta_difficulties -}}
-            {{- if $idx}}, {{- end -}}
-            "{{ js $d }}"
-            {{- end -}}
-        ];
-
-        function currentVersionKey() {
-            const betaSelect = document.getElementById("beta");
-            return betaSelect && betaSelect.value === "true" ? "beta" : "release";
-        }
-
-        function populateDifficultyOptions() {
-            const diffSelect = document.getElementById("difficulty");
-            const versionKey = currentVersionKey();
-            const diffs = versionKey === "beta" ? betaDifficulties : releaseDifficulties;
-            const previous = diffSelect.value;
-            diffSelect.innerHTML = "";
-            if (!diffs || !diffs.length) {
-                diffSelect.innerHTML = '<option value="">No difficulties</option>';
-                diffSelect.disabled = true;
-                diffSelect.required = false;
-                return;
-            }
-            diffSelect.disabled = false;
-            diffSelect.required = true;
-            diffs.forEach(d => {
-                const opt = document.createElement("option");
-                opt.value = d;
-                opt.textContent = d;
-                diffSelect.appendChild(opt);
-            });
-            // choose selectedDifficulty first, then previous, else first entry
-            const desired = diffs.includes(selectedDifficulty) ? selectedDifficulty : (diffs.includes(previous) ? previous : diffs[0]);
-            diffSelect.value = desired;
-        }
-
-        function populateWorldOptions() {
-            // Use the visible select element, not hidden input
-            const worldSelect = document.getElementById("world_select");
-            const versionKey = currentVersionKey();
-            const worlds = worldLists[versionKey] || [];
-            const previousSelection = worldSelect.value;
-
-            worldSelect.innerHTML = "";
-
-            if (!worlds.length) {
-                worldSelect.innerHTML = '<option value="">No worlds available</option>';
-                selectedWorld = "";
-                updateWorldOptions();
-                return;
-            }
-
-            worlds.forEach(world => {
-                const option = document.createElement("option");
-                option.value = world;
-                option.textContent = world;
-                worldSelect.appendChild(option);
-            });
-
-            const desiredWorld = (selectedWorld && worlds.includes(selectedWorld))
-                ? selectedWorld
-                : (previousSelection && worlds.includes(previousSelection))
-                    ? previousSelection
-                    : worlds[0];
-
-            if (desiredWorld) {
-                worldSelect.value = desiredWorld;
-                selectedWorld = desiredWorld;
-            }
-
-            updateWorldOptions();
-        }
-
-        function updateWorldOptions() {
-            const worldSelect = document.getElementById("world_select");
-            const locSelect = document.getElementById("start_location");
-            const condSelect = document.getElementById("start_condition");
-            const versionKey = currentVersionKey();
-            const world = worldSelect.value;
-
-            const worldData = (worldDataByVersion[versionKey] || {})[world];
-
-            locSelect.innerHTML = '<option value="">-- Select Start Location --</option>';
-            condSelect.innerHTML = '<option value="">-- Select Start Condition --</option>';
-
-            if (!worldData) {
-                return;
-            }
-
-            let hasSelectedLocation = false;
-            (worldData.locations || []).forEach(loc => {
-                const option = document.createElement("option");
-                option.value = loc.ID;
-                option.textContent = loc.Name || loc.ID;
-                if (loc.Description) {
-                    option.title = loc.Description;
-                }
-                if (loc.ID === selectedStartLocation) {
-                    option.selected = true;
-                    hasSelectedLocation = true;
-                }
-                locSelect.appendChild(option);
-            });
-
-            let hasSelectedCondition = false;
-            (worldData.conditions || []).forEach(cond => {
-                const option = document.createElement("option");
-                option.value = cond.ID;
-                option.textContent = cond.Name || cond.ID;
-                if (cond.Description) {
-                    option.title = cond.Description;
-                }
-                if (cond.ID === selectedStartCondition) {
-                    option.selected = true;
-                    hasSelectedCondition = true;
-                }
-                condSelect.appendChild(option);
-            });
-
-            if (!hasSelectedLocation) {
-                selectedStartLocation = "";
-            }
-
-            if (!hasSelectedCondition) {
-                selectedStartCondition = "";
-            }
-
-            updateProgressTracker();
-        }
-
-        function updateProgressTracker() {
-            const requiredFields = [
-                { id: 'name', field: 'name' },
-                { id: 'world_select', field: 'world' },
-                { id: 'start_location', field: 'start_location' },
-                { id: 'start_condition', field: 'start_condition' }
-            ];
-
-            // Only require difficulty when options are available
-            const difficultyEl = document.getElementById('difficulty');
-            if (difficultyEl && !difficultyEl.disabled) {
-                requiredFields.push({ id: 'difficulty', field: 'difficulty' });
-            }
-
-            let completedCount = 0;
-
-            requiredFields.forEach(({ id, field }) => {
-                const input = document.getElementById(id);
-                const item = document.querySelector(`.progress-item[data-field="${field}"]`);
-                
-                if (input && item) {
-                    const isComplete = input.value && input.value.trim() !== '';
-                    
-                    if (isComplete) {
-                        item.style.textDecoration = 'line-through';
-                        completedCount++;
-                    } else {
-                        item.style.textDecoration = '';
-                    }
-                }
-            });
-
-            const totalCount = requiredFields.length;
-            const percentage = Math.round((completedCount / totalCount) * 100);
-
-            document.getElementById('completedCount').textContent = completedCount;
-            document.getElementById('totalCount').textContent = totalCount;
-            const fill = document.getElementById('progressFill');
-            if (fill) fill.style.width = percentage + '%';
-            const progressText = document.querySelector('#form-progress .update-progress-text');
-            if (progressText) progressText.textContent = `Completion ${percentage}%`;
-        }
-
-        function toggleHelp(targetId) {
-            const helpBox = document.getElementById(targetId);
-            if (helpBox) {
-                helpBox.style.display = helpBox.style.display === 'none' ? 'block' : 'none';
-            }
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-            try {
-                const inlineErr = document.querySelector('.alert.alert-error[role="alert"]');
-                if (inlineErr && (window.askInfo || window.openInfo)) {
-                    const msg = (inlineErr.textContent || '').trim();
-                    if (msg) {
-                        if (window.askInfo) window.askInfo({ title: 'Create Server Error', message: msg, confirmText: 'Close' });
-                        else window.openInfo({ title: 'Create Server Error', message: msg, confirmText: 'Close' });
-                    }
-                }
-            } catch(_) {}
-            const worldSelect = document.getElementById("world_select");
-            const locSelect = document.getElementById("start_location");
-            const condSelect = document.getElementById("start_condition");
-            const versionSelect = document.getElementById("beta");
-            const nameInput = document.getElementById("name_text");
-            const difficultySelect = document.getElementById("difficulty");
-            const hiddenName = document.getElementById("name");
-            const hiddenWorld = document.getElementById("world");
-            const analysisBox = document.getElementById('saveAnalysis');
-            const progressAside = document.getElementById('progressAside');
-            let nameEdited = false;
-            let nameAutofilled = false;
-            
-
-            versionSelect.value = defaultVersion === "true" ? "true" : "false";
-            populateWorldOptions();
-            populateDifficultyOptions();
-            // Sync hidden fields for non-save mode
-            if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
-            if (hiddenWorld && worldSelect) hiddenWorld.value = worldSelect.value || '';
-
-            worldSelect.addEventListener("change", () => {
-                selectedWorld = worldSelect.value;
-                updateWorldOptions();
-                if (hiddenWorld) hiddenWorld.value = worldSelect.value || '';
-            });
-
-            versionSelect.addEventListener("change", () => {
-                populateWorldOptions();
-                populateDifficultyOptions();
-            });
-
-            locSelect.addEventListener("change", () => {
-                selectedStartLocation = locSelect.value;
-                updateProgressTracker();
-            });
-
-            condSelect.addEventListener("change", () => {
-                selectedStartCondition = condSelect.value;
-                updateProgressTracker();
-            });
-
-            nameInput.addEventListener("input", () => {
-                if (hiddenName) hiddenName.value = nameInput.value || '';
-                nameEdited = true;
-                updateProgressTracker();
-            });
-            difficultySelect.addEventListener("change", () => {
-                selectedDifficulty = difficultySelect.value;
-                updateProgressTracker();
-            });
-
-            // Help toggle handlers
-            document.querySelectorAll('.help-toggle').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const targetId = this.getAttribute('data-help-target');
-                    toggleHelp(targetId);
-                });
-            });
-
-            // Initial progress update
-            updateProgressTracker();
-
-            // Dropzone handlers for optional .save upload
-            const dz = document.getElementById('saveDropzone');
-            const fi = document.getElementById('save_file');
-            const fn = document.getElementById('saveFileName');
-            function setFileName(file){
-                if (!fn) return;
-                if (file) { fn.textContent = 'Selected: ' + file.name; }
-                else { fn.textContent = ''; }
-            }
-            function setInputsDisabled(root, disabled) {
-                if (!root) return;
-                root.querySelectorAll('input, select, textarea, button').forEach(el => {
-                    // Don't disable the file input or submit button globally
-                    if (el.id === 'save_file') return;
-                    if (el.type === 'submit') return;
-                    el.disabled = !!disabled;
-                });
-            }
-            function hideForSaveMode(on) {
-                // Show all sections; hide only world/start location/start condition controls when in save mode
-                const worldGroup = document.getElementById('basicWorldGroup');
-                const ws = document.getElementById('world_select');
-                const sl = document.getElementById('start_location');
-                const sc = document.getElementById('start_condition');
-                // Name should be editable
-                if (nameInput) { nameInput.required = true; nameInput.disabled = false; }
-                if (on) {
-                    if (worldGroup) worldGroup.style.display = 'none';
-                    if (ws) { ws.required = false; ws.disabled = true; }
-                    if (sl) { const g = sl.closest('.form-group'); if (g) g.style.display = 'none'; sl.required = false; sl.disabled = true; }
-                    if (sc) { const g = sc.closest('.form-group'); if (g) g.style.display = 'none'; sc.required = false; sc.disabled = true; }
-                } else {
-                    if (worldGroup) worldGroup.style.display = '';
-                    if (ws) { ws.required = true; ws.disabled = false; }
-                    if (sl) { const g = sl.closest('.form-group'); if (g) g.style.display = ''; sl.required = true; sl.disabled = false; }
-                    if (sc) { const g = sc.closest('.form-group'); if (g) g.style.display = ''; sc.required = true; sc.disabled = false; }
-                }
-            }
-            function analyzeSaveAndShow() {
-                const hasSave = fi && fi.files && fi.files.length > 0;
-                if (!hasSave) {
-                    if (analysisBox) analysisBox.style.display = 'none';
-                    hideForSaveMode(false);
-                    return;
-                }
-                const fd = new FormData();
-                fd.append('save_file', fi.files[0]);
-                fetch('/api/servers/analyze-save', {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json' },
-                    credentials: 'same-origin',
-                    body: fd,
-                })
-                .then(res => res.json().catch(() => ({})).then(data => ({ ok: res.ok, data, headers: res.headers })))
-                .then(({ ok, data, headers }) => {
-                    if (!ok) { throw new Error(data && data.error || 'Analyze failed'); }
-                    const w = (data && data.world) || '';
-                    const n = (data && data.world_file_name) || '';
-                    if (document.getElementById('detectedWorld')) document.getElementById('detectedWorld').textContent = w || '(unknown)';
-                    if (document.getElementById('detectedName')) document.getElementById('detectedName').textContent = n || '(unknown)';
-                    if (hiddenWorld) hiddenWorld.value = w;
-                    // Do not set hidden name yet; keep in sync with visible input below
-                    // Prefill visible fields from analyzed settings when available
-                    const setIf = (id, val) => { const el = document.getElementById(id); if (el != null && val != null && val !== '') { el.value = String(val); } };
-                    const setBool = (id, val) => { const el = document.getElementById(id); if (el != null && typeof val === 'boolean') { el.checked = !!val; } };
-                    // Name (editable): set from World File Name only once and only if user hasn't typed
-                    if (nameInput && !nameEdited && !nameAutofilled) {
-                        nameInput.value = n || nameInput.value;
-                        nameAutofilled = true;
-                    }
-                    if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
-                    // Network
-                    setIf('port', data.port);
-                    setIf('max_clients', data.max_clients);
-                    setIf('password', data.password);
-                    setBool('server_visible', data.server_visible);
-                    setIf('auth_secret', data.auth_secret);
-                    // Advanced/Startup
-                    setBool('auto_save', data.auto_save);
-                    setIf('save_interval', data.save_interval);
-                    setBool('auto_pause', data.auto_pause);
-                    setBool('delete_skeleton_on_decay', data.delete_skeleton_on_decay);
-                    // Steam P2P removed; ignore data.use_steam_p2p
-                    setIf('disconnect_timeout', data.disconnect_timeout);
-                    if (analysisBox) analysisBox.style.display = '';
-                    hideForSaveMode(true);
-                })
-                .catch(err => {
-                    try {
-                        if (typeof window.showToast === 'function') {
-                            window.showToast({ type: 'error', title: 'Analyze Save Failed', message: err && err.message ? err.message : 'Unable to parse save' });
-                        }
-                    } catch(_) {}
-                    if (analysisBox) analysisBox.style.display = 'none';
-                    hideForSaveMode(false);
-                });
-            }
-            if (dz && fi) {
-                dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.style.background = 'var(--surface-tertiary)'; });
-                dz.addEventListener('dragleave', () => { dz.style.background = 'var(--surface-secondary)'; });
-                dz.addEventListener('drop', (e) => {
-                    e.preventDefault(); dz.style.background = 'var(--surface-secondary)';
-                    const files = e.dataTransfer && e.dataTransfer.files;
-                    if (files && files.length > 0) {
-                        const f = files[0];
-                        if (f && f.name && f.name.toLowerCase().endsWith('.save')) {
-                            fi.files = files; setFileName(f); analyzeSaveAndShow();
-                        }
-                    }
-                });
-                fi.addEventListener('change', () => { setFileName(fi.files && fi.files[0]); analyzeSaveAndShow(); });
-            }
-
-            // Intercept form submit to call API and redirect to new server page
-            const form = document.getElementById('serverForm');
-            if (form) {
-                form.addEventListener('submit', function(e){
-                    e.preventDefault();
-                    const submitBtn = form.querySelector('button[type="submit"]');
-                    if (submitBtn && submitBtn.disabled) return;
-                    if (submitBtn) { submitBtn.disabled = true; submitBtn.setAttribute('aria-disabled', 'true'); }
-                    const hasSave = fi && fi.files && fi.files.length > 0;
-                    let promise;
-                    if (hasSave) {
-                        // Ensure hidden name mirrors visible input
-                        if (hiddenName && nameInput) hiddenName.value = nameInput.value || '';
-                        const fd = new FormData(form);
-                        // Send multipart to special endpoint that parses settings.xml and imports save
-                        promise = fetch('/api/servers/create-from-save', {
-                            method: 'POST',
-                            headers: { 'Accept': 'application/json' },
-                            credentials: 'same-origin',
-                            body: fd
-                        });
-                    } else {
-                        const fd = new FormData(form);
-                        const body = new URLSearchParams();
-                        for (const [k, v] of fd.entries()) { body.append(k, String(v)); }
-                        promise = fetch('/api/servers', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
-                            credentials: 'same-origin',
-                            body: body.toString()
-                        });
-                    }
-                    promise
-                    .then((res) => {
-                        try {
-                            if (typeof window.showToast === 'function') {
-                                const type = res.headers.get('X-Toast-Type');
-                                const title = res.headers.get('X-Toast-Title');
-                                const message = res.headers.get('X-Toast-Message');
-                                if (message) window.showToast({ type: type || 'info', title: title || '', message });
-                            }
-                        } catch(_) {}
-                        if (!res.ok) {
-                            return res.json().catch(() => ({})).then((d) => Promise.reject(d));
-                        }
-                        // Some proxies or servers may return text/plain; attempt robust parse
-                        return res.clone().json().catch(() => res.text().then(t => {
-                            try { return JSON.parse(t); } catch { return {}; }
-                        }));
-                    })
-                    .then((data) => {
-                        const id = data && (data.id || data.server_id || data.ID);
-                        if (id) {
-                            window.location.href = `/server/${id}`;
-                        } else {
-                            // Fallback to dashboard
-                            window.location.href = '/dashboard';
-                        }
-                    })
-                    .catch((err) => {
-                        // If the server responded with a redirect (HTML), try to follow it
-                        try {
-                            if (err && err.redirect) {
-                                window.location.href = err.redirect;
-                                return;
-                            }
-                        } catch(_) {}
-                        // Show inline alert if not already present
-                        try {
-                            const containerCard = form.closest('.card');
-                            if (containerCard && err && err.error) {
-                                let alert = containerCard.querySelector('.alert.alert-error');
-                                if (!alert) {
-                                    alert = document.createElement('div');
-                                    alert.className = 'alert alert-error';
-                                    alert.setAttribute('role', 'alert');
-                                    containerCard.insertBefore(alert, containerCard.firstChild.nextSibling);
-                                }
-                                alert.textContent = err.error;
-                            }
-                            if (typeof window.showToast === 'function' && err && err.error) {
-                                window.showToast({ type: 'error', title: 'Create Failed', message: err.error });
-                            } else if ((window.askInfo || window.openInfo) && err && err.error) {
-                                const fn = window.askInfo || window.openInfo;
-                                fn({ title: 'Create Server Error', message: err.error });
-                            }
-                        } catch(_) {}
-                    })
-                    .finally(() => {
-                        if (submitBtn) { submitBtn.disabled = false; submitBtn.removeAttribute('aria-disabled'); }
-                    });
-                });
-            }
-        });
-    </script>
     
-    {{ template "toast.html" . }}
-</body>
-</html>
+    <aside class="card" id="progressAside">
+        <div class="card-header">
+            <h2 class="card-title">Form Progress</h2>
+        </div>
+        <div class="status-info mt-0">
+            <div class="status-row">
+                <span class="status-label">Completion</span>
+                <span><span id="completedCount">0</span> of <span id="totalCount">5</span> required</span>
+            </div>
+        </div>
+        <div class="update-progress active" id="form-progress">
+            <div class="update-progress-bar">
+                <div class="update-progress-fill w-0" id="progressFill"></div>
+            </div>
+            <div class="update-progress-text">Idle</div>
+        </div>
+        <ul class="mt-3 pl-5 text-secondary">
+            <li class="progress-item" data-field="name">Server Name</li>
+            <li class="progress-item" data-field="world">World</li>
+            <li class="progress-item" data-field="start_location">Start Location</li>
+            <li class="progress-item" data-field="start_condition">Start Condition</li>
+            <li class="progress-item" data-field="difficulty">Difficulty</li>
+        </ul>
+    </aside>
+</div>
+{{end}}

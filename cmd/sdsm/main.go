@@ -171,13 +171,7 @@ func main() {
 	}
 
 	if app.manager.Paths != nil {
-		// Clear Gin log at startup to avoid unbounded growth.
 		clearLogFile(filepath.Join(app.manager.Paths.LogsDir(), "GIN.log"))
-		// Do NOT clear updates.log here. It may already contain progress written during
-		// manager initialization (e.g., startup selective updates). Clearing it again
-		// would wipe that progress. updates.log should only be truncated explicitly
-		// when the user requests it or during an intentional restart.
-		// clearLogFile(app.manager.Paths.UpdateLogFile())
 	}
 
 	// Start WebSocket hub
@@ -358,7 +352,7 @@ func setupRouter() *gin.Engine {
 	t := htmltmpl.New("").Funcs(funcMap)
 	// Parse templates from embedded FS
 	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/*.html"))
-	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/*/*.html"))
+	t = htmltmpl.Must(t.ParseFS(ui.Assets, "templates/partials/*.html"))
 	// Validate presence of critical templates
 	requiredTemplates := []string{"login.html", "manager.html", "frame.html", "dashboard.html", "setup.html", "error.html"}
 	for _, name := range requiredTemplates {
@@ -376,7 +370,7 @@ func setupRouter() *gin.Engine {
 		os.Exit(1)
 	}
 	// Validate embedded critical static assets exist
-	for _, asset := range []string{"sdsm.png", "ui-theme.css", "modern.css"} {
+	for _, asset := range []string{"sdsm.png", "ui-theme.css", "app.js"} {
 		if f, openErr := staticFS.Open(asset); openErr != nil {
 			logStuff(fmt.Sprintf("FATAL: embedded static asset missing: %s (%v)", asset, openErr))
 			os.Exit(1)
@@ -412,22 +406,22 @@ func setupRouter() *gin.Engine {
 
 	// Public Terms of Use page
 	r.GET("/terms", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "terms.html", gin.H{})
+		c.HTML(http.StatusOK, "terms.html", gin.H{"title": "Terms of Use"})
 	})
 
 	// Public License page
 	r.GET("/license", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "license.html", gin.H{})
+		c.HTML(http.StatusOK, "license.html", gin.H{"title": "License"})
 	})
 
 	// Public Privacy page
 	r.GET("/privacy", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "privacy.html", gin.H{})
+		c.HTML(http.StatusOK, "privacy.html", gin.H{"title": "Privacy"})
 	})
 
 	// Initialize handlers
 	authHandlers := handlers.NewAuthHandlers(app.authService, app.manager, app.userStore)
-	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log)
+	userHandlers := handlers.NewUserHandlers(app.userStore, app.authService, app.manager.Log, app.manager)
 	profileHandlers := handlers.NewProfileHandlers(app.userStore, app.authService)
 	managerHandlers := handlers.NewManagerHandlersWithHub(app.manager, app.userStore, app.wsHub)
 	// Wire realtime broadcast for servers that are attached on startup (detached mode)
@@ -455,17 +449,10 @@ func setupRouter() *gin.Engine {
 			c.Redirect(http.StatusFound, "/admin/setup")
 			return
 		}
-		// Try auth cookie; if valid, route by role
+		// Try auth cookie; if valid, route to frame which will handle content loading
 		if token, _ := c.Cookie(middleware.CookieName); token != "" {
-			if claims, err := app.authService.ValidateToken(token); err == nil {
-				// Default for authenticated users
-				target := "/dashboard"
-				if claims != nil && strings.TrimSpace(claims.Username) != "" {
-					if u, ok := app.userStore.Get(claims.Username); ok && u.Role == manager.RoleAdmin {
-						target = "/manager"
-					}
-				}
-				c.Redirect(http.StatusFound, target)
+			if _, err := app.authService.ValidateToken(token); err == nil {
+				c.Redirect(http.StatusFound, "/frame")
 				return
 			}
 		}

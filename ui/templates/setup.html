@@ -1,524 +1,77 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Initial Setup - SDSM</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-    <link rel="icon" href="/sdsm.png" type="image/png">
-    
-</head>
-<body class="page-shell">
-    <div class="container">
-        <header class="hero-card">
-            <div class="hero-main">
-                <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-                <div class="hero-heading">
-                    <h1 class="hero-title">Initial Setup</h1>
-                    <p class="hero-subtitle">Install required components and get started.</p>
-                </div>
-            </div>
-            <div class="hero-actions row">
-                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                    <span id="theme-icon">🌙</span>
-                </button>
-            </div>
-        </header>
-    </div>
-    <main class="container flex justify-center">
-        <div class="setup-modal glass-card max-w-820">
-            <div class="setup-header">
-                <div class="setup-icon">🔧</div>
-                <h1>
-                    Initial Setup Required
-                    <span class="build-marker" title="Setup progress UI enabled">setup-progress</span>
-                </h1>
-                <p>Some required components are missing. Let's get you set up!</p>
-            </div>
+{{define "title"}}Initial Setup{{end}}
 
-            <div id="updatesHint" class="info-box{{if .updatesAvailable}}{{else}} hidden{{end}}">
-                <strong>Updates available:</strong> New versions detected. You can update components now.
-                <span class="ml-3">
-                    <a href="/logs/updates">View change log →</a>
-                </span>
+{{define "content"}}
+<main class="container flex justify-center">
+    <div class="setup-modal glass-card max-w-820">
+        <div class="setup-header">
+            <div class="setup-icon">🔧</div>
+            <h1>
+                Initial Setup Required
+                <span class="build-marker" title="Setup progress UI enabled">setup-progress</span>
+            </h1>
+            <p>Some required components are missing. Let's get you set up!</p>
+        </div>
+
+        <div id="updatesHint" class="info-box{{if .updatesAvailable}}{{else}} hidden{{end}}">
+            <strong>Updates available:</strong> New versions detected. You can update components now.
+            <span class="ml-3">
+                <a href="/logs/updates">View change log →</a>
+            </span>
+        </div>
+
+        
+
+        <div id="errorBox" class="error-box{{if .deployErrors}} active{{end}}">
+            <h3>Installation Issues Detected</h3>
+            <ul id="errorList">
+                {{range .deployErrors}}
+                <li>{{.}}</li>
+                {{end}}
+            </ul>
+            <p class="error-hint">Review the setup log for details, then try again.</p>
+        </div>
+
+        <div class="instructions" id="install-section">
+            <h3>Pending components:</h3>
+            <ol id="install-list">
+                {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
+                <li data-component="STEAMCMD"><span class="step-badge">Step —</span> <strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
+                {{end}}
+                {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
+                <li data-component="RELEASE"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
+                {{end}}
+                {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
+                <li data-component="BETA"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
+                {{end}}
+                {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
+                <li data-component="BEPINEX"><span class="step-badge">Step —</span> <strong>BepInEx</strong> - Modding framework for Stationeers</li>
+                {{end}}
+                {{if or .missingSCON (has .missingComponents "SCON") }}
+                <li data-component="SCON"><span class="step-badge">Step —</span> <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)</li>
+                {{end}}
+                {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
+                <li data-component="LAUNCHPAD"><span class="step-badge">Step —</span> <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup</li>
+                {{end}}
+            </ol>
+        </div>
+
+        <div id="progress" class="progress-container">
+            <div class="progress-text">⏳ Installing components, please wait...</div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
             </div>
-
-            
-
-            <div id="errorBox" class="error-box{{if .deployErrors}} active{{end}}">
-                <h3>Installation Issues Detected</h3>
-                <ul id="errorList">
-                    {{range .deployErrors}}
-                    <li>{{.}}</li>
-                    {{end}}
-                </ul>
-                <p class="error-hint">Review the setup log for details, then try again.</p>
-            </div>
-
-            <div class="instructions" id="install-section">
-                <h3>Pending components:</h3>
-                <ol id="install-list">
-                    {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
-                    <li data-component="STEAMCMD"><span class="step-badge">Step —</span> <strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
-                    {{end}}
-                    {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
-                    <li data-component="RELEASE"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
-                    {{end}}
-                    {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
-                    <li data-component="BETA"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
-                    {{end}}
-                    {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
-                    <li data-component="BEPINEX"><span class="step-badge">Step —</span> <strong>BepInEx</strong> - Modding framework for Stationeers</li>
-                    {{end}}
-                    {{if or .missingSCON (has .missingComponents "SCON") }}
-                    <li data-component="SCON"><span class="step-badge">Step —</span> <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)</li>
-                    {{end}}
-                    {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
-                    <li data-component="LAUNCHPAD"><span class="step-badge">Step —</span> <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup</li>
-                    {{end}}
-                </ol>
-            </div>
-
-            <div id="progress" class="progress-container">
-                <div class="progress-text">⏳ Installing components, please wait...</div>
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
-                </div>
-                <div id="progressDetails" class="mt-4">
-                    
-                </div>
-            </div>
-
-            <div class="action-buttons">
-                <form method="POST" action="/setup/skip" id="skipForm">
-                    <button type="submit" class="btn btn-ghost" id="skipBtn">Skip for Now</button>
-                </form>
-                <button type="button" class="btn btn-setup" id="setupBtn" onclick="runSetup()">🚀 Start Setup</button>
-                <button type="button" class="btn btn-setup hidden" id="updateBtn" onclick="runUpdate()">⬆️ Update Components</button>
+            <div id="progressDetails" class="mt-4">
+                
             </div>
         </div>
-    </main>
 
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
-    {{ template "footer" . }}
-
-    <script>
-        let statusCheckInterval = null;
-        let progressInterval = null;
-        let setupProgressInterval = null;
-
-        const progressContainer = document.getElementById('progress');
-        const progressFill = document.querySelector('.progress-fill');
-        const progressText = document.querySelector('.progress-text');
-        const setupBtn = document.getElementById('setupBtn');
-        let updateBtn = null;
-        const skipBtn = document.getElementById('skipBtn');
-        const errorBox = document.getElementById('errorBox');
-        const errorList = document.getElementById('errorList');
-        const installSection = document.getElementById('install-section');
-        const updatesHint = document.getElementById('updatesHint');
-
-        function maybePromptUpdates(data) {
-            try {
-                const shouldPrompt = data && data.updatesAvailable && !data.inProgress && !sessionStorage.getItem('setupUpdatesPrompted');
-                if (!shouldPrompt) return;
-                sessionStorage.setItem('setupUpdatesPrompted', '1');
-                if (window.askConfirm) {
-                    window.askConfirm({
-                        title: 'Updates Available',
-                        message: 'New versions are available. Update components now?\n\nYou can view the changelog on the updates page.',
-                        confirmText: 'Update Now',
-                        cancelText: 'Later'
-                    }).then(ok => { if (ok) runUpdate(); });
-                } else if (window.confirm) {
-                    if (window.confirm('Updates available. Update components now?')) runUpdate();
-                }
-            } catch (_) { /* noop */ }
-        }
-
-        function updateErrorBox(errors) {
-            if (!errorBox || !errorList) {
-                return;
-            }
-
-            errorList.innerHTML = '';
-
-            if (errors && errors.length) {
-                errors.forEach(msg => {
-                    const li = document.createElement('li');
-                    li.textContent = msg;
-                    errorList.appendChild(li);
-                });
-                errorBox.classList.add('active');
-            } else {
-                errorBox.classList.remove('active');
-            }
-        }
-
-        // removed updateMissingComponents; panel is no longer rendered
-
-        function setButtonsDisabled(disabled) {
-            setupBtn.disabled = disabled;
-            skipBtn.disabled = disabled;
-        }
-
-        function stopProgressAnimation() {
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-        }
-
-        function startProgressAnimation() {
-            stopProgressAnimation();
-            if (progressFill) {
-                progressFill.style.width = '0%';
-            }
-            let width = 0;
-            progressInterval = setInterval(() => {
-                width += 1;
-                if (progressFill && width <= 95) {
-                    progressFill.style.width = width + '%';
-                }
-                if (width > 95) {
-                    stopProgressAnimation();
-                }
-            }, 300);
-        }
-
-        function runSetup() {
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
-                statusCheckInterval = null;
-            }
-
-            updateErrorBox([]);
-            setButtonsDisabled(true);
-
-            if (progressContainer) {
-                progressContainer.classList.add('active');
-            }
-            if (progressText) {
-                progressText.textContent = '⏳ Installing components, please wait...';
-            }
-            startProgressAnimation();
-
-            // Hide pending list once setup begins
-            if (installSection) installSection.classList.add('hidden');
-            if (updatesHint) updatesHint.classList.add('hidden');
-
-            fetch('/setup/install', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            }).then(response => {
-                if (response.ok) {
-                    statusCheckInterval = setInterval(checkSetupStatus, 2000);
-                    if (!setupProgressInterval) {
-                        setupProgressInterval = setInterval(fetchSetupProgress, 2000);
-                    }
-                    // Start an immediate fetch so UI populates quickly
-                    fetchSetupProgress();
-                } else {
-                    stopProgressAnimation();
-                    const msg = 'Failed to start setup. Check the log and try again.';
-                    if (progressText) { progressText.textContent = '⚠️ ' + msg; }
-                    try { if (window.openInfo) window.openInfo({ title:'Setup Error', message: msg, confirmText:'Close' }); } catch(_) {}
-                    setButtonsDisabled(false);
-                }
-            }).catch(error => {
-                stopProgressAnimation();
-                const msg = `Setup failed to start: ${error.message}`;
-                if (progressText) { progressText.textContent = '⚠️ ' + msg; }
-                try { if (window.openInfo) window.openInfo({ title:'Setup Error', message: msg, confirmText:'Close' }); } catch(_) {}
-                setButtonsDisabled(false);
-            });
-        }
-
-        function runUpdate() {
-            if (statusCheckInterval) {
-                clearInterval(statusCheckInterval);
-                statusCheckInterval = null;
-            }
-
-            updateErrorBox([]);
-            setButtonsDisabled(true);
-
-            if (progressContainer) {
-                progressContainer.classList.add('active');
-            }
-            if (progressText) {
-                progressText.textContent = '⏳ Updating components, please wait...';
-            }
-            startProgressAnimation();
-            if (updatesHint) updatesHint.classList.add('hidden');
-
-            fetch('/setup/update', {
-                method: 'POST',
-                headers: { 'Accept': 'application/json' }
-            }).then(response => {
-                if (response.ok) {
-                    statusCheckInterval = setInterval(checkSetupStatus, 2000);
-                    if (!setupProgressInterval) {
-                        setupProgressInterval = setInterval(fetchSetupProgress, 2000);
-                    }
-                    fetchSetupProgress();
-                } else {
-                    stopProgressAnimation();
-                    const msg = 'Failed to start update. Check the log and try again.';
-                    if (progressText) { progressText.textContent = '⚠️ ' + msg; }
-                    try { if (window.openInfo) window.openInfo({ title:'Update Error', message: msg, confirmText:'Close' }); } catch(_) {}
-                    setButtonsDisabled(false);
-                }
-            }).catch(error => {
-                stopProgressAnimation();
-                const msg = `Update failed to start: ${error.message}`;
-                if (progressText) { progressText.textContent = '⚠️ ' + msg; }
-                try { if (window.openInfo) window.openInfo({ title:'Update Error', message: msg, confirmText:'Close' }); } catch(_) {}
-                setButtonsDisabled(false);
-            });
-        }
-
-        function checkSetupStatus() {
-            fetch('/setup/status')
-                .then(response => response.json())
-                .then(data => {
-                    updateErrorBox(data.errors || []);
-                    // Toggle update button visibility based on backend indicator
-                    if (!updateBtn) { updateBtn = document.getElementById('updateBtn'); }
-                    if (updateBtn) {
-                        const showUpdate = !!data.updatesAvailable && (!data.inProgress);
-                        updateBtn.classList.toggle('hidden', !showUpdate);
-                    }
-                    if (updatesHint) {
-                        updatesHint.classList.toggle('hidden', !(data.updatesAvailable && !data.inProgress));
-                    }
-
-                    // Politely prompt user to update when available
-                    maybePromptUpdates(data);
-
-                    const stillMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
-
-                    if (!data.inProgress) {
-                        if (statusCheckInterval) {
-                            clearInterval(statusCheckInterval);
-                            statusCheckInterval = null;
-                        }
-                        if (setupProgressInterval) {
-                            clearInterval(setupProgressInterval);
-                            setupProgressInterval = null;
-                        }
-                        stopProgressAnimation();
-
-                        if (data.errors && data.errors.length) {
-                            if (progressText) { progressText.textContent = '⚠️ Setup encountered errors. Review the details below.'; }
-                            try { if (window.openInfo) window.openInfo({ title:'Setup Errors', message: (data.errors||[]).join('\n'), confirmText:'Close' }); } catch(_) {}
-                            if (progressFill) {
-                                progressFill.style.width = '0%';
-                            }
-                            setButtonsDisabled(false);
-                            if (progressContainer) {
-                                progressContainer.classList.add('active');
-                            }
-                            // Show pending list again if setup ended with errors
-                            if (installSection) installSection.classList.remove('hidden');
-                            return;
-                        }
-
-                        if (!data.needsUploadPrompt || !stillMissing) {
-                            if (progressFill) {
-                                progressFill.style.width = '100%';
-                            }
-                            if (progressText) {
-                                progressText.textContent = '✅ Setup complete! Redirecting...';
-                            }
-                            setTimeout(() => {
-                                window.location.href = '/manager';
-                            }, 500);
-                        } else {
-                            if (progressText) { progressText.textContent = '⚠️ Some components are still missing. Please try again.'; }
-                            try { if (window.openInfo) window.openInfo({ title:'Components Missing', message:'Some components are still missing. Please try again.', confirmText:'Close' }); } catch(_) {}
-                            if (progressFill) {
-                                progressFill.style.width = '0%';
-                            }
-                            setButtonsDisabled(false);
-                            if (progressContainer) {
-                                progressContainer.classList.add('active');
-                            }
-                            // Show pending list for remaining components
-                            if (installSection) installSection.classList.remove('hidden');
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error checking setup status:', error);
-                });
-        }
-
-        function fetchSetupProgress() {
-            fetch('/setup/progress')
-                .then(r => r.json())
-                .then(data => {
-                    renderSetupProgress(data);
-                    updateInstallList(data && Array.isArray(data.stages) ? data.stages : []);
-                    // If backend provides overall percent, reflect in bar
-                    if (typeof data.overall_percent === 'number' && progressFill) {
-                        const pct = Math.max(0, Math.min(100, data.overall_percent));
-                        progressFill.style.width = pct + '%';
-                    }
-                    // Ensure container visible when any activity or parsed state exists
-                    if (progressContainer) {
-                        const hasStages = Array.isArray(data.stages) && data.stages.length > 0;
-                        const anyActive = hasStages && data.stages.some(s => (s.status||'').toLowerCase() !== 'pending');
-                        if (data.in_progress || anyActive) {
-                            progressContainer.classList.add('active');
-                        }
-                    }
-                })
-                .catch(err => {
-                    // noop
-                });
-        }
-
-        function renderSetupProgress(data) {
-            const container = document.getElementById('progressDetails');
-            if (!container || !data || !Array.isArray(data.stages)) return;
-
-            const stageToIcon = (status) => {
-                switch ((status || '').toLowerCase()) {
-                    case 'completed': return '✅';
-                    case 'running': return '⏳';
-                    case 'error': return '⚠️';
-                    default: return '⏺️';
-                }
-            };
-
-            const rows = data.stages.map((s, idx) => {
-                const pct = typeof s.percent === 'number' ? Math.max(0, Math.min(100, s.percent)) : 0;
-                const icon = stageToIcon(s.status);
-                const status = s.status || 'Pending';
-                const stepNum = idx + 1;
-                const label = s.display_name || s.component;
-                return `
-                    <div class="progress-stage">
-                        <div class="progress-icon">${icon}</div>
-                        <div class="flex-1">
-                            <div class="progress-stage-header">
-                                <span><span class="step-badge">Step ${stepNum}</span> ${label}</span>
-                                <span>${status}${status.toLowerCase()==='running' && pct?` • ${pct}%`:''}</span>
-                            </div>
-                            <div class="progress-stage-bar">
-                                <div class="progress-stage-fill" style="width:${pct}%"></div>
-                            </div>
-                        </div>
-                    </div>`;
-            }).join('');
-
-            container.innerHTML = rows;
-        }
-
-        function updateInstallList(stages) {
-            const list = document.getElementById('install-list');
-            if (!list) return;
-            const items = list.querySelectorAll('li[data-component]');
-            if (!items || items.length === 0) return;
-
-            const byKey = new Map();
-            items.forEach(li => {
-                const key = (li.getAttribute('data-component') || '').toUpperCase();
-                if (key) byKey.set(key, li);
-            });
-
-            const ordered = [];
-            let step = 1;
-            if (Array.isArray(stages)) {
-                stages.forEach(s => {
-                    const key = (s.component || '').toUpperCase();
-                    const li = byKey.get(key);
-                    if (li) {
-                        const badge = li.querySelector('.step-badge');
-                        if (badge) badge.textContent = `Step ${step}`;
-                        ordered.push(li);
-                        byKey.delete(key);
-                        step++;
-                    }
-                });
-            }
-
-            // Append any remaining items not present in stages (fallback)
-            byKey.forEach(li => {
-                const badge = li.querySelector('.step-badge');
-                if (badge) badge.textContent = `Step ${step}`;
-                ordered.push(li);
-                step++;
-            });
-
-            // Rebuild the list in the new order
-            list.innerHTML = '';
-            ordered.forEach(li => list.appendChild(li));
-        }
-
-        // If user lands while an update is running, start polling immediately
-        (function init() {
-            // Always begin lightweight progress polling; it will show when data indicates activity
-            if (!setupProgressInterval) setupProgressInterval = setInterval(fetchSetupProgress, 2000);
-            fetchSetupProgress();
-            // If setup already running, also start status polling and animation
-            fetch('/setup/status')
-                .then(r => r.json())
-                .then(data => {
-                    if (data && data.inProgress) {
-                        if (progressContainer) progressContainer.classList.add('active');
-                        if (progressText) progressText.textContent = '⏳ Installing components, please wait...';
-                        startProgressAnimation();
-                        if (!statusCheckInterval) statusCheckInterval = setInterval(checkSetupStatus, 2000);
-                        if (installSection) installSection.classList.add('hidden');
-                        if (updatesHint) updatesHint.classList.add('hidden');
-                    } else {
-                        // Show section only if backend reports missing components
-                        const hasMissing = Array.isArray(data.missingComponents) && data.missingComponents.length > 0;
-                        if (installSection) installSection.classList.toggle('hidden', !hasMissing);
-                        // Seed update button visibility
-                        if (!updateBtn) { updateBtn = document.getElementById('updateBtn'); }
-                        if (updateBtn) updateBtn.classList.toggle('hidden', !data.updatesAvailable);
-                        if (updatesHint) updatesHint.classList.toggle('hidden', !data.updatesAvailable);
-                        // Prompt once if updates are available and we're idle
-                        maybePromptUpdates(data);
-                    }
-                }).catch(()=>{});
-        })();
-
-        function getStoredTheme() { return localStorage.getItem('theme') || 'dark'; }
-        function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = document.getElementById('theme-icon');
-            if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-        }
-        function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); setTheme(current === 'dark' ? 'light' : 'dark'); }
-        setTheme(getStoredTheme());
-
-        // If server rendered errors are present, surface them in a modal too
-        (function showInitialErrors(){
-            try {
-                if (errorBox && errorBox.classList.contains('active')) {
-                    const items = Array.from((errorList || document.createElement('ul')).querySelectorAll('li'))
-                        .map(li => (li.textContent || '').trim()).filter(Boolean);
-                    if (items.length) {
-                        if (window.openInfo) {
-                            window.openInfo({ title:'Setup Issues', message: items.join('\n'), confirmText:'Review' });
-                        } else if (window.alert) {
-                            window.alert(items.join('\n'));
-                        }
-                    }
-                }
-            } catch(_) { /* noop */ }
-        })();
-    </script>
-</body>
-</html>
+        <div class="action-buttons">
+            <form method="POST" action="/setup/skip" id="skipForm">
+                <button type="submit" class="btn btn-ghost" id="skipBtn">Skip for Now</button>
+            </form>
+            <button type="button" class="btn btn-setup" id="setupBtn" onclick="runSetup()">🚀 Start Setup</button>
+            <button type="button" class="btn btn-setup hidden" id="updateBtn" onclick="runUpdate()">⬆️ Update Components</button>
+        </div>
+    </div>
+</main>
+{{end}}

@@ -1,280 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>User Management - SDSM</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/modern.css">
-  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-  <link rel="icon" href="/sdsm.png" type="image/png">
-</head>
-<body class="page-shell">
-  <div class="container">
-    <header class="hero-card">
-      <div class="hero-main">
-        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-        <div class="hero-heading">
-          <h1 class="hero-title">User Management</h1>
-          <p class="hero-subtitle">Create, update, and remove local users and roles.</p>
+{{define "title"}}Users{{end}}
+
+{{define "content"}}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="page-title">User Management</h1>
         </div>
-      </div>
-      <div class="hero-actions row">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-          <span id="theme-icon">🌙</span>
-        </button>
-        <a href="/manager" class="btn btn-ghost">Back to Manager</a>
-        {{ template "user_menu" . }}
-      </div>
-    </header>
+    </div>
 
-  </div>
-
-  <main class="container manager-content">
-    {{ if .error }}
-    <div class="alert alert-danger" role="alert" id="users-inline-error">{{ .error }}</div>
-    {{ end }}
-
-    <section class="card p-4 mb-4">
-      <h2 class="h4 mb-3">Create User</h2>
-      <!-- API-only: neutralize legacy POST action; JS intercepts submit and calls /api/users -->
-      <form method="POST" action="#" class="users-create-grid" id="form-create-user" data-api-only="true">
-        <input type="hidden" name="create" value="1" />
-        <div>
-          <label class="form-label">Username</label>
-          <input name="new_username" id="new_username" class="form-input" placeholder="username" required />
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Users</h5>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="bi bi-plus-circle"></i> Add User
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Last Login</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="user-list">
+                                {{range .users}}
+                                    {{template "user_row.html" .}}
+                                {{end}}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div>
-          <label class="form-label">Password</label>
-          <input name="new_password" id="new_password" type="password" class="form-input" placeholder="password" required />
-        </div>
-        <div>
-          <label class="form-label">Role</label>
-          <select name="new_role" id="new_role" class="form-input">
-            <option value="admin">Admin</option>
-            <option value="operator" selected>Operator</option>
-          </select>
-        </div>
-        <div>
-          <button type="submit" id="btn-create-user" class="btn btn-primary">Add</button>
-        </div>
-      </form>
-    </section>
+    </div>
+</div>
 
-    <section class="card p-4">
-      <h2 class="h4 mb-3">Users</h2>
-      <div class="table-responsive">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Created</th>
-              <th class="w-160">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-          {{ range .users }}
-            <tr>
-              <td>{{ .Username }}</td>
-              <td>{{ .Role }}</td>
-              <td>{{ .CreatedAt }}</td>
-              <td>
-                <!-- API-only: neutral form, JS intercepts -->
-                <form method="POST" action="#" class="inline-flex gap-2 items-center form-set-role" data-username="{{ .Username }}" data-api-only="true">
-                  <input type="hidden" name="set_role_user" value="{{ .Username }}" />
-                  <select name="set_role_value" class="form-input w-160">
-                    <option value="admin" {{ if eq .Role "admin" }}selected{{ end }}>Admin</option>
-                    <option value="operator" {{ if eq .Role "operator" }}selected{{ end }}>Operator</option>
-                  </select>
-                  <button type="submit" class="btn btn-info">Update Role</button>
-                </form>
-                <!-- API-only: neutral form, JS intercepts -->
-                <form method="POST" action="#" class="inline-flex gap-2 items-center ml-2 form-reset-pass" data-username="{{ .Username }}" data-api-only="true">
-                  <input type="hidden" name="reset_password_user" value="{{ .Username }}" />
-                  <input name="reset_password_value" type="password" class="form-input w-160" placeholder="new password" />
-                  <button type="submit" class="btn btn-info">Set Password</button>
-                </form>
-                <!-- API-only: neutral form, JS intercepts -->
-                <form method="POST" action="#" class="inline ml-2 form-delete-user" data-username="{{ .Username }}" data-api-only="true">
-                  <button name="delete" value="{{ .Username }}" type="submit" class="btn btn-danger">Delete</button>
-                </form>
-              </td>
-            </tr>
-          {{ end }}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  {{ template "modal_templates" . }}
-  {{ template "modal_scripts" . }}
-
-  {{ template "footer" . }}
-
-  <script>
-    // API-only interactions for user management
-    (function(){
-      function askConfirm(options, fallbackMessage) {
-        try { if (window.openConfirm) return window.openConfirm(options); } catch(_) {}
-        return Promise.resolve(window.confirm(fallbackMessage));
-      }
-      function showToast(type, title, message) {
-        try { if (window.showToast) window.showToast({ type:type, title:title, message:message }); } catch(_) {}
-      }
-      function disable(btn, on){ if (!btn) return; btn.disabled = !!on; if(on) btn.setAttribute('aria-busy','true'); else btn.removeAttribute('aria-busy'); }
-
-      document.addEventListener('DOMContentLoaded', function(){
-        const createForm = document.getElementById('form-create-user');
-        const createBtn = document.getElementById('btn-create-user');
-        if (createForm) {
-          createForm.addEventListener('submit', function(e){
-            e.preventDefault();
-            const username = (document.getElementById('new_username')||{}).value || '';
-            const password = (document.getElementById('new_password')||{}).value || '';
-            const role = (document.getElementById('new_role')||{}).value || 'operator';
-            if (username.length < 3 || password.length < 8) {
-              showToast('error','Invalid Input','Username >=3 and password >=8 required.');
-              return;
-            }
-            disable(createBtn, true);
-            fetch('/api/users', {
-              method:'POST',
-              headers:{'Content-Type':'application/json','Accept':'application/json'},
-              credentials:'same-origin',
-              body: JSON.stringify({ username, password, role })
-            }).then(async res => {
-              if (!res.ok) {
-                let msg='Create failed';
-                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
-                showToast('error','Create Failed',msg);
-              } else {
-                showToast('success','User Created','User '+username+' added.');
-                // Reload user list (simplest approach: full reload)
-                setTimeout(()=>window.location.reload(), 400);
-              }
-            }).catch(()=>{ showToast('error','Network Error','Failed to contact server.'); })
-            .finally(()=>disable(createBtn,false));
-          });
-        }
-
-        // Role update forms
-        document.querySelectorAll('form.form-set-role').forEach(function(form){
-          form.addEventListener('submit', function(e){
-            e.preventDefault();
-            const username = form.getAttribute('data-username') || '';
-            const select = form.querySelector('select[name="set_role_value"]');
-            const role = select ? select.value : '';
-            const btn = form.querySelector('button[type="submit"]');
-            if (!username) return;
-            disable(btn,true);
-            fetch('/api/users/'+encodeURIComponent(username)+'/role', {
-              method:'PATCH',
-              headers:{'Content-Type':'application/json','Accept':'application/json'},
-              credentials:'same-origin',
-              body: JSON.stringify({ role })
-            }).then(async res => {
-              if (!res.ok) {
-                let msg='Update failed';
-                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
-                showToast('error','Role Update Failed',msg);
-              } else {
-                showToast('success','Role Updated','Role set to '+role+' for '+username+'.');
-              }
-            }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
-            .finally(()=> disable(btn,false));
-          });
-        });
-
-        // Password reset forms
-        document.querySelectorAll('form.form-reset-pass').forEach(function(form){
-          form.addEventListener('submit', function(e){
-            e.preventDefault();
-            const username = form.getAttribute('data-username') || '';
-            const input = form.querySelector('input[name="reset_password_value"]');
-            const password = input ? input.value : '';
-            const btn = form.querySelector('button[type="submit"]');
-            if (password.length < 8) { showToast('error','Invalid Password','Password must be at least 8 characters.'); return; }
-            disable(btn,true);
-            fetch('/api/users/'+encodeURIComponent(username)+'/reset-password', {
-              method:'POST',
-              headers:{'Content-Type':'application/json','Accept':'application/json'},
-              credentials:'same-origin',
-              body: JSON.stringify({ password })
-            }).then(async res => {
-              if (!res.ok) {
-                let msg='Reset failed';
-                try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
-                showToast('error','Password Reset Failed',msg);
-              } else {
-                showToast('success','Password Reset','Password updated for '+username+'.');
-                if (input) input.value='';
-              }
-            }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
-            .finally(()=> disable(btn,false));
-          });
-        });
-
-        // Delete user forms
-        document.querySelectorAll('form.form-delete-user').forEach(function(form){
-          form.addEventListener('submit', function(e){
-            e.preventDefault();
-            const username = form.getAttribute('data-username') || '';
-            const btn = form.querySelector('button[type="submit"]');
-            askConfirm({ title:'Delete User', message:'Delete user '+username+'?', confirmText:'Delete', cancelText:'Cancel', danger:true }, 'Delete user '+username+'?')
-              .then(function(ok){
-                if (!ok) return;
-                disable(btn,true);
-                fetch('/api/users/'+encodeURIComponent(username), {
-                  method:'DELETE',
-                  headers:{'Accept':'application/json'},
-                  credentials:'same-origin'
-                }).then(async res => {
-                  if (!res.ok) {
-                    let msg='Delete failed';
-                    try { const d=await res.json(); if(d && d.error) msg=d.error; } catch(_) {}
-                    showToast('error','Delete Failed',msg);
-                  } else {
-                    showToast('success','User Deleted','User '+username+' removed.');
-                    setTimeout(()=>window.location.reload(),400);
-                  }
-                }).catch(()=> showToast('error','Network Error','Failed to contact server.'))
-                .finally(()=> disable(btn,false));
-              });
-          });
-        });
-      });
-    })();
-
-    function getStoredTheme() {
-      return localStorage.getItem('theme') || 'dark';
-    }
-    function setTheme(theme) {
-      document.documentElement.setAttribute('data-theme', theme);
-      localStorage.setItem('theme', theme);
-      const icon = document.getElementById('theme-icon');
-      if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-    }
-    function toggleTheme() {
-      const current = document.documentElement.getAttribute('data-theme') || getStoredTheme();
-      setTheme(current === 'dark' ? 'light' : 'dark');
-    }
-    setTheme(getStoredTheme());
-
-    // Modalize initial error if present
-    try {
-      const inlineErr = document.getElementById('users-inline-error');
-      if (inlineErr) {
-        const msg = (inlineErr.textContent || '').trim();
-        if (msg) {
-          if (window.askInfo) window.askInfo({ title:'User Management Error', message: msg, confirmText:'Close' });
-          else if (window.openInfo) window.openInfo({ title:'User Management Error', message: msg, confirmText:'Close' });
-        }
-      }
-    } catch(_) {}
-  </script>
-</body>
-</html>
+{{template "user_modals.html" .}}
+{{end}}

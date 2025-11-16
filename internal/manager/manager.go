@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"runtime"
 	"sort"
@@ -33,6 +32,10 @@ import (
 	"sdsm/internal/models"
 	"sdsm/internal/utils"
 	"sdsm/steam"
+)
+
+const (
+	sconVersionCacheTTL = 5 * time.Minute
 )
 
 type DeployType string
@@ -155,8 +158,43 @@ type Manager struct {
 	// Discord integration
 	// DiscordDefaultWebhook is the per-manager default webhook for notifications (servers, updates)
 	DiscordDefaultWebhook string `json:"discord_default_webhook"`
-	// DiscordBugReportWebhook routes user-submitted bug reports to the SDSM community server
-	DiscordBugReportWebhook string `json:"discord_bug_report_webhook"`
+	// Notification preferences (manager defaults)
+	// NotifyEnableDeploy controls whether deployment/update notifications are sent to Discord.
+	NotifyEnableDeploy bool `json:"notify_enable_deploy"`
+	// NotifyEnableServer controls whether server lifecycle/update notifications are sent by default.
+	NotifyEnableServer bool `json:"notify_enable_server"`
+	// Per-event defaults for server notifications. Servers can override these individually.
+	NotifyOnStart           bool `json:"notify_on_start"`
+	NotifyOnStopping        bool `json:"notify_on_stopping"`
+	NotifyOnStopped         bool `json:"notify_on_stopped"`
+	NotifyOnRestart         bool `json:"notify_on_restart"`
+	NotifyOnUpdateStarted   bool `json:"notify_on_update_started"`
+	NotifyOnUpdateCompleted bool `json:"notify_on_update_completed"`
+	NotifyOnUpdateFailed    bool `json:"notify_on_update_failed"`
+	// Per-event message templates (tokens: {{server_name}}, {{event}}, {{detail}}, {{timestamp}})
+	NotifyMsgStart           string `json:"notify_msg_start"`
+	NotifyMsgStopping        string `json:"notify_msg_stopping"`
+	NotifyMsgStopped         string `json:"notify_msg_stopped"`
+	NotifyMsgRestart         string `json:"notify_msg_restart"`
+	NotifyMsgUpdateStarted   string `json:"notify_msg_update_started"`
+	NotifyMsgUpdateCompleted string `json:"notify_msg_update_completed"`
+	NotifyMsgUpdateFailed    string `json:"notify_msg_update_failed"`
+	// Per-event colors as hex strings (#RRGGBB); parsed at use-time. Fallback to defaults if invalid.
+	NotifyColorStart           string `json:"notify_color_start"`
+	NotifyColorStopping        string `json:"notify_color_stopping"`
+	NotifyColorStopped         string `json:"notify_color_stopped"`
+	NotifyColorRestart         string `json:"notify_color_restart"`
+	NotifyColorUpdateStarted   string `json:"notify_color_update_started"`
+	NotifyColorUpdateCompleted string `json:"notify_color_update_completed"`
+	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
+	// Deploy notification templates & colors (manager-wide)
+	// Tokens: {{component}}, {{duration}}, {{errors}}, {{status}}, {{timestamp}}
+	NotifyMsgDeployStarted        string `json:"notify_msg_deploy_started"`
+	NotifyMsgDeployCompleted      string `json:"notify_msg_deploy_completed"`
+	NotifyMsgDeployCompletedError string `json:"notify_msg_deploy_completed_error"`
+	NotifyColorDeployStarted        string `json:"notify_color_deploy_started"`
+	NotifyColorDeployCompleted      string `json:"notify_color_deploy_completed"`
+	NotifyColorDeployCompletedError string `json:"notify_color_deploy_completed_error"`
 	// Transient NAT/port forward status for manager port (not persisted)
 	ManagerPortForwardActive       bool          `json:"-"`
 	ManagerPortForwardExternalPort int           `json:"-"`
@@ -217,6 +255,10 @@ var progressOrder = []DeployType{
 	DeployTypeSCON,
 }
 
+// (Legacy removed) Previously: SDSMCommunityBugReportWebhook constant and related
+// backward compatibility code for a persistent bug report webhook field. The
+// bug report webhook is now a fixed value used only at submission time.
+
 func (dt DeployType) key() string {
 	return strings.ToLower(string(dt))
 }
@@ -256,7 +298,42 @@ func NewManagerWithConfig(configPath string) *Manager {
 		CookieSameSite:             "none",
 		AllowIFrame:                false,
 		WindowsDiscoveryWMIEnabled: true,
+		// Default notification preferences
+		NotifyEnableDeploy:        true,
+		NotifyEnableServer:        true,
+		NotifyOnStart:             true,
+		NotifyOnStopping:          true,
+		NotifyOnStopped:           true,
+		NotifyOnRestart:           true,
+		NotifyOnUpdateStarted:     true,
+		NotifyOnUpdateCompleted:   true,
+		NotifyOnUpdateFailed:      true,
+		// Default templates
+		NotifyMsgStart:           "Server {{server_name}} started.",
+		NotifyMsgStopping:        "Server {{server_name}} stopping.",
+		NotifyMsgStopped:         "Server {{server_name}} stopped.",
+		NotifyMsgRestart:         "Server {{server_name}} {{event}}.",
+		NotifyMsgUpdateStarted:   "Server {{server_name}} update started.",
+		NotifyMsgUpdateCompleted: "Server {{server_name}} update completed successfully.",
+		NotifyMsgUpdateFailed:    "Server {{server_name}} update failed.",
+		// Default colors (hex)
+		NotifyColorStart:           "#16A34A",
+		NotifyColorStopping:        "#F59E0B",
+		NotifyColorStopped:         "#DC2626",
+		NotifyColorRestart:         "#F59E0B",
+		NotifyColorUpdateStarted:   "#2563EB",
+		NotifyColorUpdateCompleted: "#16A34A",
+		NotifyColorUpdateFailed:    "#DC2626",
+		// Deploy templates/colors defaults
+		NotifyMsgDeployStarted:        "Deployment started: {{component}}.",
+		NotifyMsgDeployCompleted:      "Deployment completed: {{component}} in {{duration}}.",
+		NotifyMsgDeployCompletedError: "Deployment completed with errors: {{component}} in {{duration}} ({{errors}}).",
+		NotifyColorDeployStarted:        "#2563EB",
+		NotifyColorDeployCompleted:      "#16A34A",
+		NotifyColorDeployCompletedError: "#DC2626",
 	}
+
+	// (Legacy removed) Bug report webhook field initialization removed.
 
 	for _, deployType := range progressOrder {
 		m.progressByType[deployType] = &UpdateProgress{
@@ -833,20 +910,17 @@ func (m *Manager) IsActive() bool {
 	return m.Active
 }
 
+func (m *Manager) BuildTime() string {
+	return "dev"
+}
+
 func (m *Manager) safeLog(message string) {
 	if m.Log != nil {
 		m.Log.Write(message)
-		return
 	}
-	// Fallback: write directly to default SDSM log location when manager logger not initialized
-	utils.NewLogger("").Write(message)
 }
 
 func (m *Manager) startLogs() {
-	if m.Paths == nil {
-		// Initialize with default paths if not set
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
 	if err := os.MkdirAll(m.Paths.LogsDir(), 0o755); err != nil {
 		m.safeLog(fmt.Sprintf("Unable to create logs directory %s: %v", m.Paths.LogsDir(), err))
 	}
@@ -889,9 +963,6 @@ func (m *Manager) LastUpdateLogLine() string {
 }
 
 func (m *Manager) initializeServers() {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
 	// Perform best-effort process discovery before per-server initialization when detached mode is enabled.
 	var discovered map[int]int
 	if m.DetachedServers {
@@ -912,28 +983,21 @@ func (m *Manager) initializeServers() {
 		}
 		srv.EnsureLogger(m.Paths)
 
-		// Attempt to attach via process discovery first; fallback to PID file if necessary.
+		// Apply legacy-safe defaults for notification prefs: if fields are all zero-values,
+		// prefer manager defaults and enable notifications.
+		if !srv.NotifyUseManagerDefaults && strings.TrimSpace(srv.DiscordWebhook) == "" && !srv.NotifyEnable && !srv.NotifyOnStart && !srv.NotifyOnStopping && !srv.NotifyOnStopped && !srv.NotifyOnRestart && !srv.NotifyOnUpdateStarted && !srv.NotifyOnUpdateCompleted && !srv.NotifyOnUpdateFailed {
+			srv.NotifyUseManagerDefaults = true
+			srv.NotifyEnable = true
+		}
+		// No explicit templates/colors -> leave empty to inherit.
+
+		// Attach via process discovery if detached mode enabled
 		if m.DetachedServers {
 			if pid, ok := discovered[srv.ID]; ok && pid > 0 && models.IsPidAlive(pid) {
 				srv.AttachToRunning(pid)
-				m.safeLog(fmt.Sprintf("Attached (discovered) detached server %s (ID:%d) PID %d", srv.Name, srv.ID, pid))
+				m.safeLog(fmt.Sprintf("Attached detached server %s (ID:%d) PID %d", srv.Name, srv.ID, pid))
 				if m.OnServerAttached != nil {
 					m.OnServerAttached(srv)
-				}
-			} else {
-				// Fallback to PID file method for backward compatibility / Windows stub.
-				pidPath := m.Paths.ServerPIDFile(srv.ID)
-				if data, err := os.ReadFile(pidPath); err == nil {
-					pidStr := strings.TrimSpace(string(data))
-					if pid, perr := strconv.Atoi(pidStr); perr == nil && pid > 0 {
-						if models.IsPidAlive(pid) {
-							srv.AttachToRunning(pid)
-							m.safeLog(fmt.Sprintf("Attached (pidfile) detached server %s (ID:%d) PID %d", srv.Name, srv.ID, pid))
-							if m.OnServerAttached != nil {
-								m.OnServerAttached(srv)
-							}
-						}
-					}
 				}
 			}
 		}
@@ -965,6 +1029,14 @@ func (m *Manager) bootstrapDefaultConfig(configPath, rootPath string) error {
 	}
 
 	return nil
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
 }
 
 // load reads configuration from disk and rebuilds in-memory state.
@@ -1020,7 +1092,41 @@ func (m *Manager) load() (bool, error) {
 	m.SCONURLWindowsOverride = strings.TrimSpace(temp.SCONURLWindowsOverride)
 	// Discord integration fields
 	m.DiscordDefaultWebhook = strings.TrimSpace(temp.DiscordDefaultWebhook)
-	m.DiscordBugReportWebhook = strings.TrimSpace(temp.DiscordBugReportWebhook)
+	// Notification preferences (manager defaults)
+	m.NotifyEnableDeploy = temp.NotifyEnableDeploy
+	m.NotifyEnableServer = temp.NotifyEnableServer
+	m.NotifyOnStart = temp.NotifyOnStart
+	m.NotifyOnStopping = temp.NotifyOnStopping
+	m.NotifyOnStopped = temp.NotifyOnStopped
+	m.NotifyOnRestart = temp.NotifyOnRestart
+	m.NotifyOnUpdateStarted = temp.NotifyOnUpdateStarted
+	m.NotifyOnUpdateCompleted = temp.NotifyOnUpdateCompleted
+	m.NotifyOnUpdateFailed = temp.NotifyOnUpdateFailed
+	// Message templates (empty -> keep existing defaults)
+	if strings.TrimSpace(temp.NotifyMsgStart) != "" { m.NotifyMsgStart = strings.TrimSpace(temp.NotifyMsgStart) }
+	if strings.TrimSpace(temp.NotifyMsgStopping) != "" { m.NotifyMsgStopping = strings.TrimSpace(temp.NotifyMsgStopping) }
+	if strings.TrimSpace(temp.NotifyMsgStopped) != "" { m.NotifyMsgStopped = strings.TrimSpace(temp.NotifyMsgStopped) }
+	if strings.TrimSpace(temp.NotifyMsgRestart) != "" { m.NotifyMsgRestart = strings.TrimSpace(temp.NotifyMsgRestart) }
+	if strings.TrimSpace(temp.NotifyMsgUpdateStarted) != "" { m.NotifyMsgUpdateStarted = strings.TrimSpace(temp.NotifyMsgUpdateStarted) }
+	if strings.TrimSpace(temp.NotifyMsgUpdateCompleted) != "" { m.NotifyMsgUpdateCompleted = strings.TrimSpace(temp.NotifyMsgUpdateCompleted) }
+	if strings.TrimSpace(temp.NotifyMsgUpdateFailed) != "" { m.NotifyMsgUpdateFailed = strings.TrimSpace(temp.NotifyMsgUpdateFailed) }
+	// Colors (validate basic format #RRGGBB)
+	validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
+	if validColor(temp.NotifyColorStart) { m.NotifyColorStart = strings.TrimSpace(temp.NotifyColorStart) }
+	if validColor(temp.NotifyColorStopping) { m.NotifyColorStopping = strings.TrimSpace(temp.NotifyColorStopping) }
+	if validColor(temp.NotifyColorStopped) { m.NotifyColorStopped = strings.TrimSpace(temp.NotifyColorStopped) }
+	if validColor(temp.NotifyColorRestart) { m.NotifyColorRestart = strings.TrimSpace(temp.NotifyColorRestart) }
+	if validColor(temp.NotifyColorUpdateStarted) { m.NotifyColorUpdateStarted = strings.TrimSpace(temp.NotifyColorUpdateStarted) }
+	if validColor(temp.NotifyColorUpdateCompleted) { m.NotifyColorUpdateCompleted = strings.TrimSpace(temp.NotifyColorUpdateCompleted) }
+	if validColor(temp.NotifyColorUpdateFailed) { m.NotifyColorUpdateFailed = strings.TrimSpace(temp.NotifyColorUpdateFailed) }
+	// Deploy templates/colors (only override when provided & valid)
+	if strings.TrimSpace(temp.NotifyMsgDeployStarted) != "" { m.NotifyMsgDeployStarted = strings.TrimSpace(temp.NotifyMsgDeployStarted) }
+	if strings.TrimSpace(temp.NotifyMsgDeployCompleted) != "" { m.NotifyMsgDeployCompleted = strings.TrimSpace(temp.NotifyMsgDeployCompleted) }
+	if strings.TrimSpace(temp.NotifyMsgDeployCompletedError) != "" { m.NotifyMsgDeployCompletedError = strings.TrimSpace(temp.NotifyMsgDeployCompletedError) }
+	if validColor(temp.NotifyColorDeployStarted) { m.NotifyColorDeployStarted = strings.TrimSpace(temp.NotifyColorDeployStarted) }
+	if validColor(temp.NotifyColorDeployCompleted) { m.NotifyColorDeployCompleted = strings.TrimSpace(temp.NotifyColorDeployCompleted) }
+	if validColor(temp.NotifyColorDeployCompletedError) { m.NotifyColorDeployCompletedError = strings.TrimSpace(temp.NotifyColorDeployCompletedError) }
+	// (Legacy removed) Bug report webhook field load-time override removed.
 	// Default false when missing (zero value already false). Propagate to servers.
 	for _, srv := range m.Servers {
 		if srv != nil {
@@ -1266,9 +1372,6 @@ func (m *Manager) InstallTLSFromSources(certSrc, keySrc string) (string, string,
 	if len(preErrs) > 0 {
 		return "", "", errors.New(strings.Join(preErrs, "; "))
 	}
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
 	// Normalize inputs
 	certSrc = strings.TrimSpace(certSrc)
 	keySrc = strings.TrimSpace(keySrc)
@@ -1372,6 +1475,12 @@ func samePath(a, b string) bool {
 		br = strings.ToLower(br)
 	}
 	return ar == br
+}
+
+func (m *Manager) fetchSCONLatestVersion() (string, error) {
+	s := steam.NewSteam(m.SteamID, m.UpdateLog, m.Paths)
+	s.SetSCONOverrides(m.SCONRepoOverride, m.SCONURLLinuxOverride, m.SCONURLWindowsOverride)
+	return s.GetSCONLatestTag()
 }
 
 func (m *Manager) UpdateConfig(steamID, rootPath string, port int, updateTime time.Time, startupUpdate bool) {
@@ -1665,6 +1774,89 @@ func (m *Manager) IsUpdating() bool {
 	return m.Updating
 }
 
+func (m *Manager) ServerByID(id int) *models.Server {
+	for _, s := range m.Servers {
+		if s.ID == id {
+			return s
+		}
+	}
+	return nil
+}
+
+func (m *Manager) ServerCount() int {
+	return len(m.Servers)
+}
+
+func (m *Manager) GetNextAvailablePort(start int) int {
+	if start <= 0 {
+		start = 27016
+	}
+	port := start
+	for {
+		available := true
+		for _, s := range m.Servers {
+			if s.Port == port {
+				available = false
+				break
+			}
+		}
+		if available {
+			return port
+		}
+		port++
+	}
+}
+
+func (m *Manager) ServerCountActive() int {
+	return m.ActiveServerCount()
+}
+
+func (m *Manager) GetTotalPlayers() int {
+	total := 0
+	for _, s := range m.Servers {
+		total += s.ClientCount()
+	}
+	return total
+}
+
+func (m *Manager) GetMissingComponents() []string {
+	return m.MissingComponents
+}
+
+func (m *Manager) IsServerNameAvailable(name string, excludeID int) bool {
+	for _, s := range m.Servers {
+		if s.ID == excludeID {
+			continue
+		}
+		if strings.EqualFold(s.Name, name) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Manager) IsPortAvailable(port int, excludeID int) bool {
+	for _, s := range m.Servers {
+		if s.ID == excludeID {
+			continue
+		}
+		if s.Port == port {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Manager) ActiveServerCount() int {
+	count := 0
+	for _, s := range m.Servers {
+		if s.IsRunning() {
+			count++
+		}
+	}
+	return count
+}
+
 func (m *Manager) Shutdown() {
 	// Allow HTTP response to complete before shutting down
 	time.Sleep(1000 * time.Millisecond)
@@ -1811,8 +2003,6 @@ func (m *Manager) ResolveWorldID(world string, beta bool) string {
 
 // getGameDataPathForVersion resolves the best game data path for the selected channel.
 func (m *Manager) getGameDataPathForVersion(beta bool) string {
-	m.ensurePaths()
-
 	releasePath := filepath.Join(m.Paths.ReleaseDir(), "rocketstation_DedicatedServer_Data")
 	betaPath := filepath.Join(m.Paths.BetaDir(), "rocketstation_DedicatedServer_Data")
 	rootPath := filepath.Join(m.Paths.RootPath, "rocketstation_DedicatedServer_Data")
@@ -1841,14 +2031,6 @@ func (m *Manager) getGameDataPathForVersion(beta bool) string {
 	}
 
 	return releasePath
-}
-
-// ensurePaths guarantees that m.Paths is non-nil and returns it.
-func (m *Manager) ensurePaths() *utils.Paths {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
-	return m.Paths
 }
 
 // GetDifficulties returns difficulty IDs for the release channel.
@@ -2969,186 +3151,6 @@ func (m *Manager) LaunchPadDeployed() string {
 	return version
 }
 
-// SCONLatest returns the latest tagged version for the SCON plugin from its GitHub repo.
-// Repo can be overridden via configuration field SCONRepoOverride (format: owner/repo).
-func (m *Manager) SCONLatest() string {
-	m.sconLatestMu.RLock()
-	cached := m.sconLatest
-	cachedAt := m.sconLatestAt
-	m.sconLatestMu.RUnlock()
-
-	if cached != "" && time.Since(cachedAt) < sconLatestCacheTTL {
-		return cached
-	}
-
-	version, err := m.fetchSCONLatestVersion()
-	if err != nil {
-		m.safeLog(fmt.Sprintf("Failed to fetch latest SCON version: %v", err))
-		if cached != "" {
-			return cached
-		}
-		version = "Unknown"
-	} else {
-		m.safeLog(fmt.Sprintf("SCON latest version reported: %s", version))
-	}
-
-	m.sconLatestMu.Lock()
-	m.sconLatest = version
-	m.sconLatestAt = time.Now()
-	m.sconLatestMu.Unlock()
-	return version
-}
-
-// SCONDeployed returns a coarse deployed state for SCON: Installed/Missing/Error.
-func (m *Manager) SCONDeployed() string {
-	// Prefer a persisted version file if present
-	if ver := m.readPersistedSCONVersion(); ver != "" {
-		m.sconMu.Lock()
-		m.sconVersion = ver
-		m.sconChecked = time.Now()
-		m.sconMu.Unlock()
-		return ver
-	}
-
-	m.sconMu.RLock()
-	cached := m.sconVersion
-	cachedAt := m.sconChecked
-	m.sconMu.RUnlock()
-
-	if cached != "" && time.Since(cachedAt) < launchPadVersionCacheTTL {
-		return cached
-	}
-
-	state, err := m.detectSCONInstalled()
-	if err != nil {
-		state = "Error"
-		m.safeLog(fmt.Sprintf("SCON deploy check failed: %v", err))
-	}
-
-	m.sconMu.Lock()
-	m.sconVersion = state
-	m.sconChecked = time.Now()
-	m.sconMu.Unlock()
-	return state
-}
-
-// readPersistedSCONVersion reads the stored SCON version from bin/SCON/scon.version when available.
-// The value is expected to match the GitHub tag (often prefixed with 'v'), which helps equality checks
-// against SCONLatest(). Returns empty string when the file does not exist or is invalid.
-func (m *Manager) readPersistedSCONVersion() string {
-	if m.Paths == nil {
-		return ""
-	}
-	versionFile := filepath.Join(m.Paths.SCONDir(), sconVersionFile)
-	data, err := os.ReadFile(versionFile)
-	if err != nil {
-		return ""
-	}
-	value := strings.TrimSpace(string(data))
-	if value == "" {
-		return ""
-	}
-	// Keep as-is (including a leading 'v') to match GitHub tags used by SCONLatest()
-	// Limit to a sensible single-line token
-	if idx := strings.IndexAny(value, " \t\r\n"); idx >= 0 {
-		value = strings.TrimSpace(value[:idx])
-	}
-	return value
-}
-
-func (m *Manager) detectSCONInstalled() (string, error) {
-	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
-	sconDir := m.Paths.SCONDir()
-	entries, err := os.ReadDir(sconDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "Missing", nil
-		}
-		return "Error", err
-	}
-	if len(entries) == 0 {
-		return "Missing", nil
-	}
-	// Quick scan: any DLL with name containing "scon" or any file presence
-	for _, e := range entries {
-		if e.IsDir() {
-			// Look one level deep for DLLs in subdir that include scon
-			sub := filepath.Join(sconDir, e.Name())
-			_ = filepath.WalkDir(sub, func(path string, d fs.DirEntry, werr error) error {
-				if werr != nil || d == nil || d.IsDir() {
-					return nil
-				}
-				name := strings.ToLower(d.Name())
-				if strings.HasSuffix(name, ".dll") && strings.Contains(name, "scon") {
-					// Found a likely SCON dll
-					err = nil
-					// Use err return to short-circuit walk quietly
-					return io.EOF
-				}
-				return nil
-			})
-			if err == io.EOF {
-				return "Installed", nil
-			}
-			// If folder contains any non-dir file, consider installed
-			files, _ := os.ReadDir(sub)
-			for _, f := range files {
-				if !f.IsDir() {
-					return "Installed", nil
-				}
-			}
-		} else {
-			name := strings.ToLower(e.Name())
-			if strings.HasSuffix(name, ".dll") && strings.Contains(name, "scon") {
-				return "Installed", nil
-			}
-			// Any file counts as installed
-			return "Installed", nil
-		}
-	}
-	return "Missing", nil
-}
-
-func (m *Manager) fetchSCONLatestVersion() (string, error) {
-	repo := strings.TrimSpace(m.SCONRepoOverride)
-	if repo == "" {
-		// Default repo
-		repo = "JonVT/SCON"
-	}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "sdsm-manager/1.0")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("github responded with %s", resp.Status)
-	}
-
-	var payload struct {
-		TagName string `json:"tag_name"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return "", err
-	}
-	version := strings.TrimSpace(payload.TagName)
-	if version == "" {
-		return "", fmt.Errorf("github response missing tag_name")
-	}
-	return version, nil
-}
-
 func (m *Manager) fetchLaunchPadDeployedVersion() (string, error) {
 	if m.Paths == nil {
 		m.Paths = utils.NewPaths("/tmp/sdsm")
@@ -3196,6 +3198,136 @@ func (m *Manager) fetchLaunchPadDeployedVersion() (string, error) {
 	}
 
 	return version, nil
+}
+
+// SCONLatest returns the latest tagged version for the SCON plugin from its GitHub repo.
+// Repo can be overridden via configuration field SCONRepoOverride (format: owner/repo).
+func (m *Manager) SCONLatest() string {
+	m.sconLatestMu.RLock()
+	cached := m.sconLatest
+	cachedAt := m.sconLatestAt
+	m.sconLatestMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < sconLatestCacheTTL {
+		return cached
+	}
+
+	version, err := m.fetchSCONLatestVersion()
+	if err != nil {
+		m.safeLog(fmt.Sprintf("Failed to fetch latest SCON version: %v", err))
+		if cached != "" {
+			return cached
+		}
+		version = "Unknown"
+	} else {
+		m.safeLog(fmt.Sprintf("SCON latest version reported: %s", version))
+	}
+
+	m.sconLatestMu.Lock()
+	m.sconLatest = version
+	m.sconLatestAt = time.Now()
+	m.sconLatestMu.Unlock()
+
+	return version
+}
+
+func (m *Manager) SCONDeployed() string {
+	m.sconMu.RLock()
+	cached := m.sconVersion
+	cachedAt := m.sconChecked
+	m.sconMu.RUnlock()
+
+	if cached != "" && time.Since(cachedAt) < sconVersionCacheTTL {
+		return cached
+	}
+
+	version, err := m.fetchSCONDeployedVersion()
+	if err != nil {
+		result := "Error"
+		if errors.Is(err, os.ErrNotExist) {
+			result = "Missing"
+		} else {
+			m.safeLog(fmt.Sprintf("Failed to determine SCON deployed version: %v", err))
+		}
+
+		m.sconMu.Lock()
+		m.sconVersion = result
+		m.sconChecked = time.Now()
+		m.sconMu.Unlock()
+		return result
+	}
+
+	m.safeLog(fmt.Sprintf("SCON deployed version: %s", version))
+	m.sconMu.Lock()
+	m.sconVersion = version
+	m.sconChecked = time.Now()
+	m.sconMu.Unlock()
+
+	return version
+}
+
+func (m *Manager) fetchSCONDeployedVersion() (string, error) {
+	sconPath := m.Paths.SCONReleaseDir()
+	if _, err := os.Stat(sconPath); err != nil {
+		return "", err
+	}
+
+	versionFile := filepath.Join(sconPath, "version.txt")
+	if _, err := os.Stat(versionFile); err != nil {
+		return "", err
+	}
+
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(data)), nil
+}
+
+func (m *Manager) CheckMissingComponents() {
+	m.MissingComponents = []string{}
+	if m.SteamCmdDeployed() == "Missing" {
+		m.MissingComponents = append(m.MissingComponents, "SteamCMD")
+	}
+	if m.ReleaseDeployed() == "Missing" && m.BetaDeployed() == "Missing" {
+		m.MissingComponents = append(m.MissingComponents, "RocketStation Dedicated Server")
+	}
+	if len(m.MissingComponents) > 0 {
+		m.NeedsUploadPrompt = true
+	}
+}
+
+func (m *Manager) fetchSteamCmdVersion() (string, error) {
+	if m.Paths == nil {
+		m.Paths = utils.NewPaths("/tmp/sdsm")
+	}
+
+	steamCmdFile := "steamcmd.sh"
+	if runtime.GOOS == "windows" {
+		steamCmdFile = "steamcmd.exe"
+	}
+
+	steamCmdPath := filepath.Join(m.Paths.SteamDir(), steamCmdFile)
+	if _, err := os.Stat(steamCmdPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", os.ErrNotExist
+		}
+		return "", err
+	}
+
+	cmd := exec.Command(steamCmdPath, "+quit")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+
+	matches := steamCmdVersionPattern.FindSubmatch(output)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("unable to parse SteamCMD version")
+	}
+
+	return string(matches[1]), nil
 }
 
 func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
@@ -3319,62 +3451,36 @@ func extractLaunchPadVersionFromDLL(path string) string {
 }
 
 func findVersionNearAnchor(data, anchor []byte) string {
-	search := 0
-	for search < len(data) {
-		idx := bytes.Index(data[search:], anchor)
-		if idx == -1 {
-			break
-		}
-		idx += search
-		start := idx - 64
-		if start < 0 {
-			start = 0
-		}
-		end := idx + len(anchor) + 256
-		if end > len(data) {
-			end = len(data)
-		}
-
-		if match := launchPadVersionPattern.Find(data[start:end]); match != nil {
-			return string(match)
-		}
-
-		search = idx + len(anchor)
+	idx := bytes.Index(bytes.ToLower(data), bytes.ToLower(anchor))
+	if idx < 0 {
+		return ""
 	}
+
+	dataLen := len(data)
+	searchStart := idx - 256
+	if searchStart < 0 {
+		searchStart = 0
+	}
+	if searchStart >= dataLen {
+		searchStart = dataLen
+	}
+	
+	searchEnd := idx + len(anchor) + 256
+	if searchEnd > dataLen {
+		searchEnd = dataLen
+	}
+	
+	// Ensure valid slice bounds
+	if searchStart >= searchEnd {
+		return ""
+	}
+
+	region := data[searchStart:searchEnd]
+	if match := launchPadVersionPattern.Find(region); match != nil {
+		return string(match)
+	}
+
 	return ""
-}
-
-func (m *Manager) fetchSteamCmdVersion() (string, error) {
-	executable := "steamcmd.sh"
-	if runtime.GOOS == "windows" {
-		executable = "steamcmd.exe"
-	}
-
-	steamCmdPath := filepath.Join(m.Paths.SteamDir(), executable)
-	if _, err := os.Stat(steamCmdPath); err != nil {
-		return "", err
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	m.safeLog(fmt.Sprintf("Executing command: %s %s", steamCmdPath, "+quit"))
-	cmd := exec.CommandContext(ctx, steamCmdPath, "+quit")
-	cmd.Dir = filepath.Dir(steamCmdPath)
-	output, err := cmd.CombinedOutput()
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", ctx.Err()
-	}
-	if err != nil {
-		return "", fmt.Errorf("steamcmd execution failed: %w", err)
-	}
-
-	matches := steamCmdVersionPattern.FindStringSubmatch(string(output))
-	if len(matches) != 2 {
-		return "", fmt.Errorf("unable to parse SteamCMD version")
-	}
-
-	return matches[1], nil
 }
 
 func (m *Manager) fetchBepInExVersion() (string, error) {
@@ -3422,53 +3528,66 @@ func (m *Manager) fetchBepInExVersion() (string, error) {
 
 func extractBepInExVersion(data []byte) string {
 	matches := bepinexVersionPattern.FindAll(data, -1)
-	best := ""
-	bestScore := -1
-	for _, match := range matches {
-		candidate := string(match)
-		if !isLikelyBepInExVersion(candidate) {
+	if len(matches) == 0 {
+		return ""
+	}
+
+	var best string
+	bestConf := 0
+
+	for _, m := range matches {
+		version := string(m)
+		if !isLikelyBepInExVersion(version) {
 			continue
 		}
-		score := bepInExVersionConfidence(candidate)
-		if score > bestScore || (score == bestScore && compareVersionStrings(candidate, best) > 0) {
-			best = candidate
-			bestScore = score
+		conf := bepInExVersionConfidence(version)
+		if conf > bestConf {
+			best = version
+			bestConf = conf
 		}
 	}
+
 	return best
 }
 
 func isLikelyBepInExVersion(version string) bool {
-	if strings.Count(version, ".") != 3 {
+	if version == "" {
 		return false
 	}
 	major, ok := bepInExMajor(version)
-	if !ok || major <= 0 {
+	if !ok {
 		return false
 	}
-	return true
+	return major >= 5 && major <= 7
 }
 
 func bepInExVersionConfidence(version string) int {
+	score := 0
 	major, ok := bepInExMajor(version)
 	if !ok {
 		return 0
 	}
-	switch {
-	case major == 5 || major == 6:
-		return 3
-	case major > 0 && major <= 9:
-		return 2
-	case major < 100:
-		return 1
-	default:
-		return 0
+
+	if major == 5 {
+		score += 10
+	} else if major == 6 {
+		score += 8
 	}
+
+	parts := strings.Split(version, ".")
+	if len(parts) == 4 {
+		score += 5
+	}
+
+	return score
 }
 
 func bepInExMajor(version string) (int, bool) {
+	if version == "" {
+		return 0, false
+	}
 	parts := strings.Split(version, ".")
-	if len(parts) != 4 {
+	if len(parts) < 1 {
 		return 0, false
 	}
 	major, err := strconv.Atoi(parts[0])
@@ -3512,228 +3631,16 @@ func sanitizeBepInExVersionString(value string) string {
 	return value
 }
 
-func compareVersionStrings(a, b string) int {
-	partsA := strings.Split(a, ".")
-	partsB := strings.Split(b, ".")
-	maxLen := len(partsA)
-	if len(partsB) > maxLen {
-		maxLen = len(partsB)
-	}
-
-	for len(partsA) < maxLen {
-		partsA = append(partsA, "0")
-	}
-	for len(partsB) < maxLen {
-		partsB = append(partsB, "0")
-	}
-
-	for i := 0; i < maxLen; i++ {
-		aVal, _ := strconv.Atoi(partsA[i])
-		bVal, _ := strconv.Atoi(partsB[i])
-		if aVal > bVal {
-			return 1
-		}
-		if aVal < bVal {
-			return -1
-		}
-	}
-
-	return 0
-}
-
-// CheckMissingComponents checks for missing SteamCMD, game files, and BepInEx
-func (m *Manager) CheckMissingComponents() {
-	m.deployMu.Lock()
-	defer m.deployMu.Unlock()
-
-	previous := append([]string(nil), m.MissingComponents...)
-	m.MissingComponents = []string{}
-	var missingDetails []string
-
-	steamCmdBinary := "steamcmd.sh"
-	releaseBinary := "rocketstation_DedicatedServer.x86_64"
-	if runtime.GOOS == "windows" {
-		steamCmdBinary = "steamcmd.exe"
-		releaseBinary = "rocketstation_DedicatedServer.exe"
-	}
-
-	// Check for SteamCMD
-	steamCmdPath := filepath.Join(m.Paths.SteamDir(), steamCmdBinary)
-	if _, err := os.Stat(steamCmdPath); os.IsNotExist(err) {
-		m.MissingComponents = append(m.MissingComponents, "SteamCMD")
-		missingDetails = append(missingDetails, fmt.Sprintf("SteamCMD expected at %s", steamCmdPath))
-	}
-
-	// Check for Stationeers game files (Release)
-	releasePath := filepath.Join(m.Paths.ReleaseDir(), releaseBinary)
-	if _, err := os.Stat(releasePath); os.IsNotExist(err) {
-		m.MissingComponents = append(m.MissingComponents, "Stationeers Release")
-		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers release binary expected at %s", releasePath))
-	}
-
-	// Check for Stationeers game files (Beta)
-	betaPath := filepath.Join(m.Paths.BetaDir(), releaseBinary)
-	if _, err := os.Stat(betaPath); os.IsNotExist(err) {
-		m.MissingComponents = append(m.MissingComponents, "Stationeers Beta")
-		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers beta binary expected at %s", betaPath))
-	}
-
-	// Check for BepInEx
-	if !m.hasBepInExInstall() {
-		m.MissingComponents = append(m.MissingComponents, "BepInEx")
-		missingDetails = append(missingDetails, fmt.Sprintf("BepInEx files expected under %s", m.Paths.BepInExDir()))
-	}
-
-	// Check for StationeersLaunchPad (ensure directory contains files)
-	launchPadDir := m.Paths.LaunchPadDir()
-	if entries, err := os.ReadDir(launchPadDir); err != nil || len(entries) == 0 {
-		m.MissingComponents = append(m.MissingComponents, "Stationeers LaunchPad")
-		missingDetails = append(missingDetails, fmt.Sprintf("Stationeers LaunchPad expected at %s", launchPadDir))
-	}
-
-	// Check for SCON plugin presence (optional, but include in setup to avoid confusion)
-	// If SCON is missing, we surface it in missing components so setup can fetch it
-	// and redeploy servers to copy into BepInEx/plugins.
-	if state := m.SCONDeployed(); state == "Missing" {
-		m.MissingComponents = append(m.MissingComponents, "SCON")
-		missingDetails = append(missingDetails, fmt.Sprintf("SCON files expected under %s", m.Paths.SCONDir()))
-	}
-
-	changed := !reflect.DeepEqual(previous, m.MissingComponents)
-
-	if len(m.MissingComponents) > 0 {
-		m.NeedsUploadPrompt = true
-		if changed {
-			m.Log.Write(fmt.Sprintf("Missing components detected: %v", m.MissingComponents))
-			for _, detail := range missingDetails {
-				m.Log.Write("- " + detail)
-			}
-		}
-	} else {
-		m.NeedsUploadPrompt = false
-		if changed {
-			m.Log.Write("All required components detected")
-		}
-	}
-}
-
-func (m *Manager) GetMissingComponents() []string {
-	m.deployMu.Lock()
-	defer m.deployMu.Unlock()
-	if len(m.MissingComponents) == 0 {
-		return []string{}
-	}
-	comps := make([]string, len(m.MissingComponents))
-	copy(comps, m.MissingComponents)
-	return comps
-}
-
-func (m *Manager) hasBepInExInstall() bool {
-	m.ensurePaths()
-
-	for _, candidate := range m.bepInExCandidateFiles() {
-		if candidate == "" {
-			continue
-		}
-		if _, err := os.Stat(candidate); err == nil {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (m *Manager) bepInExCandidateFiles() []string {
-	m.ensurePaths()
-
-	var candidates []string
-	root := m.Paths.BepInExDir()
-	if root != "" {
-		candidates = append(candidates,
-			filepath.Join(root, "BepInEx", "core", "BepInEx.dll"),
-			filepath.Join(root, "BepInEx", "core", "BepInEx.Preloader.dll"),
-			filepath.Join(root, "doorstop_config.ini"),
-		)
+	if m.Paths == nil {
+		return nil
 	}
-
-	return uniqueStrings(candidates)
-}
-
-func (m *Manager) ServerCount() int {
-	return len(m.Servers)
-}
-
-func (m *Manager) ServerCountActive() int {
-	count := 0
-	for _, s := range m.Servers {
-		if s.IsRunning() {
-			count++
-		}
+	dir := m.Paths.BepInExDir()
+	return []string{
+		filepath.Join(dir, "core", "BepInEx.dll"),
+		filepath.Join(dir, "BepInEx.dll"),
+		filepath.Join(dir, "core", "BepInEx.Preloader.dll"),
+		filepath.Join(dir, "BepInEx.Preloader.dll"),
 	}
-	return count
 }
 
-func (m *Manager) ServerByID(id int) *models.Server {
-	for _, srv := range m.Servers {
-		if srv != nil && srv.ID == id {
-			return srv
-		}
-	}
-	return nil
-}
-
-func (m *Manager) GetTotalPlayers() int {
-	total := 0
-	for _, server := range m.Servers {
-		total += server.ClientCount()
-	}
-	return total
-}
-
-// IsPortAvailable checks if a port is available (not used by any server and at least 3 ports away)
-func (m *Manager) IsPortAvailable(port int, excludeServerID int) bool {
-	for _, srv := range m.Servers {
-		if srv.ID == excludeServerID {
-			continue
-		}
-		// Check if port conflicts or is within 3 ports of existing server
-		if abs(srv.Port-port) < 3 {
-			return false
-		}
-	}
-	return true
-}
-
-// IsServerNameAvailable checks if a server name is unique
-func (m *Manager) IsServerNameAvailable(name string, excludeServerID int) bool {
-	for _, srv := range m.Servers {
-		if srv.ID == excludeServerID {
-			continue
-		}
-		if srv.Name == name {
-			return false
-		}
-	}
-	return true
-}
-
-// GetNextAvailablePort returns the next available port starting from the suggested port
-func (m *Manager) GetNextAvailablePort(suggestedPort int) int {
-	port := suggestedPort
-	for !m.IsPortAvailable(port, -1) {
-		port += 3 // Jump by 3 to ensure spacing
-	}
-	return port
-}
-
-func fileExists(filename string) bool {
-	_, err := os.Stat(filename)
-	return !os.IsNotExist(err)
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
-}

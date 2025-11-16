@@ -195,3 +195,4 @@ func (h *AuthHandlers) AdminSetupPOST(c *gin.Context) {
 	// Redirect to login
 	c.Redirect(http.StatusFound, "/login")
 }
+

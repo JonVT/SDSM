@@ -1,146 +1,60 @@
-{{ define "commands.html" }}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Console Commands - SDSM</title>
-    <link rel="stylesheet" href="/static/ui-theme.css">
-    <script>
-        (function(){
-            var t = localStorage.getItem('theme') || 'dark';
-            document.documentElement.setAttribute('data-theme', t);
-        })();
-    </script>
-    
-</head>
-<body class="page-shell">
-    <div class="container">
-        <header class="hero-card">
-            <div class="hero-main">
-                <img src="/sdsm.png" alt="SDSM" width="56" height="56" class="hero-logo" />
-                <div class="hero-heading">
-                    <h1 class="hero-title">Console Commands</h1>
-                    <p class="hero-subtitle">Reference of available server console commands.</p>
-                </div>
-            </div>
-            <div class="hero-actions">
-                <input id="cmd-search" class="commands-search" type="text" placeholder="Filter commands (name, usage, description)..." autocomplete="off">
-            </div>
-        </header>
+{{define "title"}}Console Commands{{end}}
 
-        <div class="az-bar">
-            {{ range .letters }}
-                <a href="#cmd-{{.}}" class="btn btn-control">{{.}}</a>
-            {{ end }}
-        </div>
-
-        <p class="filter-info">Loaded {{ len .commands }} commands. Click a command name to copy it.</p>
-
-        <div class="table-shell">
-            <table class="commands-table" id="commands-table">
-                <colgroup>
-                    <col class="name">
-                    <col class="usage">
-                    <col>
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th>Command</th>
-                        <th>Usage / Args</th> 
-                        <th>Description</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {{ range .commands }}
-                    <tr {{ if .Anchor }}id="{{ .Anchor }}"{{ end }} data-name="{{ .Name }}" data-usage="{{ .UsageStr }}" data-desc="{{ .Description }}">
-                        <td class="cmd-name" title="Click to copy command" tabindex="0">{{ .Name }}</td>
-                        <td>
-                            {{ if .Usages }}
-                                {{ range .Usages }}<span class="usage-badge">{{ . }}</span>{{ end }}
-                            {{ else }}<span class="empty-usage">(none)</span>{{ end }}
-                        </td>
-                        <td>
-                            <div class="description-block">{{ .Description }}</div>
-                            <a href="#" class="desc-toggle hidden">Show more</a>
-                        </td>
-                    </tr>
-                    {{ end }}
-                </tbody>
-            </table>
+{{define "content"}}
+<header class="hero-card">
+    <div class="hero-main">
+        <img src="/sdsm.png" alt="SDSM" width="56" height="56" class="hero-logo" />
+        <div class="hero-heading">
+            <h1 class="hero-title">Console Commands</h1>
+            <p class="hero-subtitle">Reference of available server console commands.</p>
         </div>
     </div>
+    <div class="hero-actions">
+        <input id="cmd-search" class="commands-search" type="text" placeholder="Filter commands (name, usage, description)..." autocomplete="off">
+    </div>
+</header>
 
-    <script>
-    (function(){
-        const search = document.getElementById('cmd-search');
-        const rows = Array.from(document.querySelectorAll('#commands-table tbody tr'));
-        function normalize(s){ return (s||'').toLowerCase(); }
-        function filter(){
-            const q = normalize(search.value.trim());
-            rows.forEach(r => {
-                if(!q){ r.style.display=''; return; }
-                const hay = (r.dataset.name + ' ' + r.dataset.usage + ' ' + r.dataset.desc).toLowerCase();
-                r.style.display = hay.indexOf(q) !== -1 ? '' : 'none';
-            });
-        }
-        // Prefilter via ?q= param
-        const params = new URLSearchParams(window.location.search);
-        const initialQ = params.get('q');
-        if(initialQ){ search.value = initialQ; }
-        search.addEventListener('input', filter);
-        filter();
+<div class="az-bar">
+    {{ range .letters }}
+        <a href="#cmd-{{.}}" class="btn btn-control">{{.}}</a>
+    {{ end }}
+</div>
 
-        rows.forEach(r => {
-            const nameCell = r.querySelector('.cmd-name');
-            const desc = r.querySelector('.description-block');
-            const toggle = r.querySelector('.desc-toggle');
-            if(desc && toggle){
-                requestAnimationFrame(() => {
-                    if(desc.scrollHeight > desc.clientHeight + 4){ toggle.classList.remove('hidden'); }
-                });
-                toggle.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const expanded = desc.classList.toggle('expanded');
-                    toggle.textContent = expanded ? 'Show less' : 'Show more';
-                });
-            }
-            if(nameCell){
-                function copyText(text){
-                    if (navigator.clipboard && window.isSecureContext) {
-                        return navigator.clipboard.writeText(text);
-                    }
-                    return new Promise((resolve, reject) => {
-                        try {
-                            const ta = document.createElement('textarea');
-                            ta.value = text;
-                            ta.style.position = 'fixed';
-                            ta.style.left = '-1000px';
-                            ta.style.top = '-1000px';
-                            document.body.appendChild(ta);
-                            ta.focus();
-                            ta.select();
-                            const ok = document.execCommand('copy');
-                            document.body.removeChild(ta);
-                            ok ? resolve() : reject(new Error('copy failed'));
-                        } catch(e) { reject(e); }
-                    });
-                }
-                nameCell.addEventListener('click', () => {
-                    const cmd = nameCell.textContent.trim();
-                    copyText(cmd).then(() => {
-                        nameCell.classList.add('highlight');
-                        setTimeout(()=> nameCell.classList.remove('highlight'), 800);
-                    }).catch(() => {});
-                });
-                nameCell.addEventListener('keydown', e => { if(e.key==='Enter'){ nameCell.click(); }});
-            }
-        });
-    })();
-    </script>
-    {{/* Ensure modal partials are available when this template is rendered standalone */}}
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
-</body>
-</html>
-{{ end }}
+<p class="filter-info">Loaded {{ len .commands }} commands. Click a command name to copy it.</p>
+
+<div class="table-shell">
+    <table class="commands-table" id="commands-table">
+        <colgroup>
+            <col class="name">
+            <col class="usage">
+            <col>
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Command</th>
+                <th>Usage / Args</th> 
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{ range .commands }}
+            <tr {{ if .Anchor }}id="{{ .Anchor }}"{{ end }} data-name="{{ .Name }}" data-usage="{{ .UsageStr }}" data-desc="{{ .Description }}">
+                <td class="cmd-name" title="Click to copy command" tabindex="0">{{ .Name }}</td>
+                <td>
+                    {{ if .Usages }}
+                        {{ range .Usages }}<span class="usage-badge">{{ . }}</span>{{ end }}
+                    {{ else }}<span class="empty-usage">(none)</span>{{ end }}
+                </td>
+                <td>
+                    <div class="description-block">{{ .Description }}</div>
+                    <a href="#" class="desc-toggle hidden">Show more</a>
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{end}}
+{{/* Ensure modal partials are available when this template is rendered standalone */}}
+{{ template "modal_templates" . }}
+{{ template "modal_scripts" . }}

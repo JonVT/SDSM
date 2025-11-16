@@ -199,3 +199,74 @@
         </div>
     </form>
 </div>
+
+<div class="card card-config mt-3">
+    <div class="card-header">
+        <h2 class="card-title">Discord Notifications</h2>
+    </div>
+    <form id="notifications-form" data-api-only="true" onsubmit="event.preventDefault(); document.getElementById('startup-params-form').requestSubmit();">
+        <div class="form-grid-compact">
+            <div class="form-row form-row-full">
+                <label for="discord_webhook">Server Discord Webhook:</label>
+                <input type="text" id="discord_webhook" name="discord_webhook" value="{{.server.DiscordWebhook}}" class="form-input-inline" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
+            </div>
+            <div class="form-row form-row-full checkbox-row">
+                <div class="checkbox-inline checkbox-group">
+                    <label class="radio-label"><input type="checkbox" id="notify_use_manager_defaults" name="notify_use_manager_defaults" {{if .server.NotifyUseManagerDefaults}}checked{{end}}> Use Manager Defaults</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_enable" name="notify_enable" {{if .server.NotifyEnable}}checked{{end}}> Enable (when not using defaults)</label>
+                </div>
+            </div>
+            <div class="form-row form-row-full">
+                <div class="checkbox-inline checkbox-group">
+                    <label class="radio-label"><input type="checkbox" id="notify_on_start" name="notify_on_start" {{if .server.NotifyOnStart}}checked{{end}}> On Start</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_stopping" name="notify_on_stopping" {{if .server.NotifyOnStopping}}checked{{end}}> On Stopping</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_stopped" name="notify_on_stopped" {{if .server.NotifyOnStopped}}checked{{end}}> On Stopped</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_restart" name="notify_on_restart" {{if .server.NotifyOnRestart}}checked{{end}}> On Restart</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_update_started" name="notify_on_update_started" {{if .server.NotifyOnUpdateStarted}}checked{{end}}> Update Started</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_update_completed" name="notify_on_update_completed" {{if .server.NotifyOnUpdateCompleted}}checked{{end}}> Update Completed</label>
+                    <label class="radio-label"><input type="checkbox" id="notify_on_update_failed" name="notify_on_update_failed" {{if .server.NotifyOnUpdateFailed}}checked{{end}}> Update Failed</label>
+                </div>
+            </div>
+            <div class="form-row form-row-full mt-2">
+                <div class="grid-2 gap-2">
+                    <div>
+                        <label class="form-label">Start Template</label>
+                        <input type="text" name="notify_msg_start" value="{{.server.NotifyMsgStart}}" placeholder="Server {{`{{server_name}}`}} started." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_start" value="{{.server.NotifyColorStart}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Stopping Template</label>
+                        <input type="text" name="notify_msg_stopping" value="{{.server.NotifyMsgStopping}}" placeholder="Server {{`{{server_name}}`}} stopping." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_stopping" value="{{.server.NotifyColorStopping}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Stopped Template</label>
+                        <input type="text" name="notify_msg_stopped" value="{{.server.NotifyMsgStopped}}" placeholder="Server {{`{{server_name}}`}} stopped." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_stopped" value="{{.server.NotifyColorStopped}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Restart Template</label>
+                        <input type="text" name="notify_msg_restart" value="{{.server.NotifyMsgRestart}}" placeholder="Server {{`{{server_name}}`}} {{`{{event}}`}}." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_restart" value="{{.server.NotifyColorRestart}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Update Started Template</label>
+                        <input type="text" name="notify_msg_update_started" value="{{.server.NotifyMsgUpdateStarted}}" placeholder="Server {{`{{server_name}}`}} update started." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_update_started" value="{{.server.NotifyColorUpdateStarted}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Update Completed Template</label>
+                        <input type="text" name="notify_msg_update_completed" value="{{.server.NotifyMsgUpdateCompleted}}" placeholder="Server {{`{{server_name}}`}} update completed successfully." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_update_completed" value="{{.server.NotifyColorUpdateCompleted}}" title="Color" class="ml-2">
+                    </div>
+                    <div>
+                        <label class="form-label">Update Failed Template</label>
+                        <input type="text" name="notify_msg_update_failed" value="{{.server.NotifyMsgUpdateFailed}}" placeholder="Server {{`{{server_name}}`}} update failed." class="form-input-inline" autocomplete="off">
+                        <input type="color" name="notify_color_update_failed" value="{{.server.NotifyColorUpdateFailed}}" title="Color" class="ml-2">
+                    </div>
+                </div>
+                <p class="help-text mt-2">Tokens available: {{`{{server_name}}`}}, {{`{{event}}`}}, {{`{{detail}}`}}, {{`{{timestamp}}`}}. Leave blank to inherit manager defaults.</p>
+            </div>
+        </div>
+    </form>
+</div>

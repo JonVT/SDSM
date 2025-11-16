@@ -6,15 +6,12 @@
     <meta name="description" content="Stationeers Dedicated Server Manager - Secure Login">
     <title>Login - Stationeers Server Manager</title>
     <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-    <link rel="stylesheet" href="/static/modern.css?v={{buildTime}}">
-    
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    
+    <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(_){}})();</script>
+    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+    <script src="/static/app.js?v={{buildTime}}" defer></script>
 </head>
 <body class="page-shell">
     <div class="container">
@@ -112,36 +109,15 @@
     {{ template "footer" . }}
     
     <script>
-        // Theme management
-        function getStoredTheme() { return localStorage.getItem('theme') || 'dark'; }
-        function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme);
-            const icon = document.getElementById('theme-icon');
-            if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-        }
-        function toggleTheme() { const current = document.documentElement.getAttribute('data-theme') || getStoredTheme(); setTheme(current === 'dark' ? 'light' : 'dark'); }
-        setTheme(getStoredTheme());
-        
-        // Form validation and UX enhancements
+        // Login page-specific initialization
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('login-form');
             const usernameInput = document.getElementById('username');
             const passwordInput = document.getElementById('password');
             
-            // Real-time validation
-            function validateInput(input) {
-                const value = input.value.trim();
-                const isValid = value.length >= (input.name === 'password' ? 6 : 3);
-                
-                input.classList.toggle('border-danger-500', !isValid && value.length > 0);
-                input.classList.toggle('border-success-500', isValid);
-                
-                return isValid;
-            }
-            
-            usernameInput.addEventListener('input', () => validateInput(usernameInput));
-            passwordInput.addEventListener('input', () => validateInput(passwordInput));
+            // Real-time validation using SDSM helper
+            usernameInput.addEventListener('input', () => SDSM.forms.validateInput(usernameInput, 3));
+            passwordInput.addEventListener('input', () => SDSM.forms.validateInput(passwordInput, 6));
             
             // Enhanced form submission
             form.addEventListener('submit', function(e) {
@@ -170,19 +146,23 @@
                 setLoadingState(true);
             });
             
-            // HTMX event handlers
-            document.body.addEventListener('htmx:beforeRequest', function() {
-                setLoadingState(true);
-            });
+            // Auto-focus first empty field
+            if (!usernameInput.value) {
+                usernameInput.focus();
+            } else {
+                passwordInput.focus();
+            }
             
-            document.body.addEventListener('htmx:afterRequest', function() {
-                setLoadingState(false);
-            });
-            
-            document.body.addEventListener('htmx:responseError', function() {
-                showError('Network error. Please try again.');
-                setLoadingState(false);
-            });
+            // Show initial server errors in modal if present
+            try {
+                const inlineErr = document.querySelector('.error-message[role="alert"]');
+                if (inlineErr) {
+                    const msg = (inlineErr.textContent || '').trim();
+                    if (msg && window.openInfo) {
+                        window.openInfo({ title:'Login Error', message: msg, confirmText:'Close' });
+                    }
+                }
+            } catch(_) {}
         });
         
         function setLoadingState(loading) {
@@ -211,46 +191,21 @@
                     return;
                 }
             } catch(_) {}
+            
             // Fallback inline banner if modal helpers unavailable
             const existingError = document.querySelector('.error-message');
             if (existingError) { existingError.remove(); }
+            
             const errorDiv = document.createElement('div');
             errorDiv.className = 'error-message';
             errorDiv.setAttribute('role', 'alert');
             errorDiv.textContent = String(message || 'An error occurred');
+            
             const form = document.getElementById('login-form');
             form.parentNode.insertBefore(errorDiv, form);
+            
             setTimeout(() => { if (errorDiv.parentNode) { errorDiv.remove(); } }, 5000);
         }
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.shiftKey && e.key === 'T') {
-                e.preventDefault();
-                toggleTheme();
-            }
-        });
-        
-        // Auto-focus first empty field
-        document.addEventListener('DOMContentLoaded', function() {
-            const usernameInput = document.getElementById('username');
-            if (!usernameInput.value) {
-                usernameInput.focus();
-            } else {
-                document.getElementById('password').focus();
-            }
-            // Modalize initial server-rendered error banner if present
-            try {
-                const inlineErr = document.querySelector('.error-message[role="alert"]');
-                if (inlineErr) {
-                    const msg = (inlineErr.textContent || '').trim();
-                    if (msg) {
-                        if (window.askInfo) window.askInfo({ title:'Login Error', message: msg, confirmText:'Close' });
-                        else if (window.openInfo) window.openInfo({ title:'Login Error', message: msg, confirmText:'Close' });
-                    }
-                }
-            } catch(_) {}
-        });
     </script>
 </body>
 </html>

@@ -17,11 +17,12 @@ type UserHandlers struct {
 	users       *manager.UserStore
 	authService *middleware.AuthService
 	logger      *utils.Logger
+	manager     *manager.Manager
 }
 
 // NewUserHandlers constructs handlers with optional logger (nil-safe).
-func NewUserHandlers(store *manager.UserStore, auth *middleware.AuthService, logger *utils.Logger) *UserHandlers {
-	return &UserHandlers{users: store, authService: auth, logger: logger}
+func NewUserHandlers(store *manager.UserStore, auth *middleware.AuthService, logger *utils.Logger, manager *manager.Manager) *UserHandlers {
+	return &UserHandlers{users: store, authService: auth, logger: logger, manager: manager}
 }
 
 func (h *UserHandlers) UsersGET(c *gin.Context) {
@@ -37,16 +38,6 @@ func (h *UserHandlers) UsersGET(c *gin.Context) {
 	_ = h.users.Load()
 	// Snapshot of users
 	list := h.users.Users()
-	// Fallback: if store is empty but current authenticated user is 'admin', synthesize an admin record.
-	if len(list) == 0 {
-		uname := strings.TrimSpace(c.GetString("username"))
-		if strings.EqualFold(uname, "admin") && h.users.AdminCount() == 0 {
-			list = append(list, manager.User{Username: "admin", Role: manager.RoleAdmin, CreatedAt: time.Now()})
-			if h.logger != nil {
-				h.logger.Write("UsersGET: synthetic admin fallback applied (empty store)")
-			}
-		}
-	}
 	if h.logger != nil {
 		usernames := make([]string, 0, len(list))
 		for _, u := range list {
@@ -54,10 +45,48 @@ func (h *UserHandlers) UsersGET(c *gin.Context) {
 		}
 		h.logger.Write(fmt.Sprintf("UsersGET: returning %d user(s): %s", len(list), strings.Join(usernames, ",")))
 	}
-	c.HTML(http.StatusOK, "users.html", gin.H{
-		"users":    list,
-		"username": c.GetString("username"),
-		"now":      time.Now(),
+
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "users.html", gin.H{
+			"users":    list,
+			"username": c.GetString("username"),
+			"now":      time.Now(),
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will load the correct content via htmx
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  c.GetString("username"),
+		"role":      c.GetString("role"),
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "users",
+		"title":     "User Management",
+	})
+}
+
+func (h *UserHandlers) ProfileGET(c *gin.Context) {
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "profile.html", gin.H{
+			"username": c.GetString("username"),
+			"now":      time.Now(),
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will load the correct content via htmx
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  c.GetString("username"),
+		"role":      c.GetString("role"),
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "profile",
+		"title":     "My Profile",
 	})
 }
 
@@ -91,20 +120,6 @@ func (h *UserHandlers) APIUsersList(c *gin.Context) {
 			"role":       u.Role,
 			"created_at": u.CreatedAt,
 		})
-	}
-	// Fallback synthetic admin if store empty but authenticated user is 'admin'
-	if len(out) == 0 {
-		uname := strings.TrimSpace(c.GetString("username"))
-		if strings.EqualFold(uname, "admin") && h.users.AdminCount() == 0 {
-			out = append(out, gin.H{
-				"username":   "admin",
-				"role":       manager.RoleAdmin,
-				"created_at": time.Now(),
-			})
-			if h.logger != nil {
-				h.logger.Write("APIUsersList: synthetic admin fallback applied (empty store)")
-			}
-		}
 	}
 	if h.logger != nil {
 		usernames := make([]string, 0, len(out))

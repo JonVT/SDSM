@@ -1,0 +1,71 @@
+{{ define "bug_report_modal" }}
+<template id="tpl-modal-bugreport">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="bugReportTitle" aria-describedby="bugReportBody">
+        <div class="modal-card">
+            <header class="modal-header">
+                <span class="icon" aria-hidden="true">{{ template "icon_bug" . }}</span>
+                <h3 id="bugReportTitle" class="modal-title">Report a Bug</h3>
+                <button type="button" class="modal-close" data-close aria-label="Close">×</button>
+            </header>
+            <div id="bugReportBody" class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="bug_title">Title</label>
+                    <input id="bug_title" type="text" class="input" maxlength="120" placeholder="Short summary" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="bug_desc">Description</label>
+                    <textarea id="bug_desc" class="input" rows="6" placeholder="Steps to reproduce, expected vs actual"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="inline-flex items-center gap-2"><input id="bug_inc_mgr" type="checkbox" checked /> Include manager log tail</label>
+                    <label class="inline-flex items-center gap-2"><input id="bug_inc_upd" type="checkbox" checked /> Include update log tail</label>
+                    <label class="inline-flex items-center gap-2"><input id="bug_inc_env" type="checkbox" checked /> Include environment info</label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                <button type="button" class="btn btn-primary" data-submit>Submit</button>
+            </div>
+        </div>
+    </div>
+</template>
+<script>
+// Shared bug report modal handler. Requires a button with id="bugReportBtn" on the page.
+(function(){
+    function openBugReportModal(){
+        var tpl = document.getElementById('tpl-modal-bugreport');
+        if(!tpl || !tpl.content) return;
+        var modal = tpl.content.cloneNode(true).querySelector('.confirm-modal');
+        document.body.appendChild(modal);
+        var closeBtn = modal.querySelector('[data-close]');
+        var cancelBtn = modal.querySelector('[data-cancel]');
+        var submitBtn = modal.querySelector('[data-submit]');
+        function finish(){ if(modal && modal.parentNode) modal.parentNode.removeChild(modal); }
+        function activate(){ modal.classList.add('active'); modal.setAttribute('aria-hidden','false'); try { modal.querySelector('#bug_title').focus(); } catch(_){} }
+        closeBtn && closeBtn.addEventListener('click', finish);
+        cancelBtn && cancelBtn.addEventListener('click', finish);
+        submitBtn && submitBtn.addEventListener('click', function(){
+            var title = (modal.querySelector('#bug_title')?.value||'').trim();
+            var desc = (modal.querySelector('#bug_desc')?.value||'').trim();
+            var incMgr = !!modal.querySelector('#bug_inc_mgr')?.checked;
+            var incUpd = !!modal.querySelector('#bug_inc_upd')?.checked;
+            var incEnv = !!modal.querySelector('#bug_inc_env')?.checked;
+            if(!title){ try { modal.querySelector('#bug_title').focus(); } catch(_){} return; }
+            fetch('/api/bug-report', { method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, credentials:'same-origin', body: JSON.stringify({ title: title, description: desc, include_manager_log: incMgr, include_update_log: incUpd, include_environment: incEnv }) })
+                .then(function(r){ return r.ok ? r.json() : r.json().then(Promise.reject); })
+                .then(function(){ if(window.showToast) window.showToast({type:'success', title:'Thanks!', message:'Bug report submitted'}); finish(); })
+                .catch(function(e){ if(window.showToast) window.showToast({type:'error', title:'Submit Failed', message:(e&&e.error)||'Unable to submit'}); });
+        });
+        modal.addEventListener('click', function(e){ if(e.target===modal) finish(); });
+        activate();
+    }
+    function attachBtn(){
+        var btn = document.getElementById('bugReportBtn');
+        if(!btn || btn.__bugInit) return; btn.__bugInit = true;
+        btn.addEventListener('click', function(e){ e.preventDefault(); if(typeof openBugReportModal==='function'){ openBugReportModal(); } else { openBugReportModal(); } });
+    }
+    window.openBugReportModal = openBugReportModal;
+    if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', attachBtn); } else { attachBtn(); }
+})();
+</script>
+{{ end }}

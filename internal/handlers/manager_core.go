@@ -574,6 +574,29 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 	c.HTML(status, "server_new.html", payload)
 }
 
+func (h *ManagerHandlers) renderError(c *gin.Context, code int, message string) {
+	username, _ := c.Get("username")
+	role := c.GetString("role")
+
+	// If the request is from HTMX, render the error partial
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(code, "error.html", gin.H{"error": message, "title": "Error"})
+		return
+	}
+
+	// Otherwise, render the full frame with the error
+	c.HTML(code, "frame.html", gin.H{
+		"error":     message,
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "error",
+		"title":     "Error",
+	})
+}
+
 func (h *ManagerHandlers) startDeployAsync(deployType manager.DeployType) error {
 	return h.manager.StartDeployAsync(deployType)
 }
@@ -711,14 +734,18 @@ func (h *ManagerHandlers) Frame(c *gin.Context) {
 	}
 
 	data := gin.H{
-		"active":   h.manager.IsActive(),
-		"servers":  servers,
-		"username": username,
+		"active":    h.manager.IsActive(),
+		"servers":   servers,
+		"username":  username,
+		"role":      role,
+		"buildTime": h.manager.BuildTime(),
+		"page":      "dashboard", // Default to dashboard
+		"title":     "Dashboard",
 	}
 	c.HTML(http.StatusOK, "frame.html", data)
 }
 
-// Dashboard renders the main dashboard with server cards for quick status.
+// Dashboard renders the main dashboard page, showing a list of servers.
 func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	username, _ := c.Get("username")
 	role := c.GetString("role")
@@ -735,10 +762,25 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 		servers = filtered
 	}
 
-	c.HTML(http.StatusOK, "dashboard.html", gin.H{
-		"servers":  servers,
-		"username": username,
-		"role":     role,
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "dashboard.html", gin.H{
+			"servers":  servers,
+			"username": username,
+			"role":     role,
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will load the correct content via htmx
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"servers":   servers,
+		"username":  username,
+		"role":      role,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "dashboard",
+		"title":     "Dashboard",
 	})
 }
 
@@ -746,87 +788,43 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 // missing component warnings, deploy state, and game-data scanner warnings.
 func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	username, _ := c.Get("username")
+	role, _ := c.Get("role")
+	warnings := h.manager.MissingComponents
 
-	if !h.manager.IsUpdating() {
-		h.manager.CheckMissingComponents()
-	}
-
-	missingComponents := h.manager.GetMissingComponents()
-	deployErrors := h.manager.GetDeployErrors()
-	needsSetup := h.manager.NeedsUploadPrompt
-	setupInProgress := h.manager.SetupInProgress
-
-	// If setup is required or in progress, send users to the dedicated Setup page
-	if needsSetup || setupInProgress || len(missingComponents) > 0 || len(deployErrors) > 0 {
-		c.Redirect(http.StatusFound, "/setup")
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "manager.html", gin.H{
+			"username":             username,
+			"role":                 role,
+			"root_path":            h.manager.Paths.RootPath,
+			"steam_id":             h.manager.SteamID,
+			"port":                 h.manager.Port,
+			"auto_update":          h.manager.StartupUpdate,
+			"start_update":         h.manager.StartupUpdate,
+			"detached":             h.manager.DetachedServers,
+			"tray_enabled":         h.manager.TrayEnabled,
+			"updating":             h.manager.IsUpdating(),
+			"buildTime":            h.manager.BuildTime(),
+			"server_count_active":  h.manager.ActiveServerCount(),
+			"game_data_warnings":   warnings,
+			"auto_port_forward_manager": h.manager.AutoPortForwardManager,
+			"tls_enabled":          h.manager.TLSEnabled,
+			"tls_cert":             h.manager.TLSCertPath,
+			"tls_key":              h.manager.TLSKeyPath,
+		})
 		return
 	}
 
-	// Build lightweight game-data warnings if scanners return empty sets
-	relLangs := h.manager.GetLanguagesForVersion(false)
-	betaLangs := h.manager.GetLanguagesForVersion(true)
-	relWorlds := h.manager.GetWorldsByVersion(false)
-	betaWorlds := h.manager.GetWorldsByVersion(true)
-	relDiffs := h.manager.GetDifficultiesForVersion(false)
-	betaDiffs := h.manager.GetDifficultiesForVersion(true)
-
-	warnings := []string{}
-	if len(relWorlds) == 0 {
-		warnings = append(warnings, "No worlds found for Release channel.")
-	}
-	if len(betaWorlds) == 0 {
-		warnings = append(warnings, "No worlds found for Beta channel.")
-	}
-	if len(relLangs) == 0 {
-		warnings = append(warnings, "No languages found for Release channel.")
-	}
-	if len(betaLangs) == 0 {
-		warnings = append(warnings, "No languages found for Beta channel.")
-	}
-	if len(relDiffs) == 0 {
-		warnings = append(warnings, "No difficulties found for Release channel.")
-	}
-	if len(betaDiffs) == 0 {
-		warnings = append(warnings, "No difficulties found for Beta channel.")
-	}
-	// TLS configuration warnings
-	if h.manager.TLSEnabled {
-		if strings.TrimSpace(h.manager.TLSCertPath) == "" || strings.TrimSpace(h.manager.TLSKeyPath) == "" {
-			warnings = append(warnings, "TLS enabled but certificate or key path missing in configuration.")
-		}
-	}
-
-	// Defer heavy version lookups (latest/deployed) to async endpoint for faster initial paint.
-	data := gin.H{
-		"username":                   username,
-		"role":                       c.GetString("role"),
-		"steam_id":                   h.manager.SteamID,
-		"root_path":                  h.manager.Paths.RootPath,
-		"port":                       h.manager.Port,
-		"language":                   h.manager.Language,
-		"discord_default_webhook":    h.manager.DiscordDefaultWebhook,
-		"discord_bug_report_webhook": h.manager.DiscordBugReportWebhook,
-		"languages":                  relLangs,
-		"release_languages":          relLangs,
-		"beta_languages":             betaLangs,
-		"auto_update":                h.manager.UpdateTime.Format("15:04:05"),
-		"start_update":               h.manager.StartupUpdate,
-		"server_count":               h.manager.ServerCount(),
-		"server_count_active":        h.manager.ServerCountActive(),
-		"updating":                   h.manager.IsUpdating(),
-		"detached":                   h.manager.DetachedServers,
-		"tray_enabled":               h.manager.TrayEnabled,
-		"tls_enabled":                h.manager.TLSEnabled,
-		"tls_cert":                   h.manager.TLSCertPath,
-		"tls_key":                    h.manager.TLSKeyPath,
-		"auto_port_forward_manager":  h.manager.AutoPortForwardManager,
-		"game_data_warnings":         warnings,
-	}
-
-	if strings.EqualFold(strings.TrimSpace(c.Query("tls")), "generated") {
-		data["tls_generated"] = true
-	}
-	c.HTML(http.StatusOK, "manager.html", data)
+	// Otherwise, render the full frame, which will load the correct content via htmx
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "manager",
+		"title":     "Manager Settings",
+	})
 }
 
 // ManagerVersionsGET returns latest/deployed component version info as JSON for async loading.
@@ -850,17 +848,36 @@ func (h *ManagerHandlers) ManagerVersionsGET(c *gin.Context) {
 // TokensHelpGET renders a simple reference page for chat token usage.
 func (h *ManagerHandlers) TokensHelpGET(c *gin.Context) {
 	username, _ := c.Get("username")
-	c.HTML(http.StatusOK, "tokens.html", gin.H{
-		"username": username,
+	role := c.GetString("role")
+
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "tokens.html", gin.H{
+			"username": username,
+			"role":     role,
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will then load the content.
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "help/tokens",
+		"title":     "Chat Tokens",
 	})
 }
 
 // CommandsHelpGET renders a reference page for console commands parsed from docs/Commands.txt.
 func (h *ManagerHandlers) CommandsHelpGET(c *gin.Context) {
 	username, _ := c.Get("username")
+	role := c.GetString("role")
 	data, err := os.ReadFile(filepath.Join("docs", "Commands.txt"))
 	if err != nil {
-		c.HTML(http.StatusInternalServerError, "error.html", gin.H{"error": "Unable to read Commands.txt"})
+		h.renderError(c, http.StatusInternalServerError, "Unable to read Commands.txt")
 		return
 	}
 	type cmdInfo struct {
@@ -941,7 +958,30 @@ func (h *ManagerHandlers) CommandsHelpGET(c *gin.Context) {
 		commands = append(commands, info)
 		current = &commands[len(commands)-1]
 	}
-	c.HTML(http.StatusOK, "commands.html", gin.H{"username": username, "commands": commands, "letters": letters})
+
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "commands.html", gin.H{
+			"username": username,
+			"role":     role,
+			"commands": commands,
+			"letters":  letters,
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will then load the content.
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "help/commands",
+		"title":     "Console Commands",
+		"commands":  commands,
+		"letters":   letters,
+	})
 }
 
 // ServerWorldImage streams the PNG planet image for the server's configured world.
@@ -992,4 +1032,66 @@ func (h *ManagerHandlers) ServerWorldImage(c *gin.Context) {
 
 	c.Header("Cache-Control", "public, max-age=86400")
 	c.Data(http.StatusOK, "image/png", data)
+}
+
+// ManagerLogGET renders the manager log viewer page.
+func (h *ManagerHandlers) ManagerLogGET(c *gin.Context) {
+	username, _ := c.Get("username")
+	role := c.GetString("role")
+
+	if role != "admin" {
+		h.renderError(c, http.StatusForbidden, "Admin privileges required.")
+		return
+	}
+
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "logs.html", gin.H{
+			"username": username,
+			"role":     role,
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will then load the content.
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "logs/sdsm",
+		"title":     "Manager Logs",
+	})
+}
+
+// UpdateLogGET renders the update log viewer page.
+func (h *ManagerHandlers) UpdateLogGET(c *gin.Context) {
+	username, _ := c.Get("username")
+	role := c.GetString("role")
+
+	if role != "admin" {
+		h.renderError(c, http.StatusForbidden, "Admin privileges required.")
+		return
+	}
+
+	// If the request is from HTMX, render the partial view
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "logs.html", gin.H{
+			"username": username,
+			"role":     role,
+		})
+		return
+	}
+
+	// Otherwise, render the full frame, which will then load the content.
+	c.HTML(http.StatusOK, "frame.html", gin.H{
+		"username":  username,
+		"role":      role,
+		"servers":   h.manager.Servers,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"page":      "logs/update",
+		"title":     "Update Logs",
+	})
 }

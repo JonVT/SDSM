@@ -1262,6 +1262,8 @@ code.token-ref.copied {
 .config-form .form-group > * { min-width: 0; }
 .config-form .form-group input[type="checkbox"] { justify-self: start; width: 18px; height: 18px; }
 .form-checkbox { width: 18px; height: 18px; flex-shrink: 0; }
+/* Subtle vertical spacing between successive configuration rows */
+.config-form .form-group + .form-group { margin-top: var(--space-2); }
 .config-form .form-row-full { grid-template-columns: minmax(110px, 160px) 1fr; margin-top: var(--space-4); }
 .config-form .form-row-full > * { grid-column: 1 / -1; justify-self: end; width: auto; }
 

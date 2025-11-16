@@ -598,6 +598,18 @@ func (s *Steam) resolveSCONDownload(repo string) (string, string, string, error)
 	return fallback, "SCON.zip", "", nil
 }
 
+func (s *Steam) GetSCONLatestTag() (string, error) {
+	repo := strings.TrimSpace(s.SCONRepoOverride)
+	if repo == "" {
+		repo = sconDefaultRepo
+	}
+	_, _, tag, err := s.resolveSCONDownload(repo)
+	if err != nil {
+		return "", err
+	}
+	return tag, nil
+}
+
 // unzipSCONToPlugins extracts only relevant plugin files into the plugins directory.
 // It handles archives that contain BepInEx/plugins paths or DLLs at root/subfolders.
 // unzipSCONToPlugins removed; using generic unzip() into bin/SCON

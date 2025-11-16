@@ -25,7 +25,8 @@ func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 		}
 		return false
 	}
-	c.HTML(http.StatusOK, "setup.html", gin.H{
+
+	data := gin.H{
 		"missingComponents": missing,
 		"missingSteamCMD":   has("SteamCMD"),
 		"missingRelease":    has("Stationeers Release"),
@@ -36,7 +37,16 @@ func (h *ManagerHandlers) SetupGET(c *gin.Context) {
 		"paths":             h.manager.Paths,
 		"deployErrors":      h.manager.GetDeployErrors(),
 		"updatesAvailable":  h.manager.UpdatesAvailable(),
-	})
+		"title":             "Initial Setup",
+		"page":              "setup",
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		c.HTML(http.StatusOK, "setup.html", data)
+	} else {
+		// For initial setup, we don't want the full frame, just the setup page.
+		c.HTML(http.StatusOK, "setup.html", data)
+	}
 }
 
 // SetupSkipPOST marks setup as skipped and redirects to manager.

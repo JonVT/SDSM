@@ -133,8 +133,6 @@ type Server struct {
 	Proc *exec.Cmd `json:"-"`
 	Thrd chan bool `json:"-"`
 	pid  int       `json:"-"`
-	//lint:ignore U1000 retained for legacy JSON compatibility; stdin write path removed
-	stdin          io.WriteCloser `json:"-"` // deprecated: historical process stdin holder (unused)
 	Logger         *utils.Logger  `json:"-"`
 	Paths          *utils.Paths   `json:"-"`
 	Name           string         `json:"name"`
@@ -239,6 +237,37 @@ type Server struct {
 	clientsScanActive bool
 	clientsScanSeen   map[string]struct{}
 	clientsScanStart  time.Time
+	// --- Discord notifications ---
+	// DiscordWebhook overrides the manager default for server-specific notifications when non-empty.
+	DiscordWebhook string `json:"discord_webhook"`
+	// NotifyUseManagerDefaults inherits notification preferences from the manager when true (default).
+	NotifyUseManagerDefaults bool `json:"notify_use_manager_defaults"`
+	// NotifyEnable enables server notifications when not using manager defaults.
+	NotifyEnable bool `json:"notify_enable"`
+	// Per-event toggles when not using manager defaults.
+	NotifyOnStart           bool `json:"notify_on_start"`
+	NotifyOnStopping        bool `json:"notify_on_stopping"`
+	NotifyOnStopped         bool `json:"notify_on_stopped"`
+	NotifyOnRestart         bool `json:"notify_on_restart"`
+	NotifyOnUpdateStarted   bool `json:"notify_on_update_started"`
+	NotifyOnUpdateCompleted bool `json:"notify_on_update_completed"`
+	NotifyOnUpdateFailed    bool `json:"notify_on_update_failed"`
+	// Per-event message templates (overrides). Empty -> inherit manager or fallback.
+	NotifyMsgStart           string `json:"notify_msg_start"`
+	NotifyMsgStopping        string `json:"notify_msg_stopping"`
+	NotifyMsgStopped         string `json:"notify_msg_stopped"`
+	NotifyMsgRestart         string `json:"notify_msg_restart"`
+	NotifyMsgUpdateStarted   string `json:"notify_msg_update_started"`
+	NotifyMsgUpdateCompleted string `json:"notify_msg_update_completed"`
+	NotifyMsgUpdateFailed    string `json:"notify_msg_update_failed"`
+	// Per-event color overrides (#RRGGBB); empty -> inherit manager defaults.
+	NotifyColorStart           string `json:"notify_color_start"`
+	NotifyColorStopping        string `json:"notify_color_stopping"`
+	NotifyColorStopped         string `json:"notify_color_stopped"`
+	NotifyColorRestart         string `json:"notify_color_restart"`
+	NotifyColorUpdateStarted   string `json:"notify_color_update_started"`
+	NotifyColorUpdateCompleted string `json:"notify_color_update_completed"`
+	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
 }
 
 // safePIDFilePath returns a contained absolute path to the server PID file or empty string

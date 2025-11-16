@@ -1,33 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>License - SDSM</title>
-  <link rel="icon" href="/sdsm.png" type="image/png">
-  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
-</head>
-<body class="page-shell">
-  <div class="container pt-6 pb-10">
-    <header class="hero-card">
-      <div class="hero-main">
-        <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-        <div class="hero-heading">
-          <h1 class="hero-title">MIT License</h1>
-          <p class="hero-subtitle">Open-source license for SDSM source code.</p>
-        </div>
-      </div>
-      <div class="hero-actions flex-col items-end">
-        <a href="/dashboard" class="btn btn-ghost">Back to Dashboard</a>
-      </div>
-    </header>
+{{define "title"}}MIT License{{end}}
 
-    <main class="glass-card mt-6">
-      <h1>MIT License</h1>
-      <pre class="white-pre-wrap mono text-secondary">
+{{define "content"}}
+<header class="hero-card">
+    <div class="hero-main">
+      <img src="/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
+      <div class="hero-heading">
+        <h1 class="hero-title">MIT License</h1>
+        <p class="hero-subtitle">Open-source license for SDSM source code.</p>
+      </div>
+    </div>
+</header>
+
+<main class="glass-card mt-6">
+    <h1>MIT License</h1>
+    <pre class="white-pre-wrap mono text-secondary">
 MIT License
 
-    Copyright (c) 2025 JonVT and contributors
+Copyright (c) 2025 JonVT and contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -46,12 +35,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-      </pre>
-      <p class="mt-4 text-tertiary text-sm">The source code for SDSM is available at <a href="https://github.com/JonVT/SDSM" target="_blank" rel="noopener">github.com/JonVT/SDSM</a>.</p>
-    </main>
-  </div>
-  {{ template "modal_templates" . }}
-  {{ template "modal_scripts" . }}
-  {{ template "footer" . }}
-</body>
-</html>
+    </pre>
+    <p class="mt-4 text-tertiary text-sm">The source code for SDSM is available at <a href="https://github.com/JonVT/SDSM" target="_blank" rel="noopener">github.com/JonVT/SDSM</a>.</p>
+</main>
+{{end}}
