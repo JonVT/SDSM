@@ -38,8 +38,32 @@ func (m *Manager) DiscordNotifyTo(webhook, content string, embeds ...discord.Emb
 	}
 }
 
+func (m *Manager) deployNotificationsEnabled(dt DeployType) bool {
+	if m == nil {
+		return false
+	}
+	switch dt {
+	case DeployTypeRelease:
+		return m.NotifyDeployRelease
+	case DeployTypeBeta:
+		return m.NotifyDeployBeta
+	case DeployTypeBepInEx:
+		return m.NotifyDeployBepInEx
+	case DeployTypeLaunchPad:
+		return m.NotifyDeployLaunchPad
+	case DeployTypeSCON:
+		return m.NotifyDeploySCON
+	case DeployTypeSteamCMD:
+		return m.NotifyDeploySteamCMD
+	case DeployTypeServers:
+		return m.NotifyDeployServers
+	default:
+		return true
+	}
+}
+
 func (m *Manager) notifyDeployStart(dt DeployType) {
-	if m == nil || !m.NotifyEnableDeploy {
+	if m == nil || !m.NotifyEnableDeploy || !m.deployNotificationsEnabled(dt) {
 		return
 	}
 	// Tokens: component, status, timestamp
@@ -61,7 +85,7 @@ func (m *Manager) notifyDeployStart(dt DeployType) {
 }
 
 func (m *Manager) notifyDeployComplete(dt DeployType, duration time.Duration, errs []string) {
-	if m == nil || !m.NotifyEnableDeploy {
+	if m == nil || !m.NotifyEnableDeploy || !m.deployNotificationsEnabled(dt) {
 		return
 	}
 	durStr := duration.Truncate(time.Millisecond).String()

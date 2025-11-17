@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sdsm/internal/manager"
@@ -29,6 +30,9 @@ type ManagerHandlers struct {
 	manager   *manager.Manager
 	userStore *manager.UserStore
 	hub       *middleware.Hub
+
+	progressMu        sync.Mutex
+	progressLoopAlive bool
 }
 
 // NewManagerHandlers constructs a handler set bound to the provided Manager and UserStore.
@@ -600,7 +604,56 @@ func (h *ManagerHandlers) renderError(c *gin.Context, code int, message string) 
 }
 
 func (h *ManagerHandlers) startDeployAsync(deployType manager.DeployType) error {
-	return h.manager.StartDeployAsync(deployType)
+	if err := h.manager.StartDeployAsync(deployType); err != nil {
+		return err
+	}
+	h.ensureProgressBroadcastLoop()
+	return nil
+}
+
+func (h *ManagerHandlers) ensureProgressBroadcastLoop() {
+	if h.hub == nil {
+		return
+	}
+	h.progressMu.Lock()
+	if h.progressLoopAlive {
+		h.progressMu.Unlock()
+		return
+	}
+	h.progressLoopAlive = true
+	h.progressMu.Unlock()
+
+	go func() {
+		defer func() {
+			h.progressMu.Lock()
+			h.progressLoopAlive = false
+			h.progressMu.Unlock()
+		}()
+
+		var lastPayload string
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			snapshot := h.manager.ProgressSnapshot()
+			payload := map[string]any{
+				"type":     "manager_progress",
+				"snapshot": snapshot,
+			}
+			if msg, err := json.Marshal(payload); err == nil {
+				if payloadStr := string(msg); payloadStr != lastPayload {
+					lastPayload = payloadStr
+					h.hub.Broadcast(msg)
+				}
+			}
+
+			if !snapshot.Updating {
+				return
+			}
+
+			<-ticker.C
+		}
+	}()
 }
 
 func (h *ManagerHandlers) startServerUpdateAsync(s *models.Server) {
@@ -753,7 +806,7 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 	user, _ := c.Get("user")
 	role := c.GetString("role")
 	username, _ := c.Get("username")
-	
+
 	servers := h.manager.Servers
 	if role != "admin" {
 		uname, _ := username.(string)
@@ -793,46 +846,107 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 	username, _ := c.Get("username")
 	role, _ := c.Get("role")
 	warnings := h.manager.MissingComponents
+	autoUpdateTime := ""
+	if !h.manager.UpdateTime.IsZero() {
+		autoUpdateTime = h.manager.UpdateTime.Format("15:04")
+	}
 
-	// If the request is from HTMX, render the partial view
+	servers := h.manager.Servers
+	activeCount := 0
+	totalPlayers := 0
+	for _, s := range servers {
+		if s.IsRunning() {
+			activeCount++
+		}
+		totalPlayers += s.ClientCount()
+	}
+
+	data := gin.H{
+		"username":                            username,
+		"role":                                role,
+		"root_path":                           h.manager.Paths.RootPath,
+		"steam_id":                            h.manager.SteamID,
+		"port":                                h.manager.Port,
+		"auto_update_time":                    autoUpdateTime,
+		"auto_update":                         h.manager.StartupUpdate,
+		"start_update":                        h.manager.StartupUpdate,
+		"detached":                            h.manager.DetachedServers,
+		"tray_enabled":                        h.manager.TrayEnabled,
+		"updating":                            h.manager.IsUpdating(),
+		"buildTime":                           h.manager.BuildTime(),
+		"server_count_active":                 h.manager.ActiveServerCount(),
+		"game_data_warnings":                  warnings,
+		"auto_port_forward_manager":           h.manager.AutoPortForwardManager,
+		"tls_enabled":                         h.manager.TLSEnabled,
+		"tls_cert":                            h.manager.TLSCertPath,
+		"tls_key":                             h.manager.TLSKeyPath,
+		"discord_default_webhook":             h.manager.DiscordDefaultWebhook,
+		"notify_enable_deploy":                h.manager.NotifyEnableDeploy,
+		"notify_enable_server":                h.manager.NotifyEnableServer,
+		"notify_on_start":                     h.manager.NotifyOnStart,
+		"notify_on_stopping":                  h.manager.NotifyOnStopping,
+		"notify_on_stopped":                   h.manager.NotifyOnStopped,
+		"notify_on_restart":                   h.manager.NotifyOnRestart,
+		"notify_on_update_started":            h.manager.NotifyOnUpdateStarted,
+		"notify_on_update_completed":          h.manager.NotifyOnUpdateCompleted,
+		"notify_on_update_failed":             h.manager.NotifyOnUpdateFailed,
+		"notify_deploy_release":               h.manager.NotifyDeployRelease,
+		"notify_deploy_beta":                  h.manager.NotifyDeployBeta,
+		"notify_deploy_bepinex":               h.manager.NotifyDeployBepInEx,
+		"notify_deploy_launchpad":             h.manager.NotifyDeployLaunchPad,
+		"notify_deploy_scon":                  h.manager.NotifyDeploySCON,
+		"notify_deploy_steamcmd":              h.manager.NotifyDeploySteamCMD,
+		"notify_deploy_servers":               h.manager.NotifyDeployServers,
+		"notify_msg_start":                    h.manager.NotifyMsgStart,
+		"notify_msg_stopping":                 h.manager.NotifyMsgStopping,
+		"notify_msg_stopped":                  h.manager.NotifyMsgStopped,
+		"notify_msg_restart":                  h.manager.NotifyMsgRestart,
+		"notify_msg_update_started":           h.manager.NotifyMsgUpdateStarted,
+		"notify_msg_update_completed":         h.manager.NotifyMsgUpdateCompleted,
+		"notify_msg_update_failed":            h.manager.NotifyMsgUpdateFailed,
+		"notify_msg_deploy_started":           h.manager.NotifyMsgDeployStarted,
+		"notify_msg_deploy_completed":         h.manager.NotifyMsgDeployCompleted,
+		"notify_msg_deploy_completed_error":   h.manager.NotifyMsgDeployCompletedError,
+		"notify_color_start":                  h.manager.NotifyColorStart,
+		"notify_color_stopping":               h.manager.NotifyColorStopping,
+		"notify_color_stopped":                h.manager.NotifyColorStopped,
+		"notify_color_restart":                h.manager.NotifyColorRestart,
+		"notify_color_update_started":         h.manager.NotifyColorUpdateStarted,
+		"notify_color_update_completed":       h.manager.NotifyColorUpdateCompleted,
+		"notify_color_update_failed":          h.manager.NotifyColorUpdateFailed,
+		"notify_color_deploy_started":         h.manager.NotifyColorDeployStarted,
+		"notify_color_deploy_completed":       h.manager.NotifyColorDeployCompleted,
+		"notify_color_deploy_completed_error": h.manager.NotifyColorDeployCompletedError,
+		"totalServers":                        len(servers),
+		"activeServers":                       activeCount,
+		"totalPlayers":                        totalPlayers,
+		"systemHealth":                        "100%",
+		"servers":                             h.manager.Servers,
+		"active":                              h.manager.IsActive(),
+		"page":                                "manager",
+		"title":                               "Manager Settings",
+	}
+
+	// If this is an HTMX request, render only the manager content
 	if c.GetHeader("HX-Request") == "true" {
-		c.HTML(http.StatusOK, "manager.html", gin.H{
-			"username":             username,
-			"role":                 role,
-			"root_path":            h.manager.Paths.RootPath,
-			"steam_id":             h.manager.SteamID,
-			"port":                 h.manager.Port,
-			"auto_update":          h.manager.StartupUpdate,
-			"start_update":         h.manager.StartupUpdate,
-			"detached":             h.manager.DetachedServers,
-			"tray_enabled":         h.manager.TrayEnabled,
-			"updating":             h.manager.IsUpdating(),
-			"buildTime":            h.manager.BuildTime(),
-			"server_count_active":  h.manager.ActiveServerCount(),
-			"game_data_warnings":   warnings,
-			"auto_port_forward_manager": h.manager.AutoPortForwardManager,
-			"tls_enabled":          h.manager.TLSEnabled,
-			"tls_cert":             h.manager.TLSCertPath,
-			"tls_key":              h.manager.TLSKeyPath,
-		})
+		c.HTML(http.StatusOK, "manager.html", data)
 		return
 	}
 
-	// Otherwise, render the full frame, which will load the correct content via htmx
-	c.HTML(http.StatusOK, "frame.html", gin.H{
-		"username":  username,
-		"role":      role,
-		"servers":   h.manager.Servers,
-		"buildTime": h.manager.BuildTime(),
-		"active":    h.manager.IsActive(),
-		"page":      "manager",
-		"title":     "Manager Settings",
-	})
+	// Otherwise, render the full frame with manager selected
+	c.HTML(http.StatusOK, "frame.html", data)
 }
 
 // ManagerVersionsGET returns latest/deployed component version info as JSON for async loading.
 func (h *ManagerHandlers) ManagerVersionsGET(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
+	// Ensure HTMX swaps this fragment into the version grid on the
+	// manager page, even if no explicit hx-target was provided and
+	// the body has a global hx-target (e.g. #content-area).
+	if c.GetHeader("HX-Target") == "" {
+		c.Header("HX-Target", "version-status-grid")
+	}
+
+	c.HTML(http.StatusOK, "version_status_grid.html", gin.H{
 		"release_latest":     h.manager.ReleaseLatest(),
 		"beta_latest":        h.manager.BetaLatest(),
 		"steamcmd_latest":    h.manager.SteamCmdLatest(),

@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -54,6 +55,13 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		notifyOnUpdateStarted := c.PostForm("notify_on_update_started") == "on"
 		notifyOnUpdateCompleted := c.PostForm("notify_on_update_completed") == "on"
 		notifyOnUpdateFailed := c.PostForm("notify_on_update_failed") == "on"
+		notifyDeployRelease := c.PostForm("notify_deploy_release") == "on"
+		notifyDeployBeta := c.PostForm("notify_deploy_beta") == "on"
+		notifyDeployBepInEx := c.PostForm("notify_deploy_bepinex") == "on"
+		notifyDeployLaunchPad := c.PostForm("notify_deploy_launchpad") == "on"
+		notifyDeploySCON := c.PostForm("notify_deploy_scon") == "on"
+		notifyDeploySteamCMD := c.PostForm("notify_deploy_steamcmd") == "on"
+		notifyDeployServers := c.PostForm("notify_deploy_servers") == "on"
 		// Message templates & colors (accept raw; validated minimally at load/use)
 		notifyMsgStart := strings.TrimSpace(c.PostForm("notify_msg_start"))
 		notifyMsgStopping := strings.TrimSpace(c.PostForm("notify_msg_stopping"))
@@ -91,10 +99,24 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			return
 		}
 
-		t, _ := time.Parse("15:04:05", c.PostForm("auto_update"))
+		autoUpdateInput := strings.TrimSpace(c.PostForm("auto_update"))
+		updateTime := time.Time{}
+		if autoUpdateInput != "" {
+			parsed := false
+			for _, layout := range []string{"15:04", "15:04:05"} {
+				if candidate, err := time.Parse(layout, autoUpdateInput); err == nil {
+					updateTime = candidate
+					parsed = true
+					break
+				}
+			}
+			if !parsed {
+				updateTime = h.manager.UpdateTime
+			}
+		}
 		startupUpdate := c.PostForm("start_update") == "on"
 
-		h.manager.UpdateConfig(steamID, rootPath, port, t, startupUpdate)
+		h.manager.UpdateConfig(steamID, rootPath, port, updateTime, startupUpdate)
 		h.manager.DetachedServers = detachedServers
 		// Only meaningful on Windows; allow user to toggle off to disable tray next start.
 		h.manager.TrayEnabled = trayEnabled
@@ -206,30 +228,77 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		h.manager.NotifyOnUpdateStarted = notifyOnUpdateStarted
 		h.manager.NotifyOnUpdateCompleted = notifyOnUpdateCompleted
 		h.manager.NotifyOnUpdateFailed = notifyOnUpdateFailed
+		h.manager.NotifyDeployRelease = notifyDeployRelease
+		h.manager.NotifyDeployBeta = notifyDeployBeta
+		h.manager.NotifyDeployBepInEx = notifyDeployBepInEx
+		h.manager.NotifyDeployLaunchPad = notifyDeployLaunchPad
+		h.manager.NotifyDeploySCON = notifyDeploySCON
+		h.manager.NotifyDeploySteamCMD = notifyDeploySteamCMD
+		h.manager.NotifyDeployServers = notifyDeployServers
 		// Templates (empty preserves prior value)
-		if notifyMsgStart != "" { h.manager.NotifyMsgStart = notifyMsgStart }
-		if notifyMsgStopping != "" { h.manager.NotifyMsgStopping = notifyMsgStopping }
-		if notifyMsgStopped != "" { h.manager.NotifyMsgStopped = notifyMsgStopped }
-		if notifyMsgRestart != "" { h.manager.NotifyMsgRestart = notifyMsgRestart }
-		if notifyMsgUpdateStarted != "" { h.manager.NotifyMsgUpdateStarted = notifyMsgUpdateStarted }
-		if notifyMsgUpdateCompleted != "" { h.manager.NotifyMsgUpdateCompleted = notifyMsgUpdateCompleted }
-		if notifyMsgUpdateFailed != "" { h.manager.NotifyMsgUpdateFailed = notifyMsgUpdateFailed }
+		if notifyMsgStart != "" {
+			h.manager.NotifyMsgStart = notifyMsgStart
+		}
+		if notifyMsgStopping != "" {
+			h.manager.NotifyMsgStopping = notifyMsgStopping
+		}
+		if notifyMsgStopped != "" {
+			h.manager.NotifyMsgStopped = notifyMsgStopped
+		}
+		if notifyMsgRestart != "" {
+			h.manager.NotifyMsgRestart = notifyMsgRestart
+		}
+		if notifyMsgUpdateStarted != "" {
+			h.manager.NotifyMsgUpdateStarted = notifyMsgUpdateStarted
+		}
+		if notifyMsgUpdateCompleted != "" {
+			h.manager.NotifyMsgUpdateCompleted = notifyMsgUpdateCompleted
+		}
+		if notifyMsgUpdateFailed != "" {
+			h.manager.NotifyMsgUpdateFailed = notifyMsgUpdateFailed
+		}
 		// Colors (#RRGGBB)
 		validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
-		if validColor(notifyColorStart) { h.manager.NotifyColorStart = notifyColorStart }
-		if validColor(notifyColorStopping) { h.manager.NotifyColorStopping = notifyColorStopping }
-		if validColor(notifyColorStopped) { h.manager.NotifyColorStopped = notifyColorStopped }
-		if validColor(notifyColorRestart) { h.manager.NotifyColorRestart = notifyColorRestart }
-		if validColor(notifyColorUpdateStarted) { h.manager.NotifyColorUpdateStarted = notifyColorUpdateStarted }
-		if validColor(notifyColorUpdateCompleted) { h.manager.NotifyColorUpdateCompleted = notifyColorUpdateCompleted }
-		if validColor(notifyColorUpdateFailed) { h.manager.NotifyColorUpdateFailed = notifyColorUpdateFailed }
+		if validColor(notifyColorStart) {
+			h.manager.NotifyColorStart = notifyColorStart
+		}
+		if validColor(notifyColorStopping) {
+			h.manager.NotifyColorStopping = notifyColorStopping
+		}
+		if validColor(notifyColorStopped) {
+			h.manager.NotifyColorStopped = notifyColorStopped
+		}
+		if validColor(notifyColorRestart) {
+			h.manager.NotifyColorRestart = notifyColorRestart
+		}
+		if validColor(notifyColorUpdateStarted) {
+			h.manager.NotifyColorUpdateStarted = notifyColorUpdateStarted
+		}
+		if validColor(notifyColorUpdateCompleted) {
+			h.manager.NotifyColorUpdateCompleted = notifyColorUpdateCompleted
+		}
+		if validColor(notifyColorUpdateFailed) {
+			h.manager.NotifyColorUpdateFailed = notifyColorUpdateFailed
+		}
 		// Deploy templates/colors
-		if notifyMsgDeployStarted != "" { h.manager.NotifyMsgDeployStarted = notifyMsgDeployStarted }
-		if notifyMsgDeployCompleted != "" { h.manager.NotifyMsgDeployCompleted = notifyMsgDeployCompleted }
-		if notifyMsgDeployCompletedError != "" { h.manager.NotifyMsgDeployCompletedError = notifyMsgDeployCompletedError }
-		if validColor(notifyColorDeployStarted) { h.manager.NotifyColorDeployStarted = notifyColorDeployStarted }
-		if validColor(notifyColorDeployCompleted) { h.manager.NotifyColorDeployCompleted = notifyColorDeployCompleted }
-		if validColor(notifyColorDeployCompletedError) { h.manager.NotifyColorDeployCompletedError = notifyColorDeployCompletedError }
+		if notifyMsgDeployStarted != "" {
+			h.manager.NotifyMsgDeployStarted = notifyMsgDeployStarted
+		}
+		if notifyMsgDeployCompleted != "" {
+			h.manager.NotifyMsgDeployCompleted = notifyMsgDeployCompleted
+		}
+		if notifyMsgDeployCompletedError != "" {
+			h.manager.NotifyMsgDeployCompletedError = notifyMsgDeployCompletedError
+		}
+		if validColor(notifyColorDeployStarted) {
+			h.manager.NotifyColorDeployStarted = notifyColorDeployStarted
+		}
+		if validColor(notifyColorDeployCompleted) {
+			h.manager.NotifyColorDeployCompleted = notifyColorDeployCompleted
+		}
+		if validColor(notifyColorDeployCompletedError) {
+			h.manager.NotifyColorDeployCompletedError = notifyColorDeployCompletedError
+		}
 		h.manager.Save()
 		// Apply manager port forwarding changes without requiring restart
 		if !prevPF && h.manager.AutoPortForwardManager {
@@ -428,7 +497,19 @@ func (h *ManagerHandlers) UpdateStream(c *gin.Context) {
 	}
 
 	sendSnapshot := func() {
-		c.SSEvent("progress", h.manager.ProgressSnapshot())
+		snapshot := h.manager.ProgressSnapshot()
+		c.SSEvent("progress", snapshot)
+		// Also emit over WebSocket hub when available so the manager UI can
+		// reflect deploy progress in real time without an extra SSE channel.
+		if h.hub != nil {
+			payload := map[string]any{
+				"type":     "manager_progress",
+				"snapshot": snapshot,
+			}
+			if msg, err := json.Marshal(payload); err == nil {
+				h.hub.Broadcast(msg)
+			}
+		}
 		flush()
 	}
 
@@ -471,7 +552,6 @@ func validatePEMCertificate(path string) error {
 	}
 	return nil
 }
-
 
 func validatePEMKey(path string) (any, error) {
 	data, err := os.ReadFile(path)

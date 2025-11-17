@@ -189,12 +189,20 @@ type Manager struct {
 	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
 	// Deploy notification templates & colors (manager-wide)
 	// Tokens: {{component}}, {{duration}}, {{errors}}, {{status}}, {{timestamp}}
-	NotifyMsgDeployStarted        string `json:"notify_msg_deploy_started"`
-	NotifyMsgDeployCompleted      string `json:"notify_msg_deploy_completed"`
-	NotifyMsgDeployCompletedError string `json:"notify_msg_deploy_completed_error"`
+	NotifyMsgDeployStarted          string `json:"notify_msg_deploy_started"`
+	NotifyMsgDeployCompleted        string `json:"notify_msg_deploy_completed"`
+	NotifyMsgDeployCompletedError   string `json:"notify_msg_deploy_completed_error"`
 	NotifyColorDeployStarted        string `json:"notify_color_deploy_started"`
 	NotifyColorDeployCompleted      string `json:"notify_color_deploy_completed"`
 	NotifyColorDeployCompletedError string `json:"notify_color_deploy_completed_error"`
+	// Per-component deploy notification toggles (default true for backward compatibility)
+	NotifyDeployRelease   bool `json:"notify_deploy_release"`
+	NotifyDeployBeta      bool `json:"notify_deploy_beta"`
+	NotifyDeployBepInEx   bool `json:"notify_deploy_bepinex"`
+	NotifyDeployLaunchPad bool `json:"notify_deploy_launchpad"`
+	NotifyDeploySCON      bool `json:"notify_deploy_scon"`
+	NotifyDeploySteamCMD  bool `json:"notify_deploy_steamcmd"`
+	NotifyDeployServers   bool `json:"notify_deploy_servers"`
 	// Transient NAT/port forward status for manager port (not persisted)
 	ManagerPortForwardActive       bool          `json:"-"`
 	ManagerPortForwardExternalPort int           `json:"-"`
@@ -299,15 +307,15 @@ func NewManagerWithConfig(configPath string) *Manager {
 		AllowIFrame:                false,
 		WindowsDiscoveryWMIEnabled: true,
 		// Default notification preferences
-		NotifyEnableDeploy:        true,
-		NotifyEnableServer:        true,
-		NotifyOnStart:             true,
-		NotifyOnStopping:          true,
-		NotifyOnStopped:           true,
-		NotifyOnRestart:           true,
-		NotifyOnUpdateStarted:     true,
-		NotifyOnUpdateCompleted:   true,
-		NotifyOnUpdateFailed:      true,
+		NotifyEnableDeploy:      true,
+		NotifyEnableServer:      true,
+		NotifyOnStart:           true,
+		NotifyOnStopping:        true,
+		NotifyOnStopped:         true,
+		NotifyOnRestart:         true,
+		NotifyOnUpdateStarted:   true,
+		NotifyOnUpdateCompleted: true,
+		NotifyOnUpdateFailed:    true,
 		// Default templates
 		NotifyMsgStart:           "Server {{server_name}} started.",
 		NotifyMsgStopping:        "Server {{server_name}} stopping.",
@@ -325,12 +333,19 @@ func NewManagerWithConfig(configPath string) *Manager {
 		NotifyColorUpdateCompleted: "#16A34A",
 		NotifyColorUpdateFailed:    "#DC2626",
 		// Deploy templates/colors defaults
-		NotifyMsgDeployStarted:        "Deployment started: {{component}}.",
-		NotifyMsgDeployCompleted:      "Deployment completed: {{component}} in {{duration}}.",
-		NotifyMsgDeployCompletedError: "Deployment completed with errors: {{component}} in {{duration}} ({{errors}}).",
+		NotifyMsgDeployStarted:          "Deployment started: {{component}}.",
+		NotifyMsgDeployCompleted:        "Deployment completed: {{component}} in {{duration}}.",
+		NotifyMsgDeployCompletedError:   "Deployment completed with errors: {{component}} in {{duration}} ({{errors}}).",
 		NotifyColorDeployStarted:        "#2563EB",
 		NotifyColorDeployCompleted:      "#16A34A",
 		NotifyColorDeployCompletedError: "#DC2626",
+		NotifyDeployRelease:             true,
+		NotifyDeployBeta:                true,
+		NotifyDeployBepInEx:             true,
+		NotifyDeployLaunchPad:           true,
+		NotifyDeploySCON:                true,
+		NotifyDeploySteamCMD:            true,
+		NotifyDeployServers:             true,
 	}
 
 	// (Legacy removed) Bug report webhook field initialization removed.
@@ -1048,9 +1063,13 @@ func (m *Manager) load() (bool, error) {
 
 	// Preserve previously persisted active state for backward compatibility.
 	var wasActive bool
+	fieldExists := map[string]bool{}
 	if len(data) > 0 {
 		var raw map[string]json.RawMessage
 		if err := json.Unmarshal(data, &raw); err == nil {
+			for key := range raw {
+				fieldExists[key] = true
+			}
 			if activeRaw, ok := raw["active"]; ok {
 				_ = json.Unmarshal(activeRaw, &wasActive)
 			}
@@ -1103,29 +1122,91 @@ func (m *Manager) load() (bool, error) {
 	m.NotifyOnUpdateCompleted = temp.NotifyOnUpdateCompleted
 	m.NotifyOnUpdateFailed = temp.NotifyOnUpdateFailed
 	// Message templates (empty -> keep existing defaults)
-	if strings.TrimSpace(temp.NotifyMsgStart) != "" { m.NotifyMsgStart = strings.TrimSpace(temp.NotifyMsgStart) }
-	if strings.TrimSpace(temp.NotifyMsgStopping) != "" { m.NotifyMsgStopping = strings.TrimSpace(temp.NotifyMsgStopping) }
-	if strings.TrimSpace(temp.NotifyMsgStopped) != "" { m.NotifyMsgStopped = strings.TrimSpace(temp.NotifyMsgStopped) }
-	if strings.TrimSpace(temp.NotifyMsgRestart) != "" { m.NotifyMsgRestart = strings.TrimSpace(temp.NotifyMsgRestart) }
-	if strings.TrimSpace(temp.NotifyMsgUpdateStarted) != "" { m.NotifyMsgUpdateStarted = strings.TrimSpace(temp.NotifyMsgUpdateStarted) }
-	if strings.TrimSpace(temp.NotifyMsgUpdateCompleted) != "" { m.NotifyMsgUpdateCompleted = strings.TrimSpace(temp.NotifyMsgUpdateCompleted) }
-	if strings.TrimSpace(temp.NotifyMsgUpdateFailed) != "" { m.NotifyMsgUpdateFailed = strings.TrimSpace(temp.NotifyMsgUpdateFailed) }
+	if strings.TrimSpace(temp.NotifyMsgStart) != "" {
+		m.NotifyMsgStart = strings.TrimSpace(temp.NotifyMsgStart)
+	}
+	if strings.TrimSpace(temp.NotifyMsgStopping) != "" {
+		m.NotifyMsgStopping = strings.TrimSpace(temp.NotifyMsgStopping)
+	}
+	if strings.TrimSpace(temp.NotifyMsgStopped) != "" {
+		m.NotifyMsgStopped = strings.TrimSpace(temp.NotifyMsgStopped)
+	}
+	if strings.TrimSpace(temp.NotifyMsgRestart) != "" {
+		m.NotifyMsgRestart = strings.TrimSpace(temp.NotifyMsgRestart)
+	}
+	if strings.TrimSpace(temp.NotifyMsgUpdateStarted) != "" {
+		m.NotifyMsgUpdateStarted = strings.TrimSpace(temp.NotifyMsgUpdateStarted)
+	}
+	if strings.TrimSpace(temp.NotifyMsgUpdateCompleted) != "" {
+		m.NotifyMsgUpdateCompleted = strings.TrimSpace(temp.NotifyMsgUpdateCompleted)
+	}
+	if strings.TrimSpace(temp.NotifyMsgUpdateFailed) != "" {
+		m.NotifyMsgUpdateFailed = strings.TrimSpace(temp.NotifyMsgUpdateFailed)
+	}
 	// Colors (validate basic format #RRGGBB)
 	validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
-	if validColor(temp.NotifyColorStart) { m.NotifyColorStart = strings.TrimSpace(temp.NotifyColorStart) }
-	if validColor(temp.NotifyColorStopping) { m.NotifyColorStopping = strings.TrimSpace(temp.NotifyColorStopping) }
-	if validColor(temp.NotifyColorStopped) { m.NotifyColorStopped = strings.TrimSpace(temp.NotifyColorStopped) }
-	if validColor(temp.NotifyColorRestart) { m.NotifyColorRestart = strings.TrimSpace(temp.NotifyColorRestart) }
-	if validColor(temp.NotifyColorUpdateStarted) { m.NotifyColorUpdateStarted = strings.TrimSpace(temp.NotifyColorUpdateStarted) }
-	if validColor(temp.NotifyColorUpdateCompleted) { m.NotifyColorUpdateCompleted = strings.TrimSpace(temp.NotifyColorUpdateCompleted) }
-	if validColor(temp.NotifyColorUpdateFailed) { m.NotifyColorUpdateFailed = strings.TrimSpace(temp.NotifyColorUpdateFailed) }
+	if validColor(temp.NotifyColorStart) {
+		m.NotifyColorStart = strings.TrimSpace(temp.NotifyColorStart)
+	}
+	if validColor(temp.NotifyColorStopping) {
+		m.NotifyColorStopping = strings.TrimSpace(temp.NotifyColorStopping)
+	}
+	if validColor(temp.NotifyColorStopped) {
+		m.NotifyColorStopped = strings.TrimSpace(temp.NotifyColorStopped)
+	}
+	if validColor(temp.NotifyColorRestart) {
+		m.NotifyColorRestart = strings.TrimSpace(temp.NotifyColorRestart)
+	}
+	if validColor(temp.NotifyColorUpdateStarted) {
+		m.NotifyColorUpdateStarted = strings.TrimSpace(temp.NotifyColorUpdateStarted)
+	}
+	if validColor(temp.NotifyColorUpdateCompleted) {
+		m.NotifyColorUpdateCompleted = strings.TrimSpace(temp.NotifyColorUpdateCompleted)
+	}
+	if validColor(temp.NotifyColorUpdateFailed) {
+		m.NotifyColorUpdateFailed = strings.TrimSpace(temp.NotifyColorUpdateFailed)
+	}
 	// Deploy templates/colors (only override when provided & valid)
-	if strings.TrimSpace(temp.NotifyMsgDeployStarted) != "" { m.NotifyMsgDeployStarted = strings.TrimSpace(temp.NotifyMsgDeployStarted) }
-	if strings.TrimSpace(temp.NotifyMsgDeployCompleted) != "" { m.NotifyMsgDeployCompleted = strings.TrimSpace(temp.NotifyMsgDeployCompleted) }
-	if strings.TrimSpace(temp.NotifyMsgDeployCompletedError) != "" { m.NotifyMsgDeployCompletedError = strings.TrimSpace(temp.NotifyMsgDeployCompletedError) }
-	if validColor(temp.NotifyColorDeployStarted) { m.NotifyColorDeployStarted = strings.TrimSpace(temp.NotifyColorDeployStarted) }
-	if validColor(temp.NotifyColorDeployCompleted) { m.NotifyColorDeployCompleted = strings.TrimSpace(temp.NotifyColorDeployCompleted) }
-	if validColor(temp.NotifyColorDeployCompletedError) { m.NotifyColorDeployCompletedError = strings.TrimSpace(temp.NotifyColorDeployCompletedError) }
+	if strings.TrimSpace(temp.NotifyMsgDeployStarted) != "" {
+		m.NotifyMsgDeployStarted = strings.TrimSpace(temp.NotifyMsgDeployStarted)
+	}
+	if strings.TrimSpace(temp.NotifyMsgDeployCompleted) != "" {
+		m.NotifyMsgDeployCompleted = strings.TrimSpace(temp.NotifyMsgDeployCompleted)
+	}
+	if strings.TrimSpace(temp.NotifyMsgDeployCompletedError) != "" {
+		m.NotifyMsgDeployCompletedError = strings.TrimSpace(temp.NotifyMsgDeployCompletedError)
+	}
+	if validColor(temp.NotifyColorDeployStarted) {
+		m.NotifyColorDeployStarted = strings.TrimSpace(temp.NotifyColorDeployStarted)
+	}
+	if validColor(temp.NotifyColorDeployCompleted) {
+		m.NotifyColorDeployCompleted = strings.TrimSpace(temp.NotifyColorDeployCompleted)
+	}
+	if validColor(temp.NotifyColorDeployCompletedError) {
+		m.NotifyColorDeployCompletedError = strings.TrimSpace(temp.NotifyColorDeployCompletedError)
+	}
+	// Per-component deploy toggles (default true unless explicitly set)
+	if fieldExists["notify_deploy_release"] {
+		m.NotifyDeployRelease = temp.NotifyDeployRelease
+	}
+	if fieldExists["notify_deploy_beta"] {
+		m.NotifyDeployBeta = temp.NotifyDeployBeta
+	}
+	if fieldExists["notify_deploy_bepinex"] {
+		m.NotifyDeployBepInEx = temp.NotifyDeployBepInEx
+	}
+	if fieldExists["notify_deploy_launchpad"] {
+		m.NotifyDeployLaunchPad = temp.NotifyDeployLaunchPad
+	}
+	if fieldExists["notify_deploy_scon"] {
+		m.NotifyDeploySCON = temp.NotifyDeploySCON
+	}
+	if fieldExists["notify_deploy_steamcmd"] {
+		m.NotifyDeploySteamCMD = temp.NotifyDeploySteamCMD
+	}
+	if fieldExists["notify_deploy_servers"] {
+		m.NotifyDeployServers = temp.NotifyDeployServers
+	}
 	// (Legacy removed) Bug report webhook field load-time override removed.
 	// Default false when missing (zero value already false). Propagate to servers.
 	for _, srv := range m.Servers {
@@ -2140,6 +2221,7 @@ const bepinexLatestURL = "https://api.github.com/repos/BepInEx/BepInEx/releases/
 const launchPadLatestCacheTTL = 30 * time.Minute
 const launchPadLatestURL = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
 const launchPadVersionCacheTTL = time.Minute
+const launchPadVersionFile = "launchpad.version"
 const rocketStationVersionCacheTTL = time.Minute
 const rocketStationLatestCacheTTL = time.Minute
 const bepInExVersionFile = "bepinex.version"
@@ -3156,6 +3238,10 @@ func (m *Manager) fetchLaunchPadDeployedVersion() (string, error) {
 		m.Paths = utils.NewPaths("/tmp/sdsm")
 	}
 
+	if version := m.readPersistedLaunchPadVersion(); version != "" {
+		return version, nil
+	}
+
 	root := m.Paths.LaunchPadDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -3272,17 +3358,25 @@ func (m *Manager) fetchSCONDeployedVersion() (string, error) {
 		return "", err
 	}
 
-	versionFile := filepath.Join(sconPath, "version.txt")
-	if _, err := os.Stat(versionFile); err != nil {
-		return "", err
+	candidates := []string{
+		filepath.Join(sconPath, sconVersionFile),
+		filepath.Join(sconPath, "version.txt"),
 	}
 
-	data, err := os.ReadFile(versionFile)
-	if err != nil {
-		return "", err
+	for _, candidate := range candidates {
+		data, err := os.ReadFile(candidate)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return "", err
+		}
+		if value := strings.TrimSpace(string(data)); value != "" {
+			return value, nil
+		}
 	}
 
-	return strings.TrimSpace(string(data)), nil
+	return "", os.ErrNotExist
 }
 
 func (m *Manager) CheckMissingComponents() {
@@ -3464,12 +3558,12 @@ func findVersionNearAnchor(data, anchor []byte) string {
 	if searchStart >= dataLen {
 		searchStart = dataLen
 	}
-	
+
 	searchEnd := idx + len(anchor) + 256
 	if searchEnd > dataLen {
 		searchEnd = dataLen
 	}
-	
+
 	// Ensure valid slice bounds
 	if searchStart >= searchEnd {
 		return ""
@@ -3481,6 +3575,24 @@ func findVersionNearAnchor(data, anchor []byte) string {
 	}
 
 	return ""
+}
+
+func (m *Manager) readPersistedLaunchPadVersion() string {
+	if m.Paths == nil {
+		return ""
+	}
+	versionFile := filepath.Join(m.Paths.LaunchPadDir(), launchPadVersionFile)
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		return ""
+	}
+	value := strings.TrimSpace(string(data))
+	if value == "" {
+		return ""
+	}
+	value = strings.TrimPrefix(value, "v")
+	value = strings.TrimPrefix(value, "V")
+	return strings.TrimSpace(value)
 }
 
 func (m *Manager) fetchBepInExVersion() (string, error) {
@@ -3643,4 +3755,3 @@ func (m *Manager) bepInExCandidateFiles() []string {
 		filepath.Join(dir, "BepInEx.Preloader.dll"),
 	}
 }
-

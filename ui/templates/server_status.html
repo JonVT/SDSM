@@ -1,7 +1,17 @@
 {{define "title"}}{{.server.Name}}{{end}}
 
-{{define "content"}}
-<div class="server-content">
+{{define "page"}}server/{{.server.ID}}{{end}}
+
+{{define "server_status.html"}}
+<div class="server-content"
+    data-page-title="Server {{.server.Name}}"
+    data-server-id="{{.server.ID}}"
+    data-server-running="{{if .server.Running}}true{{else}}false{{end}}"
+    data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}"
+    data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}"
+    data-server-stopping="{{if .server.Stopping}}true{{else}}false{{end}}"
+    data-shutdown-delay="{{.server.ShutdownDelaySeconds}}"
+    data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}">
     {{ if .server.LastError }}
     <div id="server-error-banner" class="alert alert-danger" role="alert" aria-live="polite">
         <div class="alert-icon" aria-hidden="true">
@@ -191,4 +201,6 @@
 
 {{ template "server_status_modals.html" . }}
 {{ template "rename_modal" . }}
+{{ template "server_status_scripts.html" . }}
+</div>
 {{end}}

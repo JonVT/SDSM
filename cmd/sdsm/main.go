@@ -701,7 +701,22 @@ func setupRouter() *gin.Engine {
 			userHandlers.UsersGET(c)
 		})
 		// Users POST removed; UI uses /api endpoints.
-		protected.POST("/update", managerHandlers.UpdatePOST)
+		updateHandler := func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				acceptsJSON := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json")
+				ajax := c.GetHeader("HX-Request") == "true" || strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
+				if acceptsJSON || ajax {
+					handlers.ToastError(c, "Permission Denied", "Admin privileges required.")
+					c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				} else {
+					c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+				}
+				return
+			}
+			managerHandlers.UpdatePOST(c)
+		}
+		protected.POST("/update", updateHandler)
+		protected.POST("/manager/update", updateHandler)
 		// Graceful shutdown with optional server stop based on detached mode
 		protected.POST("/shutdown", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {

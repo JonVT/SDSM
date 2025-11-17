@@ -1,18 +1,53 @@
 {{define "user_row"}}
-<tr id="user-row-{{.Username}}">
-    <td>{{.Username}}</td>
-    <td>{{.Role}}</td>
-    <td>{{if .LastLogin.IsZero}}-{{else}}{{.LastLogin.Format "2006-01-02 15:04"}}{{end}}</td>
+<tr id="user-row-{{.Username}}" class="user-row" data-username="{{.Username}}" data-role="{{.Role}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}">
     <td>
-        <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#resetPasswordModal" data-username="{{.Username}}">
-            <i class="bi bi-key"></i> Reset Password
-        </button>
-        <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editUserModal" data-username="{{.Username}}" data-role="{{.Role}}">
-            <i class="bi bi-pencil"></i> Edit
-        </button>
-        <button class="btn btn-sm btn-danger" hx-post="/api/users/{{.Username}}/delete" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-confirm="Are you sure you want to delete user {{.Username}}?">
-            <i class="bi bi-trash"></i> Delete
-        </button>
+        <div class="user-cell">
+            <div class="user-avatar" aria-hidden="true">{{initials .Username}}</div>
+            <div>
+                <div class="user-name">{{.Username}}</div>
+                <div class="user-meta">
+                    {{if .CreatedAt.IsZero}}
+                        User account
+                    {{else}}
+                        Joined {{.CreatedAt.Format "2006-01-02"}}
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </td>
+    <td>
+        <div class="role-select-wrapper">
+            <label class="sr-only" for="role-{{.Username}}">Role for {{.Username}}</label>
+            <select id="role-{{.Username}}" class="role-select" name="role" hx-patch="/api/users/{{.Username}}/role" hx-trigger="change" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-indicator="#global-htmx-indicator">
+                <option value="operator" {{if eq .Role "operator"}}selected{{end}}>Operator</option>
+                <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
+            </select>
+        </div>
+    </td>
+    <td>
+        <div class="access-chip access-{{.AccessState}}">{{.AccessSummary}}</div>
+        {{if .AccessDetails}}
+        <div class="access-detail-list" aria-label="Server access list for {{.Username}}">
+            {{range .AccessDetails}}
+            <span class="access-pill" title="{{.}}">{{.}}</span>
+            {{end}}
+        </div>
+        {{else if and (eq .Role "operator") (not .AssignedAllServers)}}
+        <div class="text-xs text-secondary">No servers assigned</div>
+        {{end}}
+    </td>
+    <td class="text-end">
+        <div class="btn-group user-actions" role="group" aria-label="Actions for {{.Username}}">
+            <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#resetPasswordModal" data-username="{{.Username}}">
+                Reset Password
+            </button>
+            <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#accessModal" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" data-can-edit="{{if .CanEditAccess}}true{{else}}false{{end}}" {{if not .CanEditAccess}}disabled title="Admins already have access to all servers"{{end}}>
+                Manage Access
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" hx-delete="/api/users/{{.Username}}" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-confirm="Delete user {{.Username}}?" hx-indicator="#global-htmx-indicator">
+                Delete
+            </button>
+        </div>
     </td>
 </tr>
 {{end}}

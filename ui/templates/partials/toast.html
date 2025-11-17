@@ -118,33 +118,53 @@
         });
 
         document.addEventListener('htmx:afterRequest', function(event) {
-            const xhr = event.detail.xhr;
-            
-            // Check for toast headers
-            const toastType = xhr.getResponseHeader('X-Toast-Type');
-            const toastTitle = xhr.getResponseHeader('X-Toast-Title');
-            const toastMessage = xhr.getResponseHeader('X-Toast-Message');
+            const xhr = event.detail && event.detail.xhr;
+            if (xhr) {
+                const toastType = xhr.getResponseHeader('X-Toast-Type');
+                const toastTitle = xhr.getResponseHeader('X-Toast-Title');
+                const toastMessage = xhr.getResponseHeader('X-Toast-Message');
 
-            if (toastMessage) {
-                showToast({
-                    type: toastType || 'info',
-                    title: toastTitle || '',
-                    message: toastMessage
-                });
+                if (toastMessage && !xhr._toastShown) {
+                    showToast({
+                        type: toastType || 'info',
+                        title: toastTitle || '',
+                        message: toastMessage
+                    });
+                    xhr._toastShown = true;
+                }
             }
 
-            // Decrement and maybe hide global indicator
             inflight = Math.max(0, inflight - 1);
             if (inflight === 0) hideGlobalIndicator();
         });
 
-        // Listen for errors
         document.addEventListener('htmx:responseError', function(event) {
-            showToast({
-                type: 'error',
-                title: 'Request Failed',
-                message: 'An error occurred while processing your request.'
-            });
+            const xhr = event.detail && event.detail.xhr;
+            let handled = false;
+
+            if (xhr) {
+                const toastType = xhr.getResponseHeader('X-Toast-Type');
+                const toastTitle = xhr.getResponseHeader('X-Toast-Title');
+                const toastMessage = xhr.getResponseHeader('X-Toast-Message');
+
+                if (toastMessage) {
+                    showToast({
+                        type: toastType || 'error',
+                        title: toastTitle || 'Request Failed',
+                        message: toastMessage
+                    });
+                    xhr._toastShown = true;
+                    handled = true;
+                }
+            }
+
+            if (!handled) {
+                showToast({
+                    type: 'error',
+                    title: 'Request Failed',
+                    message: 'An error occurred while processing your request.'
+                });
+            }
 
             inflight = Math.max(0, inflight - 1);
             if (inflight === 0) hideGlobalIndicator();

@@ -31,16 +31,16 @@ func TestValidatePortAvailable(t *testing.T) {
 		{ID: 2, Port: 27021},
 	}}
 
-	// Valid and sufficiently distant from existing ports
-	if port, _, err := ValidatePortAvailable(mgr, "27030", -1); err != nil || port != 27030 {
-		t.Fatalf("expected port 27030 to be valid and available, got port=%d err=%v", port, err)
+	// Valid and available: manager has no ports in use near 27030
+	if port, suggested, err := ValidatePortAvailable(mgr, "27030", -1); err != nil || port != 27030 || suggested != 0 {
+		t.Fatalf("expected port 27030 to be valid and available, got port=%d suggested=%d err=%v", port, suggested, err)
 	}
 
-	// Conflict: within 3 of existing 27021 (27019..27023)
-	if _, suggested, err := ValidatePortAvailable(mgr, "27022", -1); err == nil {
-		t.Fatalf("expected conflict for 27022 due to proximity to 27021, got nil error")
-	} else if suggested == 0 {
-		t.Fatalf("expected a suggested next available port when conflict occurs")
+	// Conflict: exact collision with existing 27021 should yield error and suggested port
+	if port, suggested, err := ValidatePortAvailable(mgr, "27021", -1); err == nil {
+		t.Fatalf("expected conflict for 27021 due to existing server using that port, got nil error")
+	} else if port != 27021 || suggested == 0 {
+		t.Fatalf("expected original port and non-zero suggested port on conflict, got port=%d suggested=%d", port, suggested)
 	}
 
 	// Non-numeric
@@ -93,9 +93,9 @@ func TestValidateNewServerConfig(t *testing.T) {
 		t.Fatalf("expected error due to duplicate server name")
 	}
 
-	// Port conflict should return an error
+	// Port conflict should return an error when colliding with existing server
 	in.Name = "Delta"
-	in.PortRaw = "27016" // within 3 of 27015
+	in.PortRaw = "27015" // exact conflict
 	if _, err := ValidateNewServerConfig(mgr, in); err == nil {
 		t.Fatalf("expected error due to port conflict")
 	}

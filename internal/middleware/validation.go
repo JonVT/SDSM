@@ -45,7 +45,7 @@ func SanitizePath(input string) string {
 }
 
 func ValidatePort(portStr string) (int, error) {
-	port, err := strconv.Atoi(portStr)
+	port, err := strconv.Atoi(strings.TrimSpace(portStr))
 	if err != nil {
 		return 0, err
 	}

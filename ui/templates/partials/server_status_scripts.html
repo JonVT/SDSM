@@ -1,4 +1,5 @@
 <script>
+    (function(){
     // Global guard to prevent ReferenceError if handlers run before DOMContentLoaded sets locals
     window.__sdsmPendingSubmit = window.__sdsmPendingSubmit || false;
     function openLogPopup(serverId) {
@@ -73,7 +74,11 @@
 
     // Initialize theme
     setTheme(getStoredTheme());
-    const rootEl = document.body;
+    const rootEl = document.querySelector('.server-content') || document.body;
+    if (!rootEl) {
+        console.warn('SDSM: server content root not found; skipping server controls.');
+        return;
+    }
     const statusIndicator = document.getElementById('status-dot-indicator');
     const statusText = document.getElementById('status-dot-text');
     const statusContainer = document.getElementById('status-pill-container');
@@ -1971,7 +1976,7 @@
         langSelect.value = desired;
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    function initServerStatusUI() {
         // Safety net: ensure every .btn has a visible variant; default to neutral if none present
         (function enforceButtonVariants(){
             try {
@@ -3904,8 +3909,14 @@
             const historyBody = document.getElementById('players-history-body');
             delegateAction(liveBody);
             delegateAction(historyBody);
-        })();
-    });
+            })();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initServerStatusUI);
+        } else {
+            initServerStatusUI();
+        }
 
     // -------- Server Logs (tabs + tail) --------
     function renderLogTabs(files) {
@@ -4112,5 +4123,6 @@
             });
         }
         updateLogButtonsState();
+    })();
     })();
 </script>

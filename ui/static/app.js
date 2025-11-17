@@ -187,6 +187,11 @@
               SDSM.ui.updateStats(data.stats);
             }
             break;
+          case 'manager_progress':
+            if (typeof SDSM.ui.updateManagerProgress === 'function') {
+              SDSM.ui.updateManagerProgress(data.snapshot);
+            }
+            break;
           default:
             console.log('Unknown WebSocket message type:', data.type);
         }
@@ -210,6 +215,37 @@
 
     // UI Update Helpers
     ui: {
+      updateManagerProgress: function(snapshot) {
+        if (!snapshot || !Array.isArray(snapshot.components)) return;
+
+        snapshot.components.forEach(comp => {
+          const key = (comp.key || comp.Key || '').toLowerCase();
+          if (!key) return;
+          const row = document.querySelector(`.versions-row[data-component="${key}"]`);
+          if (!row) return;
+
+          const progressEl = row.querySelector(`.progress-fill[data-progress="${key}"]`);
+          const pill = row.querySelector('.status-pill');
+
+          if (progressEl && typeof comp.percent === 'number') {
+            const pct = Math.max(0, Math.min(100, comp.percent));
+            progressEl.style.width = pct + '%';
+          }
+
+          if (pill) {
+            pill.classList.remove('status-ok', 'status-outdated', 'status-running', 'status-error');
+            if (snapshot.updating && comp.running) {
+              pill.classList.add('status-running');
+              pill.textContent = comp.stage || 'Updating...';
+            } else if (comp.error) {
+              pill.classList.add('status-error');
+              pill.textContent = 'Error';
+              pill.title = comp.error;
+            }
+          }
+        });
+      },
+
       updateServerStatus: function(serverId, status) {
         const card = document.querySelector(`[data-server-id="${serverId}"]`);
         if (!card) return;
@@ -476,6 +512,21 @@
       // Initialize keyboard shortcuts
       this.keyboard.init();
 
+      // Ensure the shared WebSocket connection is active so realtime UI
+      // updates (manager progress, server statuses, etc.) are received even on
+      // pages that do not run page-specific scripts.
+      try {
+        if (typeof WebSocket !== 'undefined') {
+          const ws = this.state.ws;
+          const needsConnect = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+          if (needsConnect) {
+            this.ws.connect();
+          }
+        }
+      } catch (err) {
+        console.error('WebSocket initialization failed:', err);
+      }
+
       // Initialize HTMX indicators if HTMX is present
       if (typeof htmx !== 'undefined') {
         document.body.addEventListener('htmx:beforeRequest', (ev) => {
@@ -495,6 +546,18 @@
         document.addEventListener('htmx:afterSwap', (e) => {
           if (e.target && e.target.closest('#server-grid')) {
             this.ui.bindServerCardNavigation(e.target.closest('#server-grid'));
+          }
+
+          // When #content-area is swapped, update the frame title from the
+          // new content's data-page-title attribute if present.
+          if (e.target && e.target.id === 'content-area') {
+            const titleEl = document.getElementById('page-title');
+            if (titleEl) {
+              const wrapper = e.target.querySelector('[data-page-title]');
+              if (wrapper && wrapper.dataset.pageTitle) {
+                titleEl.textContent = wrapper.dataset.pageTitle;
+              }
+            }
           }
         });
       }

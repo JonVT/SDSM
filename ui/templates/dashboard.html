@@ -2,6 +2,7 @@
 {{define "page"}}dashboard{{end}}
 
 {{define "dashboard.html"}}
+<div data-page-title="Dashboard">
 <!-- Dashboard Content - loaded into frame.html via HTMX -->
 <section class="stats-grid">
     <div class="stat-card">
@@ -71,4 +72,5 @@
         }
     });
 </script>
+</div>
 {{end}}

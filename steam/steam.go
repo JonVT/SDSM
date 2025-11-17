@@ -21,14 +21,15 @@ import (
 )
 
 const (
-	STEAMCMD_WIN_URL   = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
-	STEAMCMD_LINUX_URL = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
-	bepInExLatestAPI   = "https://api.github.com/repos/BepInEx/BepInEx/releases/latest"
-	launchPadAPI       = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
-	launchPadFallback  = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
-	bepInExVersionFile = "bepinex.version"
-	sconVersionFile    = "scon.version"
-	sconDefaultRepo    = "JonVT/SCON" // default guess; can be overridden via configuration
+	STEAMCMD_WIN_URL     = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip"
+	STEAMCMD_LINUX_URL   = "https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz"
+	bepInExLatestAPI     = "https://api.github.com/repos/BepInEx/BepInEx/releases/latest"
+	launchPadAPI         = "https://api.github.com/repos/StationeersLaunchPad/StationeersLaunchPad/releases/latest"
+	launchPadFallback    = "https://github.com/StationeersLaunchPad/StationeersLaunchPad/archive/refs/heads/main.zip"
+	bepInExVersionFile   = "bepinex.version"
+	launchPadVersionFile = "launchpad.version"
+	sconVersionFile      = "scon.version"
+	sconDefaultRepo      = "JonVT/SCON" // default guess; can be overridden via configuration
 )
 
 // Steam provides helpers to query Steam APIs and deploy/update components
@@ -359,15 +360,20 @@ func (s *Steam) resolveBepInExDownload() (string, string, string, error) {
 }
 
 // UpdateLaunchPad fetches and deploys Stationeers LaunchPad, flattening the root folder if needed.
+
 func (s *Steam) UpdateLaunchPad() error {
 	s.Logger.Write("Updating Stationeers LaunchPad")
-	url, archiveName, err := s.resolveLaunchPadDownload()
+	url, archiveName, releaseVersion, err := s.resolveLaunchPadDownload()
 	if err != nil {
 		return err
 	}
 
 	zipPath := filepath.Join(s.Paths.RootPath, archiveName)
-	s.Logger.Write(fmt.Sprintf("Downloading Stationeers LaunchPad from %s", url))
+	if releaseVersion != "" {
+		s.Logger.Write(fmt.Sprintf("Downloading Stationeers LaunchPad %s from %s", releaseVersion, url))
+	} else {
+		s.Logger.Write(fmt.Sprintf("Downloading Stationeers LaunchPad from %s", url))
+	}
 	if _, _, err := s.downloadFile(url, zipPath, "Downloading"); err != nil {
 		return err
 	}
@@ -390,15 +396,29 @@ func (s *Steam) UpdateLaunchPad() error {
 		s.Logger.Write(fmt.Sprintf("Warning: unable to flatten LaunchPad directory: %v", err))
 	}
 
+	if releaseVersion != "" {
+		versionPath := filepath.Join(s.Paths.LaunchPadDir(), launchPadVersionFile)
+		clean := strings.TrimSpace(releaseVersion)
+		if clean != "" {
+			if werr := os.WriteFile(versionPath, []byte(clean+"\n"), 0o644); werr != nil {
+				s.Logger.Write(fmt.Sprintf("Warning: unable to record LaunchPad version: %v", werr))
+			}
+		}
+	}
+
 	s.reportProgress("Completed", 0, 0)
-	s.Logger.Write("Stationeers LaunchPad deployed successfully")
+	if releaseVersion != "" {
+		s.Logger.Write(fmt.Sprintf("Stationeers LaunchPad %s deployed successfully", releaseVersion))
+	} else {
+		s.Logger.Write("Stationeers LaunchPad deployed successfully")
+	}
 	return nil
 }
 
-func (s *Steam) resolveLaunchPadDownload() (string, string, error) {
+func (s *Steam) resolveLaunchPadDownload() (string, string, string, error) {
 	req, err := http.NewRequest(http.MethodGet, launchPadAPI, nil)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	req.Header.Set("User-Agent", "SDSM-Manager")
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -406,13 +426,13 @@ func (s *Steam) resolveLaunchPadDownload() (string, string, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		s.Logger.Write(fmt.Sprintf("Warning: unable to query LaunchPad release API: %v", err))
-		return launchPadFallback, "StationeersLaunchPad.zip", nil
+		return launchPadFallback, "StationeersLaunchPad.zip", "", nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		s.Logger.Write(fmt.Sprintf("Warning: LaunchPad release API returned status %d", resp.StatusCode))
-		return launchPadFallback, "StationeersLaunchPad.zip", nil
+		return launchPadFallback, "StationeersLaunchPad.zip", "", nil
 	}
 
 	var release struct {
@@ -426,20 +446,36 @@ func (s *Steam) resolveLaunchPadDownload() (string, string, error) {
 
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		s.Logger.Write(fmt.Sprintf("Warning: unable to parse LaunchPad release metadata: %v", err))
-		return launchPadFallback, "StationeersLaunchPad.zip", nil
+		return launchPadFallback, "StationeersLaunchPad.zip", "", nil
 	}
+
+	version := sanitizeLaunchPadTag(release.TagName)
 
 	for _, asset := range release.Assets {
 		if strings.HasSuffix(strings.ToLower(asset.Name), ".zip") && asset.BrowserDownloadURL != "" {
-			return asset.BrowserDownloadURL, asset.Name, nil
+			return asset.BrowserDownloadURL, asset.Name, version, nil
 		}
 	}
 
 	if release.ZipballURL != "" {
-		return release.ZipballURL, "StationeersLaunchPad.zip", nil
+		return release.ZipballURL, "StationeersLaunchPad.zip", version, nil
 	}
 
-	return launchPadFallback, "StationeersLaunchPad.zip", nil
+	return launchPadFallback, "StationeersLaunchPad.zip", "", nil
+}
+
+func sanitizeLaunchPadTag(tag string) string {
+	value := strings.TrimSpace(tag)
+	if value == "" {
+		return ""
+	}
+	if len(value) > 0 {
+		switch value[0] {
+		case 'v', 'V':
+			value = value[1:]
+		}
+	}
+	return strings.TrimSpace(value)
 }
 
 // UpdateSCON downloads the latest SCON release (from GitHub) and places its contents into BepInEx/plugins.

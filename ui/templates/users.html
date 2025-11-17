@@ -1,45 +1,143 @@
-{{define "title"}}Users{{end}}
+{{define "title"}}User Management{{end}}
+{{define "page"}}users{{end}}
 
 {{define "users.html"}}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="page-title">User Management</h1>
+<div class="container-fluid" data-page-title="User Management">
+    <div class="glass-card user-management-card">
+        <div class="card-header space-between">
+            <div>
+                <h2 class="card-title">User Management</h2>
+                <p class="card-subtitle">Assign which servers each operator can control. {{len .users}} user{{if ne (len .users) 1}}s{{end}} • {{len .serverOptions}} server{{if ne (len .serverOptions) 1}}s{{end}}</p>
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                <span class="btn-label">Add User</span>
+            </button>
         </div>
-    </div>
-
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title">Users</h5>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                        <i class="bi bi-plus-circle"></i> Add User
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Username</th>
-                                    <th>Role</th>
-                                    <th>Last Login</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="user-list">
-                                {{range .users}}
-                                    {{template "user_row.html" .}}
-                                {{end}}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+        <div class="card-content">
+            <div class="table-responsive users-table-wrapper">
+                <table class="table users-table" aria-describedby="users-help-text">
+                    <thead>
+                        <tr>
+                            <th scope="col">User</th>
+                            <th scope="col">Role</th>
+                            <th scope="col">Access</th>
+                            <th scope="col" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-list">
+                        {{if .users}}
+                            {{range .users}}
+                                {{template "user_row" .}}
+                            {{end}}
+                        {{else}}
+                            <tr id="user-empty-row">
+                                <td colspan="4" class="text-center text-secondary py-4">No users yet. Use “Add User” to create the first account.</td>
+                            </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+                <p id="users-help-text" class="text-xs text-secondary mt-2">Operators restricted to specific servers cannot start, stop, or deploy outside their allowed list.</p>
             </div>
         </div>
     </div>
+
+    {{template "user_modals" .}}
 </div>
 
-{{template "user_modals.html" .}}
+<script>
+(function(){
+    function initUserManagement(){
+        const container = document.querySelector('[data-page-title="User Management"]');
+        if (!container) { return; }
+
+        const accessForm = document.getElementById('accessForm');
+        const accessModal = document.getElementById('accessModal');
+        const assignAllToggle = document.getElementById('assign-all-toggle');
+        const assignAllInput = document.getElementById('assign-all-input');
+        const accessSubtitle = document.getElementById('accessModalSubtitle');
+
+        const resetForm = document.getElementById('resetPasswordForm');
+        const resetModal = document.getElementById('resetPasswordModal');
+        const resetSubtitle = document.getElementById('resetPasswordSubtitle');
+
+        function setAssignAllState(on){
+            if (assignAllInput) {
+                assignAllInput.value = on ? 'true' : 'false';
+            }
+            if (!accessForm) { return; }
+            const boxes = accessForm.querySelectorAll('input[name="servers"]');
+            boxes.forEach(cb => {
+                cb.disabled = on;
+                if (on) { cb.checked = false; }
+            });
+        }
+
+        if (assignAllToggle && !assignAllToggle.dataset.bound) {
+            assignAllToggle.addEventListener('change', function(){
+                setAssignAllState(assignAllToggle.checked);
+            });
+            assignAllToggle.dataset.bound = 'true';
+        }
+
+        if (accessForm && accessModal && !accessForm.dataset.bound) {
+            accessModal.addEventListener('show.bs.modal', function(event){
+                const trigger = event.relatedTarget;
+                if (!trigger || trigger.getAttribute('data-can-edit') === 'false') {
+                    event.preventDefault();
+                    return;
+                }
+                const username = (trigger.getAttribute('data-username') || '').trim();
+                if (!username) {
+                    event.preventDefault();
+                    return;
+                }
+                accessForm.setAttribute('hx-post', `/api/users/${encodeURIComponent(username)}/assignments`);
+                accessForm.setAttribute('hx-target', `#user-row-${username}`);
+                if (accessSubtitle) {
+                    accessSubtitle.textContent = `Server access for ${username}`;
+                }
+                const assignAll = trigger.getAttribute('data-assigned-all') === 'true';
+                if (assignAllToggle) {
+                    assignAllToggle.checked = assignAll;
+                }
+                setAssignAllState(assignAll);
+                const raw = trigger.getAttribute('data-assigned') || '';
+                const assigned = raw.split(',').filter(Boolean);
+                const assignedSet = new Set(assigned);
+                accessForm.querySelectorAll('input[name="servers"]').forEach(cb => {
+                    cb.checked = !assignAll && assignedSet.has(cb.value);
+                });
+            });
+            accessForm.dataset.bound = 'true';
+        }
+
+        if (resetForm && resetModal && !resetForm.dataset.bound) {
+            resetModal.addEventListener('show.bs.modal', function(event){
+                const trigger = event.relatedTarget;
+                const username = trigger ? (trigger.getAttribute('data-username') || '').trim() : '';
+                resetForm.setAttribute('hx-post', `/api/users/${encodeURIComponent(username)}/reset-password`);
+                if (resetSubtitle) {
+                    resetSubtitle.textContent = username ? `New password for ${username}` : 'Update the password for this account.';
+                }
+            });
+            resetForm.dataset.bound = 'true';
+        }
+    }
+
+    if (!window.__usersPageHTMXHook) {
+        document.body.addEventListener('htmx:afterSwap', function(evt){
+            if (evt.target && typeof evt.target.querySelector === 'function' && evt.target.querySelector('[data-page-title="User Management"]')) {
+                initUserManagement();
+            }
+        });
+        window.__usersPageHTMXHook = true;
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initUserManagement, { once: true });
+    } else {
+        initUserManagement();
+    }
+})();
+</script>
 {{end}}
