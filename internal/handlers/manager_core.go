@@ -854,11 +854,11 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 		}
 	}
 	managerInfo := gin.H{
-		"port":              h.manager.Port,
-		"root_path":         rootPath,
-		"updating":          h.manager.IsUpdating(),
-		"updates_available": h.manager.UpdatesAvailable(),
-		"components_total":   componentsTotal,
+		"port":                h.manager.Port,
+		"root_path":           rootPath,
+		"updating":            h.manager.IsUpdating(),
+		"updates_available":   h.manager.UpdatesAvailable(),
+		"components_total":    componentsTotal,
 		"components_outdated": componentsOutdated,
 		"components_uptodate": componentsUpToDate,
 	}
@@ -883,18 +883,22 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 		"admins":    adminUsers,
 		"operators": operatorUsers,
 	}
+	systemTelemetry := h.manager.SystemTelemetry()
+	systemHealth := fmt.Sprintf("%.0f%%", h.manager.SystemHealthPercent())
 
 	data := gin.H{
-		"servers":     servers,
-		"user":        user,
-		"username":    username,
-		"role":        role,
-		"buildTime":   h.manager.BuildTime(),
-		"active":      h.manager.IsActive(),
-		"managerInfo": managerInfo,
-		"userStats":   userStats,
-		"page":        "dashboard",
-		"title":       "Dashboard",
+		"servers":         servers,
+		"user":            user,
+		"username":        username,
+		"role":            role,
+		"buildTime":       h.manager.BuildTime(),
+		"active":          h.manager.IsActive(),
+		"managerInfo":     managerInfo,
+		"userStats":       userStats,
+		"systemTelemetry": systemTelemetry,
+		"systemHealth":    systemHealth,
+		"page":            "dashboard",
+		"title":           "Dashboard",
 	}
 
 	// If this is an HTMX request, render only the content
@@ -927,6 +931,8 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		}
 		totalPlayers += s.ClientCount()
 	}
+	systemHealth := fmt.Sprintf("%.0f%%", h.manager.SystemHealthPercent())
+	systemTelemetry := h.manager.SystemTelemetry()
 
 	data := gin.H{
 		"username":                            username,
@@ -987,7 +993,8 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"totalServers":                        len(servers),
 		"activeServers":                       activeCount,
 		"totalPlayers":                        totalPlayers,
-		"systemHealth":                        "100%",
+		"systemHealth":                        systemHealth,
+		"systemTelemetry":                     systemTelemetry,
 		"servers":                             h.manager.Servers,
 		"active":                              h.manager.IsActive(),
 		"page":                                "manager",

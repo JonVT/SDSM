@@ -7,8 +7,10 @@
     {{ $totalServers := len .servers }}
     {{ $activeServers := 0 }}
     {{ $connectedPlayers := 0 }}
+    {{ $startableServers := 0 }}
     {{ range .servers }}
         {{ if .IsRunning }}{{ $activeServers = add $activeServers 1 }}{{ end }}
+        {{ if or (not .IsRunning) .Stopping }}{{ $startableServers = add $startableServers 1 }}{{ end }}
         {{ $connectedPlayers = add $connectedPlayers .ClientCount }}
     {{ end }}
 
@@ -151,6 +153,18 @@
                     Refreshing…
                 </div>
                 {{ if eq .role "admin" }}
+                <button type="button"
+                        class="btn btn-success"
+                        hx-post="/api/servers/start-all"
+                        hx-target="this"
+                        hx-swap="none"
+                        hx-disabled-elt="this"
+                        hx-confirm="Start all stopped servers now?"
+                        title="Start all stopped servers"
+                        {{ if eq $startableServers 0 }}disabled aria-disabled="true"{{ end }}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Start All Servers</span>
+                </button>
                 <button type="button"
                         class="btn btn-danger"
                         hx-post="/api/servers/stop-all"

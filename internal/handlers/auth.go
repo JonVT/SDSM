@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,6 +15,22 @@ type AuthHandlers struct {
 	authService *middleware.AuthService
 	manager     *manager.Manager
 	users       *manager.UserStore
+}
+
+func (h *AuthHandlers) logAuthEvent(format string, args ...interface{}) {
+	if h == nil || h.manager == nil || h.manager.Log == nil {
+		return
+	}
+	h.manager.Log.Write(fmt.Sprintf(format, args...))
+}
+
+func (h *AuthHandlers) reloadUsers(reason string) {
+	if h == nil || h.users == nil {
+		return
+	}
+	if err := h.users.Load(); err != nil {
+		h.logAuthEvent("User store reload failed (%s): %v", reason, err)
+	}
 }
 
 type LoginRequest struct {
@@ -68,11 +85,12 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 		c.Redirect(http.StatusFound, "/admin/setup")
 		return
 	}
-	username := c.PostForm("username")
-	password := c.PostForm("password")
-	redirect := c.PostForm("redirect")
+	username := middleware.SanitizeString(c.PostForm("username"))
+	password := strings.TrimSpace(c.PostForm("password"))
+	redirect := strings.TrimSpace(c.PostForm("redirect"))
 
 	if username == "" || password == "" {
+		h.logAuthEvent("UI login rejected: missing credentials from %s", c.ClientIP())
 		c.HTML(http.StatusBadRequest, "login.html", gin.H{
 			"error":    "Username and password are required",
 			"redirect": redirect,
@@ -80,15 +98,24 @@ func (h *AuthHandlers) LoginPOST(c *gin.Context) {
 		return
 	}
 
+	h.reloadUsers("login")
+
 	// Validate credentials against user store
 	u, exists := h.users.Get(username)
 	if !exists || !h.authService.CheckPassword(password, u.PasswordHash) {
+		if !exists {
+			h.logAuthEvent("UI login failed for unknown user '%s' from %s", username, c.ClientIP())
+		} else {
+			h.logAuthEvent("UI login failed for user '%s' from %s: password mismatch", username, c.ClientIP())
+		}
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"error":    "Invalid username or password",
 			"redirect": redirect,
 		})
 		return
 	}
+
+	h.logAuthEvent("UI login successful for user '%s' from %s", username, c.ClientIP())
 
 	// Generate JWT token
 	token, err := h.authService.GenerateToken(username)
@@ -131,16 +158,24 @@ func (h *AuthHandlers) APILogin(c *gin.Context) {
 	}
 
 	username := middleware.SanitizeString(req.Username)
-	password := req.Password
+	password := strings.TrimSpace(req.Password)
+	h.reloadUsers("api login")
 
 	// Validate credentials
 	u, exists := h.users.Get(username)
 	if !exists || !h.authService.CheckPassword(password, u.PasswordHash) {
+		if !exists {
+			h.logAuthEvent("API login failed for unknown user '%s' from %s", username, c.ClientIP())
+		} else {
+			h.logAuthEvent("API login failed for user '%s' from %s: password mismatch", username, c.ClientIP())
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "Invalid username or password",
 		})
 		return
 	}
+
+	h.logAuthEvent("API login successful for user '%s' from %s", username, c.ClientIP())
 
 	// Generate JWT token
 	token, err := h.authService.GenerateToken(username)
@@ -195,4 +230,3 @@ func (h *AuthHandlers) AdminSetupPOST(c *gin.Context) {
 	// Redirect to login
 	c.Redirect(http.StatusFound, "/login")
 }
-

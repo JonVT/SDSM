@@ -108,10 +108,16 @@ func (h *ManagerHandlers) broadcastStats() {
 	if h == nil || h.hub == nil {
 		return
 	}
-	stats := map[string]int{
-		"totalServers":  h.manager.ServerCount(),
-		"activeServers": h.manager.ServerCountActive(),
-		"totalPlayers":  h.manager.GetTotalPlayers(),
+	telemetry := h.manager.SystemTelemetry()
+	health := 100.0
+	if telemetry != nil {
+		health = telemetry.HealthPercent
+	}
+	stats := map[string]any{
+		"totalServers":        h.manager.ServerCount(),
+		"activeServers":       h.manager.ServerCountActive(),
+		"totalPlayers":        h.manager.GetTotalPlayers(),
+		"systemHealthPercent": health,
 	}
 	payload := map[string]any{
 		"type":  "stats_update",
@@ -3427,6 +3433,48 @@ func (h *ManagerHandlers) APIServerUnban(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
+// APIServersStartAll starts every stopped server (admin only).
+func (h *ManagerHandlers) APIServersStartAll(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	started := 0
+	shutdownsCanceled := 0
+	for _, s := range h.manager.Servers {
+		if s == nil {
+			continue
+		}
+		// If a shutdown countdown is in progress, cancel instead of issuing a new start.
+		if s.Running && s.Stopping {
+			if s.CancelStop() {
+				shutdownsCanceled++
+				h.BroadcastStatusAndStats(s)
+				h.manager.NotifyServerEvent(s, "stopping-canceled", "Shutdown canceled via Start All.")
+			}
+			continue
+		}
+		if s.IsRunning() || s.Starting {
+			continue
+		}
+		s.Start()
+		started++
+		h.manager.NotifyServerEvent(s, "started", "Server start initiated via Start All.")
+		h.BroadcastStatusAndStats(s)
+	}
+	switch {
+	case started == 0 && shutdownsCanceled == 0:
+		ToastInfo(c, "Start All", "No stopped servers were available to start.")
+	case started > 0 && shutdownsCanceled > 0:
+		ToastSuccess(c, "Start All", fmt.Sprintf("Starting %d servers (canceled %d shutdowns).", started, shutdownsCanceled))
+	case started > 0:
+		ToastSuccess(c, "Start All", fmt.Sprintf("Starting %d servers.", started))
+	default:
+		ToastSuccess(c, "Start All", fmt.Sprintf("Canceled shutdowns for %d servers.", shutdownsCanceled))
+	}
+	c.JSON(http.StatusOK, gin.H{"started": started, "shutdowns_canceled": shutdownsCanceled})
+}
+
 // APIServersStopAll stops all running servers (admin only).
 func (h *ManagerHandlers) APIServersStopAll(c *gin.Context) {
 	role := c.GetString("role")
@@ -3987,22 +4035,43 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 	totalServers := h.manager.ServerCount()
 	activeServers := h.manager.ServerCountActive()
 	totalPlayers := h.manager.GetTotalPlayers()
+	systemHealth := "100%"
+	telemetry := h.manager.SystemTelemetry()
+	systemHealthPercent := 100.0
+	var telemetryPayload gin.H
+	if telemetry != nil {
+		systemHealthPercent = telemetry.HealthPercent
+		systemHealth = fmt.Sprintf("%.0f%%", telemetry.HealthPercent)
+		telemetryPayload = gin.H{
+			"cpu_percent":    telemetry.CPUPercent,
+			"memory_percent": telemetry.MemoryPercent,
+			"memory_used":    telemetry.MemoryUsed,
+			"memory_total":   telemetry.MemoryTotal,
+			"disk_percent":   telemetry.DiskPercent,
+			"disk_used":      telemetry.DiskUsed,
+			"disk_total":     telemetry.DiskTotal,
+			"health_percent": telemetry.HealthPercent,
+			"sampled_at":     telemetry.SampledAt,
+		}
+	}
 
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		c.HTML(http.StatusOK, "stats.html", gin.H{
 			"totalServers":  totalServers,
 			"activeServers": activeServers,
 			"totalPlayers":  totalPlayers,
-			"systemHealth":  "100%",
+			"systemHealth":  systemHealth,
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"totalServers":  totalServers,
-		"activeServers": activeServers,
-		"totalPlayers":  totalPlayers,
-		"systemHealth":  "100%",
+		"totalServers":        totalServers,
+		"activeServers":       activeServers,
+		"totalPlayers":        totalPlayers,
+		"systemHealth":        systemHealth,
+		"systemHealthPercent": systemHealthPercent,
+		"systemTelemetry":     telemetryPayload,
 	})
 }
 

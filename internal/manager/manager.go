@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -213,6 +214,16 @@ type Manager struct {
 	// or through recovery flows. Handlers can set this to trigger realtime UI
 	// broadcasts so dashboards update immediately after attach.
 	OnServerAttached func(*models.Server) `json:"-"`
+	telemetryMu      sync.RWMutex
+	systemTelemetry  *models.SystemTelemetry
+	lastCPUTotal     float64
+	lastCPUIdle      float64
+	serverCPUTimes   map[int]float64
+	telemetryStop    chan struct{}
+	telemetryWG      sync.WaitGroup
+	notificationsMu  sync.RWMutex
+	notifications    []models.DashboardNotification
+	notificationSeq  atomic.Uint64
 }
 
 type UpdateProgress struct {
@@ -346,6 +357,8 @@ func NewManagerWithConfig(configPath string) *Manager {
 		NotifyDeploySCON:                true,
 		NotifyDeploySteamCMD:            true,
 		NotifyDeployServers:             true,
+		serverCPUTimes:                  make(map[int]float64),
+		notifications:                   make([]models.DashboardNotification, 0, 16),
 	}
 
 	// (Legacy removed) Bug report webhook field initialization removed.

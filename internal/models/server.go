@@ -268,6 +268,82 @@ type Server struct {
 	NotifyColorUpdateStarted   string `json:"notify_color_update_started"`
 	NotifyColorUpdateCompleted string `json:"notify_color_update_completed"`
 	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
+	resourceMu                sync.RWMutex
+	resourceUsage             *ServerResourceUsage
+}
+
+// PID returns the best-known operating system process ID for the running server.
+func (s *Server) PID() int {
+	if s == nil {
+		return 0
+	}
+	if s.Proc != nil && s.Proc.Process != nil {
+		return s.Proc.Process.Pid
+	}
+	return s.pid
+}
+
+// Uptime reports how long the server has been running based on ServerStarted.
+func (s *Server) Uptime() time.Duration {
+	if s == nil || s.ServerStarted == nil {
+		return 0
+	}
+	return time.Since(*s.ServerStarted)
+}
+
+// UptimeSeconds returns the uptime rounded down to whole seconds.
+func (s *Server) UptimeSeconds() int64 {
+	uptime := s.Uptime()
+	if uptime <= 0 {
+		return 0
+	}
+	return int64(uptime / time.Second)
+}
+
+// UptimeString formats the uptime for display (e.g., 1d 02h 03m).
+func (s *Server) UptimeString() string {
+	uptime := s.Uptime()
+	if uptime <= 0 {
+		return "—"
+	}
+	days := uptime / (24 * time.Hour)
+	hours := (uptime % (24 * time.Hour)) / time.Hour
+	minutes := (uptime % time.Hour) / time.Minute
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %02dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %02dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
+// UpdateResourceUsage stores a fresh telemetry snapshot for the server.
+func (s *Server) UpdateResourceUsage(usage *ServerResourceUsage) {
+	if s == nil {
+		return
+	}
+	s.resourceMu.Lock()
+	defer s.resourceMu.Unlock()
+	if usage == nil {
+		s.resourceUsage = nil
+		return
+	}
+	s.resourceUsage = usage.Copy()
+}
+
+// ResourceUsage returns the latest telemetry snapshot (if any).
+func (s *Server) ResourceUsage() *ServerResourceUsage {
+	if s == nil {
+		return nil
+	}
+	s.resourceMu.RLock()
+	defer s.resourceMu.RUnlock()
+	if s.resourceUsage == nil {
+		return nil
+	}
+	return s.resourceUsage.Copy()
 }
 
 // safePIDFilePath returns a contained absolute path to the server PID file or empty string
@@ -1986,6 +2062,7 @@ func (s *Server) performFinalShutdown() {
 			s.Running = false
 			s.Stopping = false
 			s.Starting = false
+			s.ServerStarted = nil
 		}
 		return
 	}
@@ -1999,6 +2076,7 @@ func (s *Server) performFinalShutdown() {
 	s.Running = false
 	s.Stopping = false
 	s.Starting = false
+	s.ServerStarted = nil
 	now := time.Now()
 	s.markAllClientsDisconnected(now)
 	s.rewritePlayersLog()
@@ -2531,6 +2609,7 @@ func (s *Server) Start() {
 		s.Starting = false
 		s.Proc = nil
 		s.pid = 0
+		s.ServerStarted = nil
 		// stdin fallback removed
 		close(stop)
 		if s.Thrd == stop {
@@ -2601,6 +2680,7 @@ func (s *Server) AttachToRunning(pid int) {
 		srv.Running = false
 		srv.Starting = false
 		srv.Stopping = false
+		srv.ServerStarted = nil
 		close(stop)
 		if srv.Thrd == stop {
 			srv.Thrd = nil

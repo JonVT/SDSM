@@ -802,18 +802,40 @@
             setInterval(updateDateTime, 1000);
         }
 
+        const syncNavState = (path) => {
+          const targetPath = path || window.location.pathname;
+          SDSM.frame.updateTitle(targetPath);
+          SDSM.frame.updateActiveNav(targetPath);
+        };
+
         // Listen for HTMX navigation to update title and active nav item
-        document.body.addEventListener('htmx:nav', (evt) => {
-            const path = evt.detail.path;
-            if (path) {
-                SDSM.frame.updateTitle(path);
-                SDSM.frame.updateActiveNav(path);
+        if (typeof htmx !== 'undefined') {
+          document.body.addEventListener('htmx:pushedIntoHistory', (evt) => {
+            syncNavState(evt.detail?.path);
+          });
+
+          document.body.addEventListener('htmx:historyRestore', (evt) => {
+            syncNavState(evt.detail?.path);
+          });
+
+          document.body.addEventListener('htmx:afterSwap', (evt) => {
+            if (evt.target && evt.target.id === 'content-area') {
+              syncNavState(window.location.pathname);
             }
+          });
+        }
+
+        window.addEventListener('popstate', () => syncNavState(window.location.pathname));
+
+        document.body.addEventListener('click', (evt) => {
+          const target = evt.target instanceof Element ? evt.target.closest('.nav-item') : null;
+          if (target && target.dataset.target) {
+            SDSM.frame.updateActiveNav(target.dataset.target);
+          }
         });
 
         // On first load, set the title correctly
-        SDSM.frame.updateTitle(window.location.pathname);
-        SDSM.frame.updateActiveNav(window.location.pathname);
+        syncNavState(window.location.pathname);
       }
     },
 

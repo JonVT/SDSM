@@ -5,10 +5,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"sdsm/internal/integrations/discord"
 	"sdsm/internal/models"
 )
+
+const maxDashboardNotifications = 50
 
 // DiscordNotify posts a simple embed or content message to the manager's default webhook.
 // It is best-effort; errors are logged to the manager log and otherwise ignored.
@@ -124,13 +127,7 @@ func (m *Manager) NotifyServerEvent(s *models.Server, event, detail string) {
 	if m == nil || s == nil {
 		return
 	}
-	// Determine whether this event should be notified based on prefs
-	if !m.shouldNotifyServerEvent(s, event) {
-		return
-	}
-	// Effective template & color
 	msgTemplate, colorHex := m.effectiveTemplateAndColor(s, event)
-	// Token substitution
 	ts := map[string]string{
 		"server_name": s.Name,
 		"event":       event,
@@ -139,18 +136,24 @@ func (m *Manager) NotifyServerEvent(s *models.Server, event, detail string) {
 	}
 	rendered := renderTemplate(msgTemplate, ts)
 	if strings.TrimSpace(rendered) == "" {
-		// Fallback if empty after substitution
 		if detail == "" {
 			rendered = fmt.Sprintf("Server %s event: %s", s.Name, event)
 		} else {
 			rendered = detail
 		}
 	}
-	// Determine embed title (consistent prefix)
+	label := formatEventLabel(event)
+	if label == "" {
+		label = event
+	}
+	kind := notificationKindForEvent(event)
+	m.enqueueDashboardNotification(kind, event, fmt.Sprintf("%s %s", s.Name, label), rendered, s.ID, "server")
+	if !m.shouldNotifyServerEvent(s, event) {
+		return
+	}
 	title := fmt.Sprintf("Server %s: %s", s.Name, event)
 	color := parseHexColor(colorHex, defaultColorForEvent(event))
 	embed := discord.NewEmbed(title, rendered, color, "SDSM")
-	// Route to server webhook when present; otherwise fall back to manager default
 	target := strings.TrimSpace(s.DiscordWebhook)
 	if target == "" {
 		target = strings.TrimSpace(m.DiscordDefaultWebhook)
@@ -262,6 +265,85 @@ func (m *Manager) effectiveTemplateAndColor(s *models.Server, event string) (str
 	default:
 		return firstNonEmpty(s.NotifyMsgStart, m.NotifyMsgStart), firstNonEmpty(s.NotifyColorStart, m.NotifyColorStart)
 	}
+}
+
+func (m *Manager) enqueueDashboardNotification(kind, event, title, message string, serverID int, source string) {
+	if m == nil {
+		return
+	}
+	entry := models.DashboardNotification{
+		ID:        m.notificationSeq.Add(1),
+		Kind:      kind,
+		Event:     event,
+		Title:     strings.TrimSpace(title),
+		Message:   strings.TrimSpace(message),
+		ServerID:  serverID,
+		Source:    strings.TrimSpace(source),
+		CreatedAt: time.Now(),
+	}
+	m.notificationsMu.Lock()
+	defer m.notificationsMu.Unlock()
+	if len(m.notifications) == 0 {
+		m.notifications = []models.DashboardNotification{entry}
+		return
+	}
+	// Prepend and enforce max buffer length
+	buffer := make([]models.DashboardNotification, 0, len(m.notifications)+1)
+	buffer = append(buffer, entry)
+	buffer = append(buffer, m.notifications...)
+	if len(buffer) > maxDashboardNotifications {
+		buffer = buffer[:maxDashboardNotifications]
+	}
+	m.notifications = buffer
+}
+
+func notificationKindForEvent(event string) string {
+	switch event {
+	case "started", "update-completed":
+		return models.NotificationKindSuccess
+	case "stopping", "restart-scheduled", "restart-pending", "update-started":
+		return models.NotificationKindWarning
+	case "stopped", "update-failed":
+		return models.NotificationKindDanger
+	default:
+		return models.NotificationKindInfo
+	}
+}
+
+func formatEventLabel(event string) string {
+	parts := strings.FieldsFunc(event, func(r rune) bool {
+		return r == '-' || r == '_' || unicode.IsSpace(r)
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		runes := []rune(strings.ToLower(part))
+		runes[0] = unicode.ToUpper(runes[0])
+		parts[i] = string(runes)
+	}
+	return strings.Join(parts, " ")
+}
+
+// RecentNotifications returns up to limit most recent dashboard notifications.
+func (m *Manager) RecentNotifications(limit int) []models.DashboardNotification {
+	if m == nil {
+		return nil
+	}
+	m.notificationsMu.RLock()
+	defer m.notificationsMu.RUnlock()
+	if len(m.notifications) == 0 {
+		return nil
+	}
+	if limit <= 0 || limit > len(m.notifications) {
+		limit = len(m.notifications)
+	}
+	out := make([]models.DashboardNotification, limit)
+	copy(out, m.notifications[:limit])
+	return out
 }
 
 func firstNonEmpty(values ...string) string {

@@ -170,6 +170,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	app.manager.StartTelemetryMonitor()
+
 	if app.manager.Paths != nil {
 		clearLogFile(filepath.Join(app.manager.Paths.LogsDir(), "GIN.log"))
 	}
@@ -286,6 +288,7 @@ func main() {
 
 	// Exit manager, stopping servers unless detached mode keeps them running
 	if app.manager != nil {
+		app.manager.StopTelemetryMonitor()
 		stopServers := !app.manager.DetachedServers
 		app.manager.ExitDetached(stopServers)
 	}
@@ -559,6 +562,14 @@ func setupRouter() *gin.Engine {
 				return
 			}
 			managerHandlers.APIServerDelete(c)
+		})
+		// Start all servers (admin)
+		api.POST("/servers/start-all", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersStartAll(c)
 		})
 		// Stop all servers (admin)
 		api.POST("/servers/stop-all", func(c *gin.Context) {

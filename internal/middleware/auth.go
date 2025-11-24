@@ -114,6 +114,20 @@ func requestIsSecure(c *gin.Context) bool {
 	return false
 }
 
+// bearerTokenFromHeader extracts the JWT token from an Authorization header when it
+// uses the Bearer scheme. Any other scheme (e.g., Basic) is ignored to avoid
+// interfering with reverse proxies that inject their own credentials.
+func bearerTokenFromHeader(header string) string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return ""
+	}
+	if len(header) >= 7 && strings.EqualFold(header[0:7], "bearer ") {
+		return strings.TrimSpace(header[7:])
+	}
+	return ""
+}
+
 // forceSecureCookies honors SDSM_COOKIE_FORCE_SECURE=true to always mark cookies Secure.
 // CookieOptions controls how cookies are issued by UI/API helpers.
 type CookieOptions struct {
@@ -194,12 +208,9 @@ func ClearAuthCookie(c *gin.Context) {
 // RequireAuth is a UI middleware that enforces authentication via cookie or header.
 func (a *AuthService) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Try to get token from header first
-		tokenString := c.GetHeader("Authorization")
-		if tokenString != "" {
-			// Remove "Bearer " prefix if present
-			tokenString = strings.TrimPrefix(tokenString, "Bearer ")
-		} else {
+		// Try to get token from Authorization header when it carries a Bearer token
+		tokenString := bearerTokenFromHeader(c.GetHeader("Authorization"))
+		if tokenString == "" {
 			// Fall back to cookie
 			tokenString, _ = c.Cookie(CookieName)
 		}
@@ -235,8 +246,8 @@ func (a *AuthService) RequireAPIAuth() gin.HandlerFunc {
 			return
 		}
 
-		// Prefer Authorization header but fall back to cookie for browser requests
-		tokenString := c.GetHeader("Authorization")
+		// Prefer Authorization header bearing a JWT but fall back to cookie for browser requests
+		tokenString := bearerTokenFromHeader(c.GetHeader("Authorization"))
 		if tokenString == "" {
 			if cookieToken, err := c.Cookie(CookieName); err == nil {
 				tokenString = cookieToken
@@ -256,8 +267,6 @@ func (a *AuthService) RequireAPIAuth() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header or cookie required"})
 			return
 		}
-
-		tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 
 		claims, err := a.ValidateToken(tokenString)
 		if err != nil {
