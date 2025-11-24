@@ -466,7 +466,7 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 			if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 				c.Header("HX-Trigger", "refresh")
 				ToastSuccess(c, "Shutdown Canceled", s.Name+" will keep running.")
-				c.HTML(http.StatusOK, "server_card.html", s)
+				c.HTML(http.StatusOK, "server_card.html", gin.H{"server": s, "role": role})
 				return
 			}
 			ToastSuccess(c, "Shutdown Canceled", s.Name+" will keep running.")
@@ -484,7 +484,7 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 		// Trigger a stats refresh on the page (stats-grid listens to 'refresh')
 		c.Header("HX-Trigger", "refresh")
 		ToastSuccess(c, "Server Started", s.Name+" is starting...")
-		c.HTML(http.StatusOK, "server_card.html", s)
+		c.HTML(http.StatusOK, "server_card.html", gin.H{"server": s, "role": role})
 		return
 	}
 	ToastSuccess(c, "Server Started", s.Name+" is starting...")
@@ -568,7 +568,7 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 		} else {
 			ToastInfo(c, "Shutdown Scheduled", s.Name+" is stopping now.")
 		}
-		c.HTML(http.StatusOK, "server_card.html", s)
+		c.HTML(http.StatusOK, "server_card.html", gin.H{"server": s, "role": role})
 		return
 	}
 	// JSON branch
@@ -613,6 +613,102 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	ToastInfo(c, "Shutdown Scheduled", s.Name+" is stopping now.")
 	h.manager.NotifyServerEvent(s, "stopping", "Shutdown initiated (no delay).")
 	c.JSON(http.StatusOK, gin.H{"status": "stopping"})
+}
+
+// APIServerPause issues PAUSE true via console to pause gameplay.
+func (h *ManagerHandlers) APIServerPause(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if !s.IsRunning() {
+		ToastWarn(c, "Pause Failed", "Server is not running.")
+		c.JSON(http.StatusConflict, gin.H{"error": "server not running"})
+		return
+	}
+	if s.Paused {
+		c.JSON(http.StatusOK, gin.H{"status": "already-paused"})
+		return
+	}
+
+	if err := s.SendCommand("console", "PAUSE true"); err != nil {
+		ToastError(c, "Pause Failed", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	s.Paused = true
+	h.manager.NotifyServerEvent(s, "paused", "Server paused via API.")
+	h.BroadcastStatusAndStats(s)
+	ToastSuccess(c, "Server Paused", s.Name+" paused.")
+	c.JSON(http.StatusOK, gin.H{"status": "paused"})
+}
+
+// APIServerResume issues PAUSE false to resume gameplay when paused.
+func (h *ManagerHandlers) APIServerResume(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	if !s.IsRunning() {
+		ToastWarn(c, "Resume Failed", "Server is not running.")
+		c.JSON(http.StatusConflict, gin.H{"error": "server not running"})
+		return
+	}
+	if !s.Paused {
+		c.JSON(http.StatusOK, gin.H{"status": "already-running"})
+		return
+	}
+
+	if err := s.SendCommand("console", "PAUSE false"); err != nil {
+		ToastError(c, "Resume Failed", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	s.Paused = false
+	h.manager.NotifyServerEvent(s, "resumed", "Server resumed via API.")
+	h.BroadcastStatusAndStats(s)
+	ToastSuccess(c, "Server Resumed", s.Name+" resumed.")
+	c.JSON(http.StatusOK, gin.H{"status": "resumed"})
 }
 
 // APIServerRestart restarts a server asynchronously
@@ -1154,13 +1250,41 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 	s.NotifyMsgUpdateFailed = strings.TrimSpace(body["notify_msg_update_failed"])
 	// Colors (#RRGGBB basic validation; invalid kept empty to inherit)
 	validColor := func(v string) bool { v = strings.TrimSpace(v); return len(v) == 7 && strings.HasPrefix(v, "#") }
-	if validColor(body["notify_color_start"]) { s.NotifyColorStart = strings.TrimSpace(body["notify_color_start"]) } else { s.NotifyColorStart = strings.TrimSpace(s.NotifyColorStart) }
-	if validColor(body["notify_color_stopping"]) { s.NotifyColorStopping = strings.TrimSpace(body["notify_color_stopping"]) } else { s.NotifyColorStopping = strings.TrimSpace(s.NotifyColorStopping) }
-	if validColor(body["notify_color_stopped"]) { s.NotifyColorStopped = strings.TrimSpace(body["notify_color_stopped"]) } else { s.NotifyColorStopped = strings.TrimSpace(s.NotifyColorStopped) }
-	if validColor(body["notify_color_restart"]) { s.NotifyColorRestart = strings.TrimSpace(body["notify_color_restart"]) } else { s.NotifyColorRestart = strings.TrimSpace(s.NotifyColorRestart) }
-	if validColor(body["notify_color_update_started"]) { s.NotifyColorUpdateStarted = strings.TrimSpace(body["notify_color_update_started"]) } else { s.NotifyColorUpdateStarted = strings.TrimSpace(s.NotifyColorUpdateStarted) }
-	if validColor(body["notify_color_update_completed"]) { s.NotifyColorUpdateCompleted = strings.TrimSpace(body["notify_color_update_completed"]) } else { s.NotifyColorUpdateCompleted = strings.TrimSpace(s.NotifyColorUpdateCompleted) }
-	if validColor(body["notify_color_update_failed"]) { s.NotifyColorUpdateFailed = strings.TrimSpace(body["notify_color_update_failed"]) } else { s.NotifyColorUpdateFailed = strings.TrimSpace(s.NotifyColorUpdateFailed) }
+	if validColor(body["notify_color_start"]) {
+		s.NotifyColorStart = strings.TrimSpace(body["notify_color_start"])
+	} else {
+		s.NotifyColorStart = strings.TrimSpace(s.NotifyColorStart)
+	}
+	if validColor(body["notify_color_stopping"]) {
+		s.NotifyColorStopping = strings.TrimSpace(body["notify_color_stopping"])
+	} else {
+		s.NotifyColorStopping = strings.TrimSpace(s.NotifyColorStopping)
+	}
+	if validColor(body["notify_color_stopped"]) {
+		s.NotifyColorStopped = strings.TrimSpace(body["notify_color_stopped"])
+	} else {
+		s.NotifyColorStopped = strings.TrimSpace(s.NotifyColorStopped)
+	}
+	if validColor(body["notify_color_restart"]) {
+		s.NotifyColorRestart = strings.TrimSpace(body["notify_color_restart"])
+	} else {
+		s.NotifyColorRestart = strings.TrimSpace(s.NotifyColorRestart)
+	}
+	if validColor(body["notify_color_update_started"]) {
+		s.NotifyColorUpdateStarted = strings.TrimSpace(body["notify_color_update_started"])
+	} else {
+		s.NotifyColorUpdateStarted = strings.TrimSpace(s.NotifyColorUpdateStarted)
+	}
+	if validColor(body["notify_color_update_completed"]) {
+		s.NotifyColorUpdateCompleted = strings.TrimSpace(body["notify_color_update_completed"])
+	} else {
+		s.NotifyColorUpdateCompleted = strings.TrimSpace(s.NotifyColorUpdateCompleted)
+	}
+	if validColor(body["notify_color_update_failed"]) {
+		s.NotifyColorUpdateFailed = strings.TrimSpace(body["notify_color_update_failed"])
+	} else {
+		s.NotifyColorUpdateFailed = strings.TrimSpace(s.NotifyColorUpdateFailed)
+	}
 
 	s.WorldID = h.manager.ResolveWorldID(s.World, s.Beta)
 
@@ -1213,6 +1337,60 @@ func (h *ManagerHandlers) APIServerAttachDefaults(c *gin.Context) {
 		"clients_query_retry_count":         retryCount,
 		"clients_query_retry_delay_seconds": retryDelay,
 	})
+}
+
+// APIServerRename updates only the server name (admin-only).
+func (h *ManagerHandlers) APIServerRename(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var nameInput string
+	contentType := strings.ToLower(strings.TrimSpace(c.GetHeader("Content-Type")))
+	if strings.Contains(contentType, "application/json") {
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+			return
+		}
+		nameInput = req.Name
+	} else {
+		_ = c.Request.ParseForm()
+		nameInput = c.PostForm("name")
+	}
+	name := middleware.SanitizeString(nameInput)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
+		return
+	}
+	if err := ValidateServerNameAvailable(h.manager, name, s.ID); err != nil {
+		ToastError(c, "Rename Failed", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	oldName := s.Name
+	s.Name = name
+	h.manager.Save()
+	h.broadcastServersChanged()
+	h.BroadcastStatusAndStats(s)
+
+	ToastSuccess(c, "Server Renamed", fmt.Sprintf("%s renamed to %s", oldName, name))
+	c.JSON(http.StatusOK, gin.H{"status": "renamed", "name": name})
 }
 
 // APIServerSetLanguage updates only the language setting (no redeploy here).
@@ -1282,6 +1460,62 @@ func (h *ManagerHandlers) APIServerUpdateServerFiles(c *gin.Context) {
 	}
 	h.startServerUpdateAsync(s)
 	ToastSuccess(c, "Update Started", s.Name+" update started.")
+	c.JSON(http.StatusOK, gin.H{"status": "started"})
+}
+
+// APIServerReinstall wipes the server's game/mod directories then redeploys files.
+func (h *ManagerHandlers) APIServerReinstall(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if s.IsRunning() || s.Starting {
+		ToastWarn(c, "Reinstall Blocked", "Stop the server before reinstalling.")
+		c.JSON(http.StatusConflict, gin.H{"error": "server running"})
+		return
+	}
+	if h.manager.IsServerUpdateRunning(s.ID) {
+		ToastInfo(c, "Update Running", s.Name+" update already running.")
+		c.JSON(http.StatusConflict, gin.H{"error": "update running"})
+		return
+	}
+
+	paths := s.Paths
+	if paths == nil {
+		paths = h.manager.Paths
+	}
+	if paths == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "paths unavailable"})
+		return
+	}
+
+	cleanupTargets := []string{paths.ServerGameDir(s.ID), paths.ServerModsDir(s.ID)}
+	for _, dir := range cleanupTargets {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
+			ToastError(c, "Reinstall Failed", fmt.Sprintf("Failed to clean %s: %v", dir, err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cleanup failed"})
+			return
+		}
+	}
+	if snap := paths.ServerDeploySnapshotFile(s.ID); strings.TrimSpace(snap) != "" {
+		_ = os.Remove(snap)
+	}
+
+	h.startServerUpdateAsync(s)
+	ToastSuccess(c, "Reinstall Started", s.Name+" reinstall started.")
 	c.JSON(http.StatusOK, gin.H{"status": "started"})
 }
 
@@ -2212,6 +2446,226 @@ func (h *ManagerHandlers) APIServerLogDownload(c *gin.Context) {
 	c.FileAttachment(path, name)
 }
 
+// APIServerWorldDownload streams the most recent primary world .save file for a server.
+// RBAC: admins or assigned operators may download the world archive.
+// Optional query param "name" selects a specific file under saves/<ServerName>/.
+func (h *ManagerHandlers) APIServerWorldDownload(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	target, err := h.resolveWorldSaveTarget(s, c.Query("name"))
+	if err != nil {
+		status := http.StatusInternalServerError
+		message := err.Error()
+		switch {
+		case errors.Is(err, errWorldSaveNotFound):
+			status = http.StatusNotFound
+			message = "world save not found"
+		case errors.Is(err, errNoWorldSaves):
+			status = http.StatusNotFound
+			message = "no world saves available"
+		case errors.Is(err, errInvalidWorldSave):
+			status = http.StatusBadRequest
+			message = "invalid file"
+		default:
+			lower := strings.ToLower(message)
+			if strings.Contains(lower, "not found") || strings.Contains(lower, "available") {
+				status = http.StatusNotFound
+			}
+		}
+		c.JSON(status, gin.H{"error": message})
+		return
+	}
+
+	c.FileAttachment(target, filepath.Base(target))
+}
+
+// APIServerWorldSaves lists available world save archives for a server ordered by most recent first.
+func (h *ManagerHandlers) APIServerWorldSaves(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	worldDir, err := h.serverWorldSavesDir(s)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"files": []any{}})
+		return
+	}
+
+	files, err := listWorldSaveFiles(worldDir)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"files": []any{}})
+		return
+	}
+	response := make([]gin.H, 0, len(files))
+	for _, f := range files {
+		response = append(response, gin.H{
+			"name":       f.Name,
+			"size_bytes": f.Size,
+			"modified":   f.Modified.Format(time.RFC3339),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"files": response})
+}
+
+var (
+	errWorldSaveNotFound = errors.New("world save not found")
+	errNoWorldSaves      = errors.New("no world saves available")
+	errInvalidWorldSave  = errors.New("invalid world save")
+)
+
+func (h *ManagerHandlers) resolveWorldSaveTarget(s *models.Server, requested string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("Server not found")
+	}
+	worldDir, err := h.serverWorldSavesDir(s)
+	if err != nil {
+		return "", err
+	}
+	req := strings.TrimSpace(requested)
+	if req != "" {
+		base := filepath.Base(req)
+		if !strings.HasSuffix(strings.ToLower(base), ".save") {
+			base += ".save"
+		}
+		candidate := filepath.Join(worldDir, base)
+		if !pathWithin(worldDir, candidate) {
+			return "", errInvalidWorldSave
+		}
+		if info, err := os.Stat(candidate); err != nil || info.IsDir() {
+			return "", errWorldSaveNotFound
+		}
+		return candidate, nil
+	}
+	files, err := listWorldSaveFiles(worldDir)
+	if err != nil {
+		return "", err
+	}
+	if len(files) == 0 {
+		return "", errNoWorldSaves
+	}
+	return filepath.Join(worldDir, files[0].Name), nil
+}
+
+func pathWithin(base, target string) bool {
+	base = filepath.Clean(base)
+	target = filepath.Clean(target)
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return false
+	}
+	targetAbs, err := filepath.Abs(target)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(baseAbs, targetAbs)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+type worldSaveFile struct {
+	Name     string
+	Size     int64
+	Modified time.Time
+}
+
+func listWorldSaveFiles(dir string) ([]worldSaveFile, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]worldSaveFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(strings.ToLower(name), ".save") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		files = append(files, worldSaveFile{
+			Name:     name,
+			Size:     info.Size(),
+			Modified: info.ModTime(),
+		})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].Modified.Equal(files[j].Modified) {
+			return files[i].Name < files[j].Name
+		}
+		return files[i].Modified.After(files[j].Modified)
+	})
+	return files, nil
+}
+
+func (h *ManagerHandlers) serverWorldSavesDir(s *models.Server) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("Server not found")
+	}
+	var savesRoot string
+	if s.Paths != nil {
+		savesRoot = s.Paths.ServerSavesDir(s.ID)
+	} else if h.manager.Paths != nil {
+		savesRoot = h.manager.Paths.ServerSavesDir(s.ID)
+	}
+	if strings.TrimSpace(savesRoot) == "" {
+		return "", fmt.Errorf("world saves directory not available")
+	}
+	worldDir := filepath.Join(savesRoot, s.Name)
+	info, err := os.Stat(worldDir)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("world saves not found")
+	}
+	return worldDir, nil
+}
+
 // APIServerLogClear truncates a server log file. Admin-only.
 // Accepts name via form or JSON body.
 func (h *ManagerHandlers) APIServerLogClear(c *gin.Context) {
@@ -2493,6 +2947,43 @@ func (h *ManagerHandlers) APIServerSave(c *gin.Context) {
 		return
 	}
 	ToastSuccess(c, "Save Requested", "Manual save requested.")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// APIServerQuickSave triggers FILE quicksave for the active world.
+func (h *ManagerHandlers) APIServerQuickSave(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if !s.IsRunning() {
+		ToastWarn(c, "Quick Save Failed", "Server is not running.")
+		c.JSON(http.StatusConflict, gin.H{"error": "server not running"})
+		return
+	}
+	if err := s.SendCommand("console", "FILE quicksave"); err != nil {
+		ToastError(c, "Quick Save Failed", err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	ToastSuccess(c, "Quick Save Requested", "Quick save requested.")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 

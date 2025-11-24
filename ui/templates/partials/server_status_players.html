@@ -1,169 +1,167 @@
-{{/* Compute local variables within this partial's scope */}}
-{{ $live := .liveClients }}
-{{ $liveCount := len $live }}
-{{ $history := .historyClients }}
-{{ $historyCount := len $history }}
-{{ $banned := .banned }}
-
+{{define "server_status_players.html"}}
 <div class="card card-players">
     <div class="card-header">
         <h2 class="card-title">Players</h2>
-        <span class="pill" id="players-live-count" title="Click to refresh from server">{{if gt $liveCount 0}}{{printf "%d online" $liveCount}}{{else}}0 online{{end}}</span>
+        <div class="tabs" role="tablist">
+            <button class="tab active" id="tab-live" role="tab" aria-selected="true" aria-controls="players-live-panel">
+                Live <span class="badge" id="live-count">{{len .server.LiveClients}}</span>
+            </button>
+            <button class="tab" id="tab-history" role="tab" aria-selected="false" aria-controls="players-history-panel">
+                History <span class="badge" id="history-count">{{len .server.Clients}}</span>
+            </button>
+            {{if eq .role "admin"}}
+            <button class="tab" id="tab-banned" role="tab" aria-selected="false" aria-controls="players-banned-panel">
+                Banned <span class="badge" id="banned-count">{{len .server.BannedClients}}</span>
+            </button>
+            {{end}}
+        </div>
     </div>
-    <div class="players-header-bar row justify-between">
-        <div class="tab-set">
-            <button type="button" class="tab-btn active" data-target="players-live" title="View players currently online">Live</button>
-            <button type="button" class="tab-btn" data-target="players-history" title="View previous player sessions">History</button>
-            <button type="button" class="tab-btn" data-target="players-banned" title="View and manage banned players">Banned</button>
-        </div>
-        <label class="checkbox-inline" for="player-saves-toggle" title="save the game when a player connects to the server.">
-            <input type="checkbox" id="player-saves-toggle" {{ if .server.PlayerSaves }}checked{{ end }} />
-            <span>Player Saves</span>
-        </label>
-    </div>
-    <div class="players-section">
-        <div class="tab-panel active" id="players-live">
-            <table class="players-table {{if eq $liveCount 0}}hidden{{end}}" id="players-live-table">
-                <thead>
-                    <tr>
-                        <th>Player Name</th>
-                        <th>Steam ID</th>
-                        <th>Connected At</th>
-                        <th></th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="players-live-body">
-                    {{range $live}}
-                    <tr>
-                        <td>
-                            <span class="player-name">
-                                {{if .IsAdmin}}
-                                <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
-                                {{end}}
-                                {{.Name}}
-                            </span>
-                        </td>
-                        <td>{{.SteamID}}</td>
-                        <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
-                        <td>
-                            <!-- API-only: neutral form; JS handles via /api -->
-                            <form class="inline-form" onsubmit="return false" data-api-only="true">
-                                <button type="submit" name="kick" value="{{.Name}}" class="btn btn-warning btn-icon" aria-label="Kick player" title="Kick player">
-                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="9"></circle>
-                                        <line x1="8" y1="12" x2="16" y2="12"></line>
-                                    </svg>
-                                </button>
-                            </form>
-                        </td>
-                        <td>
-                            <!-- API-only: neutral form; JS handles via /api -->
-                            <form class="inline-form" onsubmit="return false" data-api-only="true">
-                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
-                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="9"></circle>
-                                        <line x1="5" y1="19" x2="19" y2="5"></line>
-                                    </svg>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
-            <div class="empty-state {{if gt $liveCount 0}}hidden{{end}}" id="players-live-empty">No players currently connected</div>
-        </div>
-        <div class="tab-panel" id="players-history">
-            <table class="players-table {{if eq $historyCount 0}}hidden{{end}}" id="players-history-table">
-                <thead>
-                    <tr>
-                        <th>Player Name</th>
-                        <th>Steam ID</th>
-                        <th>Connected At</th>
-                        <th>Session Length</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="players-history-body">
-                    {{range $history}}
-                    <tr>
-                        <td>
-                            <span class="player-name">
-                                {{if .IsAdmin}}
-                                <span class="player-admin-icon" title="Admin" aria-label="Admin">🛡️</span>
-                                {{end}}
-                                {{.Name}}
-                            </span>
-                        </td>
-                        <td>{{.SteamID}}</td>
-                        <td>{{.ConnectDatetime.Format "2006-01-02 15:04:05"}}</td>
-                        <td>{{.SessionDurationString}}</td>
-                        <td>
-                            <!-- API-only: neutral form; JS handles via /api -->
-                            <form class="inline-form" onsubmit="return false" data-api-only="true">
-                                <button type="submit" name="ban" value="{{.SteamID}}" class="btn btn-danger btn-icon" aria-label="Ban player" title="Ban Steam ID">
-                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="9"></circle>
-                                        <line x1="5" y1="19" x2="19" y2="5"></line>
-                                    </svg>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {{end}}
-                </tbody>
-            </table>
-            <div class="empty-state {{if gt $historyCount 0}}hidden{{end}}" id="players-history-empty">No player sessions recorded</div>
-        </div>
-        <div class="tab-panel" id="players-banned">
-            <table class="players-table {{if or (not $banned) (eq (len $banned) 0)}}hidden{{end}}" id="players-banned-table">
-                <thead>
-                    <tr>
-                        <th>Player Name</th>
-                        <th>Steam ID</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="players-banned-body">
-                    {{if $banned}}
-                        {{range $banned}}
-                        <tr>
-                            <td>
-                                {{if .Name}}{{.Name}}{{else}}—{{end}}
-                            </td>
-                            <td>{{.SteamID}}</td>
-                            <td>
-                                <!-- API-only: neutral form; JS handles via /api -->
-                                <form class="inline-form" onsubmit="return false" data-api-only="true">
-                                    <button type="submit" name="unban" value="{{.SteamID}}" class="btn btn-success btn-icon" aria-label="Unban player" title="Unban Steam ID">
-                                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                            <circle cx="12" cy="12" r="9"></circle>
-                                            <polyline points="9 12 12 15 17 10"></polyline>
-                                        </svg>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {{end}}
-                    {{end}}
-                </tbody>
-            </table>
-            <div class="empty-state {{if and $banned (gt (len $banned) 0)}}hidden{{end}}" id="players-banned-empty">No banned players</div>
 
-            <!-- API-only: neutral form; JS intercepts submit -->
-            <form id="banned-add-form" class="form-inline mt-3" data-api-only="true">
-                <label for="ban_steam_id" class="sr-only">Steam ID</label>
-                <input type="text" id="ban_steam_id" name="ban_steam_id" placeholder="Enter Steam ID" class="form-input-inline input-wide" autocomplete="off">
-                <button type="submit" name="add_ban" value="true" class="btn btn-primary btn-min-sm" title="Ban the entered Steam ID">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9"></circle>
-                        <line x1="12" y1="8" x2="12" y2="16"></line>
-                        <line x1="8" y1="12" x2="16" y2="12"></line>
-                    </svg>
-                    <span class="ml-6">Add</span>
-                </button>
-            </form>
+    <div class="card-body p-0">
+        <div id="players-live-panel" role="tabpanel" aria-labelledby="tab-live">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>GUID</th>
+                            <th>IP</th>
+                            <th>Joined</th>
+                            {{if eq .role "admin"}}<th class="text-right">Actions</th>{{end}}
+                        </tr>
+                    </thead>
+                    <tbody id="live-players-table">
+                        {{range .server.LiveClients}}
+                            <tr id="live-player-{{.GUID}}">
+                                <td>{{.Name}}</td>
+                                <td><code class="text-xs">{{.GUID}}</code></td>
+                                <td>{{.IP}}</td>
+                                <td>{{.Connected}}</td>
+                                {{if eq $.role "admin"}}
+                                <td class="text-right">
+                                    <button class="btn btn-icon btn-sm btn-danger btn-kick" data-guid="{{.GUID}}" title="Kick Player"><i data-feather="x-circle"></i></button>
+                                    <button class="btn btn-icon btn-sm btn-warning btn-ban" data-guid="{{.GUID}}" title="Ban Player"><i data-feather="slash"></i></button>
+                                </td>
+                                {{end}}
+                            </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <div id="live-players-empty" class="empty-state {{if .server.LiveClients}}hidden{{end}}">
+                <i data-feather="users"></i>
+                <h3 class="empty-state-title">No Players Online</h3>
+                <p class="empty-state-description">Players will appear here when they join the server.</p>
+            </div>
         </div>
+
+        <div id="players-history-panel" role="tabpanel" aria-labelledby="tab-history" class="hidden">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>GUID</th>
+                            <th>Last Seen</th>
+                            {{if eq .role "admin"}}<th class="text-right">Actions</th>{{end}}
+                        </tr>
+                    </thead>
+                    <tbody id="history-players-table">
+                        {{range .server.Clients}}
+                            <tr id="history-player-{{.GUID}}">
+                                <td>{{.Name}}</td>
+                                <td><code class="text-xs">{{.GUID}}</code></td>
+                                <td>{{.LastSeen.Format "Jan 2, 2006 3:04 PM"}}</td>
+                                {{if eq $.role "admin"}}
+                                <td class="text-right">
+                                    <button class="btn btn-icon btn-sm btn-warning btn-ban" data-guid="{{.GUID}}" title="Ban Player"><i data-feather="slash"></i></button>
+                                </td>
+                                {{end}}
+                            </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <div id="history-players-empty" class="empty-state {{if .server.Clients}}hidden{{end}}">
+                <i data-feather="clock"></i>
+                <h3 class="empty-state-title">No Player History</h3>
+                <p class="empty-state-description">Player history is not enabled or no players have joined yet.</p>
+            </div>
+        </div>
+
+        {{if eq .role "admin"}}
+        <div id="players-banned-panel" role="tabpanel" aria-labelledby="tab-banned" class="hidden">
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>GUID</th>
+                            <th>Banned On</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="banned-players-table">
+                        {{range .server.BannedClients}}
+                            <tr id="banned-player-{{.GUID}}">
+                                <td>{{.Name}}</td>
+                                <td><code class="text-xs">{{.GUID}}</code></td>
+                                <td>{{.BannedOn.Format "Jan 2, 2006 3:04 PM"}}</td>
+                                <td class="text-right">
+                                    <button class="btn btn-icon btn-sm btn-success btn-unban" data-guid="{{.GUID}}" title="Unban Player"><i data-feather="check-circle"></i></button>
+                                </td>
+                            </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            <div id="banned-players-empty" class="empty-state {{if .server.BannedClients}}hidden{{end}}">
+                <i data-feather="slash"></i>
+                <h3 class="empty-state-title">No Banned Players</h3>
+                <p class="empty-state-description">You can ban players from the Live or History tabs.</p>
+            </div>
+        </div>
+        {{end}}
     </div>
 </div>
+
+<template id="live-player-row-template">
+    <tr id="live-player-{{.GUID}}">
+        <td>{{.Name}}</td>
+        <td><code class="text-xs">{{.GUID}}</code></td>
+        <td>{{.IP}}</td>
+        <td>{{.Connected}}</td>
+        {{if eq $.role "admin"}}
+        <td class="text-right">
+            <button class="btn btn-icon btn-sm btn-danger btn-kick" data-guid="{{.GUID}}" title="Kick Player"><i data-feather="x-circle"></i></button>
+            <button class="btn btn-icon btn-sm btn-warning btn-ban" data-guid="{{.GUID}}" title="Ban Player"><i data-feather="slash"></i></button>
+        </td>
+        {{end}}
+    </tr>
+</template>
+
+<template id="history-player-row-template">
+    <tr id="history-player-{{.GUID}}">
+        <td>{{.Name}}</td>
+        <td><code class="text-xs">{{.GUID}}</code></td>
+        <td>{{.LastSeen}}</td>
+        {{if eq $.role "admin"}}
+        <td class="text-right">
+            <button class="btn btn-icon btn-sm btn-warning btn-ban" data-guid="{{.GUID}}" title="Ban Player"><i data-feather="slash"></i></button>
+        </td>
+        {{end}}
+    </tr>
+</template>
+
+<template id="banned-player-row-template">
+    <tr id="banned-player-{{.GUID}}">
+        <td>{{.Name}}</td>
+        <td><code class="text-xs">{{.GUID}}</code></td>
+        <td>{{.BannedOn}}</td>
+        <td class="text-right">
+            <button class="btn btn-icon btn-sm btn-success btn-unban" data-guid="{{.GUID}}" title="Unban Player"><i data-feather="check-circle"></i></button>
+        </td>
+    </tr>
+</template>
+{{end}}
+

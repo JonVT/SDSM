@@ -1,272 +1,108 @@
-<div class="card card-config">
-    <div class="card-header">
-        <h2 class="card-title">Configuration</h2>
-    </div>
-    <!-- API-only: remove legacy POST target. JS intercepts submit and calls /api/servers/:id/settings -->
-    <form id="startup-params-form" data-api-only="true">
-        <input type="hidden" name="confirm_reset_saves" id="confirm-reset-saves-flag" value="0" />
-        <div class="form-grid-compact">
-            <div class="form-row form-row-full">
-                <label>Server Path:</label>
-                <span class="readonly-field">{{.serverPath}}</span>
+{{define "server_status_config.html"}}
+<div class="card col-span-full" id="server-config-card">
+    <form id="server-config-form">
+        <div class="card-header">
+            <div class="flex items-center gap-2">
+                <i data-feather="settings"></i>
+                <h2 class="card-title">Configuration</h2>
             </div>
-
-            <div class="form-row grid-2 grid-items-center">
-                <div>
-                    <label>Game Version:</label>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="beta" value="false" {{if not .server.Beta}}checked{{end}}> Release
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="beta" value="true" {{if .server.Beta}}checked{{end}}> Beta
-                        </label>
-                    </div>
-                </div>
-                <div>
-                    <label for="server_visible">Public:</label>
-                    <div class="checkbox-inline checkbox-group">
-                        <label class="radio-label"><input type="checkbox" id="server_visible" name="server_visible" {{if .server.Visible}}checked{{end}}> Public</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="difficulty">Difficulty:</label>
-                    <select name="difficulty" id="difficulty" class="form-select-inline" aria-label="Difficulty">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="port">Port:</label>
-                    <input type="number" id="port" name="port" value="{{.server.Port}}" class="form-input-inline" placeholder="7777" autocomplete="off">
-                </div>
-            </div>
-
-            <div class="form-row grid-2">
-                <div>
-                    <label for="start_location">Start Location:</label>
-                    <select name="start_location" id="start_location" class="form-select-inline" aria-label="Start Location">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-                <div>
-                    <label for="start_condition">Start Condition:</label>
-                    <select name="start_condition" id="start_condition" class="form-select-inline" aria-label="Start Condition">
-                        <option value="">Loading...</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group">
-                    <label class="form-label" for="max_clients">Max Players</label>
-                    <input type="number" id="max_clients" name="max_clients" value="{{.server.MaxClients}}" class="form-control" placeholder="8" autocomplete="off">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="save_interval">Save Interval (sec)</label>
-                    <input type="number" id="save_interval" name="save_interval" value="{{.server.SaveInterval}}" class="form-control" placeholder="300" autocomplete="off">
-                </div>
-            </div>
-
-            
-
-            
-
-            <div class="form-row form-row-full">
-                <label for="welcome_message">Welcome Message:</label>
-                <input type="text" id="welcome_message" name="welcome_message" value="{{.server.WelcomeMessage}}" class="form-input-inline" placeholder="Optional message sent to chat when a player connects" title="Message sent to chat when any player connects." autocomplete="off">
-            </div>
-
-            <div class="form-row form-row-full">
-                <label for="welcome_back_message">Welcome Back Message:</label>
-                <input type="text" id="welcome_back_message" name="welcome_back_message" value="{{.server.WelcomeBackMessage}}" class="form-input-inline" placeholder="Optional message for returning players" title="Message sent to chat when a returning player connects (overrides the Welcome Message for returning players)." autocomplete="off">
-            </div>
-
-            <div class="form-row form-row-full message-delay-row">
-                <label for="welcome_delay_seconds">Message Delay (sec):</label>
-                <div class="row-controls">
-                    <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" value="{{.server.WelcomeDelaySeconds}}" class="form-input-inline" min="0" max="600" placeholder="1" autocomplete="off" title="Delay before sending welcome / welcome back messages.">
-                        <button type="button" class="btn btn-ghost btn-min-sm" id="welcome-token-help" title="Show available chat tokens for welcome messages">Message Tokens</button>
-                </div>
-            </div>
-
-            
-
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="password">Server Password:</label>
-                    <input type="password" id="password" name="password" value="{{.server.Password}}" class="form-input-inline" placeholder="Password" autocomplete="current-password">
-                </div>
-                <div>
-                    <label for="auth_secret">Auth Secret:</label>
-                    <input type="text" id="auth_secret" name="auth_secret" value="{{.server.AuthSecret}}" class="form-input-inline" placeholder="Auth Secret" autocomplete="off">
-                </div>
-            </div>
-
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="disconnect_timeout">Disconnect Timeout (ms):</label>
-                    <input type="number" id="disconnect_timeout" name="disconnect_timeout" value="{{.server.DisconnectTimeout}}" class="form-input-inline" min="1000" max="600000" step="1000" placeholder="10000" autocomplete="off">
-                </div>
-                <div>
-                    <label for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec):</label>
-                    <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" value="{{.server.BepInExInitTimeoutSeconds}}" class="form-input-inline" min="5" max="120" placeholder="10" autocomplete="off" title="Maximum time to wait for initial BepInEx bootstrap on Windows.">
-                </div>
-            </div>
-
-            <div class="form-row grid-3 grid-items-end">
-                <div>
-                    <label for="log_attach_rehydrate_kb">Attach Rehydrate Window (KB):</label>
-                    <input type="number" id="log_attach_rehydrate_kb" name="log_attach_rehydrate_kb" value="{{.server.LogAttachRehydrateKB}}" class="form-input-inline" min="16" max="4096" step="16" placeholder="256" autocomplete="off" title="How many KB of recent output log to replay when attaching to a running server.">
-                </div>
-                <div>
-                    <label for="clients_query_retry_count">CLIENTS Retry Count:</label>
-                    <input type="number" id="clients_query_retry_count" name="clients_query_retry_count" value="{{.server.ClientsQueryRetryCount}}" class="form-input-inline" min="1" max="10" step="1" placeholder="3" autocomplete="off" title="How many times to issue CLIENTS after attach.">
-                </div>
-                <div>
-                    <label for="clients_query_retry_delay_seconds">CLIENTS Retry Delay (sec):</label>
-                    <input type="number" id="clients_query_retry_delay_seconds" name="clients_query_retry_delay_seconds" value="{{.server.ClientsQueryRetryDelaySeconds}}" class="form-input-inline" min="1" max="10" step="1" placeholder="2" autocomplete="off" title="Seconds to wait between CLIENTS retries.">
-                </div>
-            </div>
-
-            
-            <div class="grid-2">
-                <div class="form-group">
-                    <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
-                    <input type="number" id="max_auto_saves" name="max_auto_saves" value="{{.server.MaxAutoSaves}}" class="form-control" min="1" max="1000" placeholder="5" autocomplete="off" title="Maximum number of autosaves to retain on disk (default 5)">
-                </div>
-                <div class="form-group">
-                    <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
-                    <input type="number" id="max_quick_saves" name="max_quick_saves" value="{{.server.MaxQuickSaves}}" class="form-control" min="1" max="1000" placeholder="5" autocomplete="off" title="Maximum number of quicksaves to retain on disk (default 5)">
-                </div>
-            </div>
-
-            <div class="form-row grid-2 grid-items-end">
-                <div>
-                    <label for="shutdown_delay_seconds">Shutdown Delay (sec):</label>
-                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" value="{{.server.ShutdownDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="2" autocomplete="off" title="Delay before shutdown completes after stop is requested.">
-                </div>
-                <div>
-                    <label for="restart_delay_seconds">Restart Delay (sec):</label>
-                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" value="{{.server.RestartDelaySeconds}}" class="form-input-inline" min="0" max="3600" placeholder="0" autocomplete="off" title="Delay before restarting after a restart is triggered.">
-                </div>
-            </div>
-
-            <div class="form-row form-row-full checkbox-row">
-                <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label"><input type="checkbox" id="auto_start" name="auto_start" {{if .server.AutoStart}}checked{{end}}> Auto Start</label>
-                    <label class="radio-label"><input type="checkbox" id="auto_save" name="auto_save" {{if .server.AutoSave}}checked{{end}}> Auto Save</label>
-                    <label class="radio-label"><input type="checkbox" id="auto_pause" name="auto_pause" {{if .server.AutoPause}}checked{{end}}> Auto Pause</label>
-                    <label class="radio-label"><input type="checkbox" id="auto_update" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}> Auto Update</label>
-                </div>
-            </div>
-
-            <div class="form-row form-row-full checkbox-row">
-                <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label"><input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}> Delete Skeleton On Decay</label>
-                </div>
-            </div>
-
-            <div class="form-row form-row-full">
-                <label>Port Forwarding:</label>
-                <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label" title="Adaptive forwarding: prefers the game's built-in UPnP when available and falls back to SDSM's NAT-PMP/UPnP mapping.">
-                        <input type="checkbox" id="auto_port_forward" name="auto_port_forward" {{if .server.AutoPortForward}}checked{{end}}> Port Forwarding <span class="pill pill-sm" title="Forwarding behavior is adaptive">Adaptive</span>
-                    </label>
-                </div>
-                <p class="help-text">When enabled, SDSM will first look for a port mapping created by the game via UPnP. If none is found, SDSM will attempt to create a NAT-PMP/UPnP mapping for the game UDP port.</p>
-            </div>
-
-            <div class="form-row form-row-full" id="net-forwarding-extras" style="display: none;">
-                <label>External Address:</label>
-                <div class="row-controls">
-                    <span id="external-ip-value" class="readonly-field" title="External IP as reported by your router (UPnP/NAT-PMP)">—</span>
-                        <button type="button" class="btn btn-info btn-min-sm" id="btn-test-port" title="Best-effort check for port reachability from the internet">Test Port</button>
-                </div>
-            </div>
-        </div>
-        <div class="control-actions mt-3">
-            <button type="submit" name="update" value="true" id="btn-update-params" class="btn btn-primary btn-min-lg" title="Apply the startup parameter changes for this server">
-                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a 2 2 0 0 1-2 2z"></path>
-                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                    <polyline points="7 3 7 8 15 8"></polyline>
-                </svg>
-                Update
+            <button type="button" id="serverConfigToggle" class="btn btn-ghost btn-sm" aria-expanded="false" aria-controls="serverConfigContent">
+                <span id="serverConfigToggleLabel">Expand</span>
+                <i data-feather="chevron-down" class="transform transition-transform"></i>
             </button>
         </div>
-    </form>
-</div>
 
-<div class="card card-config mt-3">
-    <div class="card-header">
-        <h2 class="card-title">Discord Notifications</h2>
-    </div>
-    <form id="notifications-form" data-api-only="true" onsubmit="event.preventDefault(); document.getElementById('startup-params-form').requestSubmit();">
-        <div class="form-grid-compact">
-            <div class="form-row form-row-full">
-                <label for="discord_webhook">Server Discord Webhook:</label>
-                <input type="text" id="discord_webhook" name="discord_webhook" value="{{.server.DiscordWebhook}}" class="form-input-inline" placeholder="https://discord.com/api/webhooks/..." autocomplete="off">
-            </div>
-            <div class="form-row form-row-full checkbox-row">
-                <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label"><input type="checkbox" id="notify_use_manager_defaults" name="notify_use_manager_defaults" {{if .server.NotifyUseManagerDefaults}}checked{{end}}> Use Manager Defaults</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_enable" name="notify_enable" {{if .server.NotifyEnable}}checked{{end}}> Enable (when not using defaults)</label>
-                </div>
-            </div>
-            <div class="form-row form-row-full">
-                <div class="checkbox-inline checkbox-group">
-                    <label class="radio-label"><input type="checkbox" id="notify_on_start" name="notify_on_start" {{if .server.NotifyOnStart}}checked{{end}}> On Start</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_stopping" name="notify_on_stopping" {{if .server.NotifyOnStopping}}checked{{end}}> On Stopping</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_stopped" name="notify_on_stopped" {{if .server.NotifyOnStopped}}checked{{end}}> On Stopped</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_restart" name="notify_on_restart" {{if .server.NotifyOnRestart}}checked{{end}}> On Restart</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_update_started" name="notify_on_update_started" {{if .server.NotifyOnUpdateStarted}}checked{{end}}> Update Started</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_update_completed" name="notify_on_update_completed" {{if .server.NotifyOnUpdateCompleted}}checked{{end}}> Update Completed</label>
-                    <label class="radio-label"><input type="checkbox" id="notify_on_update_failed" name="notify_on_update_failed" {{if .server.NotifyOnUpdateFailed}}checked{{end}}> Update Failed</label>
-                </div>
-            </div>
-            <div class="form-row form-row-full mt-2">
-                <div class="grid-2 gap-2">
-                    <div>
-                        <label class="form-label">Start Template</label>
-                        <input type="text" name="notify_msg_start" value="{{.server.NotifyMsgStart}}" placeholder="Server {{`{{server_name}}`}} started." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_start" value="{{.server.NotifyColorStart}}" title="Color" class="ml-2">
+        <div id="serverConfigContent" class="hidden">
+            <div class="card-body grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                
+                <div class="flex flex-col gap-4">
+                    <h3 class="text-lg font-semibold border-b pb-2">General</h3>
+                    <div class="form-group">
+                        <label for="server-name-input" class="form-label">Server Name</label>
+                        <input type="text" id="server-name-input" name="Name" value="{{.server.Name}}" class="form-control">
                     </div>
-                    <div>
-                        <label class="form-label">Stopping Template</label>
-                        <input type="text" name="notify_msg_stopping" value="{{.server.NotifyMsgStopping}}" placeholder="Server {{`{{server_name}}`}} stopping." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_stopping" value="{{.server.NotifyColorStopping}}" title="Color" class="ml-2">
+                    <div class="form-group">
+                        <label for="server-password" class="form-label">Password</label>
+                        <input type="password" id="server-password" name="Password" value="{{.server.Password}}" class="form-control">
                     </div>
-                    <div>
-                        <label class="form-label">Stopped Template</label>
-                        <input type="text" name="notify_msg_stopped" value="{{.server.NotifyMsgStopped}}" placeholder="Server {{`{{server_name}}`}} stopped." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_stopped" value="{{.server.NotifyColorStopped}}" title="Color" class="ml-2">
+                    <div class="form-group">
+                        <label for="server-max-clients" class="form-label">Max Players</label>
+                        <input type="number" id="server-max-clients" name="MaxClients" value="{{.server.MaxClients}}" class="form-control">
                     </div>
-                    <div>
-                        <label class="form-label">Restart Template</label>
-                        <input type="text" name="notify_msg_restart" value="{{.server.NotifyMsgRestart}}" placeholder="Server {{`{{server_name}}`}} {{`{{event}}`}}." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_restart" value="{{.server.NotifyColorRestart}}" title="Color" class="ml-2">
+                    <div class="form-group">
+                        <label for="server-port" class="form-label">Port</label>
+                        <input type="number" id="server-port" name="Port" value="{{.server.Port}}" class="form-control">
                     </div>
-                    <div>
-                        <label class="form-label">Update Started Template</label>
-                        <input type="text" name="notify_msg_update_started" value="{{.server.NotifyMsgUpdateStarted}}" placeholder="Server {{`{{server_name}}`}} update started." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_update_started" value="{{.server.NotifyColorUpdateStarted}}" title="Color" class="ml-2">
+                    <div class="form-group">
+                        <label for="server-query-port" class="form-label">Query Port</label>
+                        <input type="number" id="server-query-port" name="QueryPort" value="{{.server.QueryPort}}" class="form-control">
                     </div>
-                    <div>
-                        <label class="form-label">Update Completed Template</label>
-                        <input type="text" name="notify_msg_update_completed" value="{{.server.NotifyMsgUpdateCompleted}}" placeholder="Server {{`{{server_name}}`}} update completed successfully." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_update_completed" value="{{.server.NotifyColorUpdateCompleted}}" title="Color" class="ml-2">
-                    </div>
-                    <div>
-                        <label class="form-label">Update Failed Template</label>
-                        <input type="text" name="notify_msg_update_failed" value="{{.server.NotifyMsgUpdateFailed}}" placeholder="Server {{`{{server_name}}`}} update failed." class="form-input-inline" autocomplete="off">
-                        <input type="color" name="notify_color_update_failed" value="{{.server.NotifyColorUpdateFailed}}" title="Color" class="ml-2">
+                    <div class="form-group">
+                        <label for="server-language" class="form-label">Language</label>
+                        <select id="server-language" name="Language" class="form-select">
+                            <option value="" {{if not .server.Language}}selected{{end}}>Default (English)</option>
+                            {{range .languages}}
+                            <option value="{{.Code}}" {{if eq .Code $.server.Language}}selected{{end}}>{{.Name}}</option>
+                            {{end}}
+                        </select>
                     </div>
                 </div>
-                <p class="help-text mt-2">Tokens available: {{`{{server_name}}`}}, {{`{{event}}`}}, {{`{{detail}}`}}, {{`{{timestamp}}`}}. Leave blank to inherit manager defaults.</p>
+
+                <div class="flex flex-col gap-4">
+                    <h3 class="text-lg font-semibold border-b pb-2">Gameplay</h3>
+                    <div class="form-group">
+                        <label for="server-game-mode" class="form-label">Game Mode</label>
+                        <select id="server-game-mode" name="GameMode" class="form-select">
+                            <option value="survival" {{if eq .server.GameMode "survival"}}selected{{end}}>Survival</option>
+                            <option value="creative" {{if eq .server.GameMode "creative"}}selected{{end}}>Creative</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="server-save-interval" class="form-label">Save Interval (minutes)</label>
+                        <input type="number" id="server-save-interval" name="SaveInterval" value="{{.server.SaveInterval}}" class="form-control">
+                    </div>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-pause-empty" name="PauseWhenEmpty" class="form-switch" {{if .server.PauseWhenEmpty}}checked{{end}}>
+                        <span>Pause When Empty</span>
+                    </label>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-player-saves" name="PlayerSaves" class="form-switch" {{if .server.PlayerSaves}}checked{{end}}>
+                        <span>Allow Player Saves</span>
+                    </label>
+                </div>
+
+                <div class="flex flex-col gap-4">
+                    <h3 class="text-lg font-semibold border-b pb-2">Advanced</h3>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-auto-update" name="AutoUpdate" class="form-switch" {{if .server.AutoUpdate}}checked{{end}}>
+                        <span>Auto-update</span>
+                    </label>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-beta" name="Beta" class="form-switch" {{if .server.Beta}}checked{{end}}>
+                        <span>Beta Branch</span>
+                    </label>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-public" name="Public" class="form-switch" {{if .server.Public}}checked{{end}}>
+                        <span>Public</span>
+                    </label>
+                    <label class="form-group-tile">
+                        <input type="checkbox" id="server-enable-upnp" name="EnableUPnP" class="form-switch" {{if .server.EnableUPnP}}checked{{end}}>
+                        <span>Enable UPnP</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="card-footer flex justify-end gap-2">
+                <button type="button" id="btn-reset-config" class="btn btn-secondary">
+                    <i data-feather="refresh-cw"></i>
+                    <span>Reset</span>
+                </button>
+                <button type="submit" class="btn btn-primary" {{if .server.Running}}disabled title="Stop the server to save changes"{{end}}>
+                    <i data-feather="save"></i>
+                    <span>Save Configuration</span>
+                </button>
             </div>
         </div>
     </form>
 </div>
+{{end}}

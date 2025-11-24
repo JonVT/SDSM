@@ -802,7 +802,6 @@ func (h *ManagerHandlers) Frame(c *gin.Context) {
 
 // Dashboard renders the main dashboard page, showing a list of servers.
 func (h *ManagerHandlers) Dashboard(c *gin.Context) {
-	log.Printf("Dashboard handler called for user: %s, role: %s", c.GetString("username"), c.GetString("role"))
 	user, _ := c.Get("user")
 	role := c.GetString("role")
 	username, _ := c.Get("username")
@@ -819,15 +818,83 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 		servers = filtered
 	}
 
+	rootPath := ""
+	if h.manager != nil && h.manager.Paths != nil {
+		rootPath = h.manager.Paths.RootPath
+	}
+
+	componentsTotal := 0
+	componentsUpToDate := 0
+	componentsOutdated := 0
+	if h.manager != nil {
+		tracked := []manager.DeployType{
+			manager.DeployTypeRelease,
+			manager.DeployTypeBeta,
+			manager.DeployTypeBepInEx,
+			manager.DeployTypeLaunchPad,
+			manager.DeployTypeSCON,
+		}
+		componentsTotal = len(tracked)
+		componentsUpToDate = componentsTotal
+		outdated := make(map[manager.DeployType]struct{}, componentsTotal)
+		for _, comp := range h.manager.ComponentsNeedingUpdate() {
+			switch comp {
+			case manager.DeployTypeServers, manager.DeployTypeSteamCMD, manager.DeployTypeAll:
+				continue
+			}
+			outdated[comp] = struct{}{}
+		}
+		componentsOutdated = len(outdated)
+		if componentsOutdated > componentsTotal {
+			componentsOutdated = componentsTotal
+		}
+		componentsUpToDate = componentsTotal - componentsOutdated
+		if componentsUpToDate < 0 {
+			componentsUpToDate = 0
+		}
+	}
+	managerInfo := gin.H{
+		"port":              h.manager.Port,
+		"root_path":         rootPath,
+		"updating":          h.manager.IsUpdating(),
+		"updates_available": h.manager.UpdatesAvailable(),
+		"components_total":   componentsTotal,
+		"components_outdated": componentsOutdated,
+		"components_uptodate": componentsUpToDate,
+	}
+
+	totalUsers := 0
+	adminUsers := 0
+	operatorUsers := 0
+	if h.userStore != nil {
+		users := h.userStore.Users()
+		totalUsers = len(users)
+		for _, u := range users {
+			switch u.Role {
+			case manager.RoleAdmin:
+				adminUsers++
+			case manager.RoleOperator:
+				operatorUsers++
+			}
+		}
+	}
+	userStats := gin.H{
+		"total":     totalUsers,
+		"admins":    adminUsers,
+		"operators": operatorUsers,
+	}
+
 	data := gin.H{
-		"servers":   servers,
-		"user":      user,
-		"username":  username,
-		"role":      role,
-		"buildTime": h.manager.BuildTime(),
-		"active":    h.manager.IsActive(),
-		"page":      "dashboard",
-		"title":     "Dashboard",
+		"servers":     servers,
+		"user":        user,
+		"username":    username,
+		"role":        role,
+		"buildTime":   h.manager.BuildTime(),
+		"active":      h.manager.IsActive(),
+		"managerInfo": managerInfo,
+		"userStats":   userStats,
+		"page":        "dashboard",
+		"title":       "Dashboard",
 	}
 
 	// If this is an HTMX request, render only the content

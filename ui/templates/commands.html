@@ -2,57 +2,51 @@
 {{define "page"}}commands{{end}}
 
 {{define "commands.html"}}
-<header class="hero-card">
-    <div class="hero-main">
-        <img src="/sdsm.png" alt="SDSM" width="56" height="56" class="hero-logo" />
-        <div class="hero-heading">
-            <h1 class="hero-title">Console Commands</h1>
-            <p class="hero-subtitle">Reference of available server console commands.</p>
+<div class="card" data-page-title="Console Commands">
+    <div class="card-header">
+        <h2>Console Commands</h2>
+        <div class="card-header-actions">
+            <input id="cmd-search" class="form-control" type="text" placeholder="Filter commands..." autocomplete="off">
         </div>
     </div>
-    <div class="hero-actions">
-        <input id="cmd-search" class="commands-search" type="text" placeholder="Filter commands (name, usage, description)..." autocomplete="off">
-    </div>
-</header>
-
-<div class="az-bar">
-    {{ range .letters }}
-        <a href="#cmd-{{.}}" class="btn btn-control">{{.}}</a>
-    {{ end }}
-</div>
-
-<p class="filter-info">Loaded {{ len .commands }} commands. Click a command name to copy it.</p>
-
-<div class="table-shell">
-    <table class="commands-table" id="commands-table">
-        <colgroup>
-            <col class="name">
-            <col class="usage">
-            <col>
-        </colgroup>
-        <thead>
-            <tr>
-                <th>Command</th>
-                <th>Usage / Args</th> 
-                <th>Description</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{ range .commands }}
-            <tr {{ if .Anchor }}id="{{ .Anchor }}"{{ end }} data-name="{{ .Name }}" data-usage="{{ .UsageStr }}" data-desc="{{ .Description }}">
-                <td class="cmd-name" title="Click to copy command" tabindex="0">{{ .Name }}</td>
-                <td>
-                    {{ if .Usages }}
-                        {{ range .Usages }}<span class="usage-badge">{{ . }}</span>{{ end }}
-                    {{ else }}<span class="empty-usage">(none)</span>{{ end }}
-                </td>
-                <td>
-                    <div class="description-block">{{ .Description }}</div>
-                    <a href="#" class="desc-toggle hidden">Show more</a>
-                </td>
-            </tr>
+    <div class="card-content">
+        <div class="az-bar">
+            {{ range .letters }}
+                <a href="#cmd-{{.}}" class="btn btn-sm btn-ghost">{{.}}</a>
             {{ end }}
-        </tbody>
-    </table>
+        </div>
+
+        <p class="text-muted mt-4" id="filter-info">Loaded {{ len .commands }} commands. Click a command name to copy it.</p>
+
+        <div class="table-container mt-4">
+            <table class="table" id="commands-table">
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Usage / Args</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .commands }}
+                    <tr {{ if .Anchor }}id="{{ .Anchor }}"{{ end }} data-name="{{ .Name }}" data-usage="{{ .UsageStr }}" data-desc="{{ .Description }}">
+                        <td class="cmd-name" title="Click to copy command" tabindex="0">
+                            <code>{{ .Name }}</code>
+                        </td>
+                        <td>
+                            {{ if .Usages }}
+                                {{ range .Usages }}<span class="badge">{{ . }}</span>{{ end }}
+                            {{ else }}<span class="text-muted">(none)</span>{{ end }}
+                        </td>
+                        <td>
+                            <div class="description-block">{{ .Description }}</div>
+                            <a href="#" class="desc-toggle hidden">Show more</a>
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {{end}}

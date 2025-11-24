@@ -1,334 +1,225 @@
 {{define "title"}}Create New Server{{end}}
+{{define "page"}}server_new{{end}}
 
-{{define "content"}}
-<div class="main-grid">
+{{define "server_new.html"}}
+<div class="grid-new-server" data-page-title="Create New Server">
     <div class="card">
-        {{ if .error }}
-        <div class="alert alert-error" role="alert">{{ .error }}</div>
-        {{ end }}
-        <!-- API-only: neutralize legacy action; JS submit handler calls /api endpoints -->
-        <form method="POST" action="#" id="serverForm" enctype="multipart/form-data" data-api-only="true">
-            <div class="form-section">
-                <h3 class="section-title">Create From Save (optional)</h3>
-                <div id="saveDropzone" class="dropzone border border-dashed rounded-md p-4 bg-surface-secondary flex items-center gap-3">
-                    <div class="flex-1">
-                        <div class="fw-600 mb-1">Drop a Stationeers .save file here</div>
-                        <div class="text-secondary text-0_9">We'll read the save to set name and world, and import it.</div>
-                        <div id="saveFileName" class="mt-2 text-0_9 text-primary"></div>
-                    </div>
-                    <div>
-                        <label for="save_file" class="btn btn-neutral">Choose File</label>
+        <div class="card-header">
+            <h2>Create New Server</h2>
+        </div>
+        <div class="card-content">
+            {{ if .error }}
+            <div class="alert alert-danger" role="alert">{{ .error }}</div>
+            {{ end }}
+            <form method="POST" action="#" id="serverForm" enctype="multipart/form-data">
+                
+                <div class="form-section">
+                    <h3 class="form-section-title">Create From Save (Optional)</h3>
+                    <div id="saveDropzone" class="dropzone">
+                        <div class="dz-message">
+                            <svg class="icon-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 17.25V21h18v-3.75M4.5 12a7.5 7.5 0 0115 0v2.25H4.5V12z" />
+                            </svg>
+                            <strong>Drop a Stationeers .save file here</strong>
+                            <span class="text-muted">We'll read the save to set name and world, and import it.</span>
+                            <div id="saveFileName" class="mt-2 text-sm text-primary"></div>
+                        </div>
+                         <label for="save_file" class="btn btn-secondary btn-sm">Choose File</label>
                         <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
                     </div>
+                    <div id="saveAnalysis" class="hidden mt-4 p-3 rounded-md bg-surface-2">
+                        <h4 class="text-md font-semibold mb-2">Detected From Save</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">World</label>
+                                <div id="detectedWorld" class="form-control-static"></div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">World File Name (Server Name)</label>
+                                <div id="detectedName" class="form-control-static"></div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="name" name="name" value="{{ index .form "name" }}">
+                        <input type="hidden" id="world" name="world" value="{{ index .form "world" }}">
+                    </div>
                 </div>
-                <div id="saveAnalysis" class="hidden mt-3 p-3 rounded-md bg-surface-tertiary">
-                    <div class="fw-600 mb-2">Detected From Save</div>
+
+                <div class="form-section">
+                    <h3 class="form-section-title">Basic Settings</h3>
+                    <div class="form-grid">
+                        <div class="form-group form-span-all" id="basicNameGroup">
+                            <label class="form-label" for="name_text">Server Name *</label>
+                            <input type="text" id="name_text" name="name" class="form-control" required value="{{ index .form "name" }}" placeholder="My Awesome Server">
+                            <p class="form-hint">The name that will appear in the server list.</p>
+                        </div>
+                        <div class="form-group" id="basicWorldGroup">
+                            <label class="form-label" for="world_select">World *</label>
+                            <select id="world_select" name="world" class="form-control" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="start_location">Start Location *</label>
+                            <select name="start_location" id="start_location" class="form-control" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="start_condition">Start Condition *</label>
+                            <select name="start_condition" id="start_condition" class="form-control" required>
+                                <option value="">Loading...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="difficulty">Difficulty *</label>
+                            <select id="difficulty" name="difficulty" class="form-control" required>
+                                {{ range .difficulties }}
+                                <option value="{{ . }}" {{ if eq . (index .form "difficulty") }}selected{{ end }}>{{ . }}</option>
+                                {{ end }}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3 class="form-section-title">Network Settings</h3>
                     <div class="form-grid">
                         <div class="form-group">
-                            <label class="form-label">World</label>
-                            <div id="detectedWorld" class="p-3 border rounded-md bg-surface-subtle"></div>
+                            <label class="form-label" for="port">Port *</label>
+                            <input type="number" id="port" name="port" class="form-control" required value="{{ or (index .form "port") 27016 }}" min="1024" max="65535">
                         </div>
                         <div class="form-group">
-                            <label class="form-label">World File Name (Server Name)</label>
-                            <div id="detectedName" class="p-3 border rounded-md bg-surface-subtle"></div>
+                            <label class="form-label" for="max_clients">Max Players *</label>
+                            <input type="number" id="max_clients" name="max_clients" class="form-control" required value="{{ or (index .form "max_clients") 10 }}" min="1" max="100">
+                        </div>
+                        <div class="form-group form-span-all">
+                            <label class="form-label" for="password">Server Password</label>
+                            <input type="text" id="password" name="password" class="form-control" value="{{ index .form "password" }}" placeholder="Leave empty for no password">
                         </div>
                     </div>
-                    <!-- Hidden fields to carry through to server in case needed -->
-                    <input type="hidden" id="name" name="name" value="{{ index .form "name" }}">
-                    <input type="hidden" id="world" name="world" value="{{ index .form "world" }}">
                 </div>
-                
-            </div>
-            
-            <div class="form-section">
-                <h3 class="section-title">Basic Settings</h3>
-                <div class="form-grid">
-                    
-                    <!-- Name and World inputs are moved to detected section when save is selected -->
-                    <div class="form-group form-grid-full" id="basicNameGroup">
-                        <label class="form-label" for="name_text">Server Name *</label>
-                            <input type="text" id="name_text" name="name" class="form-control" required
-                               value="{{ index .form "name" }}"
-                               placeholder="Enter server name">
-                        <p class="help-text">The name that will appear in the server list</p>
-                        <div class="row items-center gap-2 mt-2">
-                            <label class="checkbox-label mb-0">
-                                <input type="checkbox" id="server_visible" name="server_visible" {{ if index .form "server_visible" }}checked{{ end }}>
-                                <span>Server Visible</span>
-                            </label>
-                            <p class="help-text mb-0">Visible in public server browser</p>
+
+                <div class="form-section">
+                    <h3 class="form-section-title">Advanced Settings</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label class="form-label" for="save_interval">Save Interval (sec) *</label>
+                            <input type="number" id="save_interval" name="save_interval" class="form-control" required value="{{ or (index .form "save_interval") 300 }}" min="60" max="3600">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="restart_delay_seconds">Restart Delay (sec)</label>
+                            <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" value="{{ or (index .form "restart_delay_seconds") 10 }}" min="0" max="3600">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (sec)</label>
+                            <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" value="{{ or (index .form "shutdown_delay_seconds") 2 }}" min="0" max="3600">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
+                            <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
+                            <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" min="5" max="120">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="auth_secret">Auth Secret</label>
+                            <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
                         </div>
                     </div>
-
-                    <div class="form-group" id="basicWorldGroup">
-                        <label class="form-label" for="world_select">World *</label>
-                        <select id="world_select" name="world" class="form-control" required>
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="start_location">Start Location *</label>
-                        <select name="start_location" id="start_location" class="form-control" required>
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="start_condition">Start Condition *</label>
-                        <select name="start_condition" id="start_condition" class="form-control" required>
-                            <option value="">Loading...</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="beta">Game Version *</label>
-                        <select id="beta" name="beta" class="form-control" required>
-                            <option value="false" {{ if ne (index .form "beta") "true" }}selected{{ end }}>Release</option>
-                            <option value="true" {{ if eq (index .form "beta") "true" }}selected{{ end }}>Beta</option>
-                        </select>
-                        <p class="help-text">Choose Release (stable) or Beta (experimental)</p>
-                    </div>
-                    {{ $selectedDifficulty := index .form "difficulty" }}
-                    <div class="form-group">
-                        <label class="form-label" for="difficulty">Difficulty *</label>
-                        <select id="difficulty" name="difficulty" class="form-control" required>
-                            {{ range .difficulties }}
-                            <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
-                            {{ end }}
-                        </select>
-                        <p class="help-text">Game difficulty level</p>
-                    </div>
                 </div>
-            </div>
-            
-            
-            <div class="form-section">
-                <h3 class="section-title">Network Settings</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label class="form-label" for="port">Port *</label>
-                        <input type="number" id="port" name="port" class="form-control" required 
-                               value="{{ index .form "port" }}" min="1024" max="65535"
-                               placeholder="27016">
-                        <p class="help-text">Server port (1024-65535)</p>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="max_clients">Max Players *</label>
-                        <input type="number" id="max_clients" name="max_clients" class="form-control" required 
-                               value="{{ index .form "max_clients" }}" min="1" max="100"
-                               placeholder="10">
-                        <p class="help-text">Maximum number of players</p>
-                    </div>
-                    
-                    <div class="form-group form-grid-full">
-                        <label class="form-label" for="password">Server Password</label>
-                        <input type="text" id="password" name="password" class="form-control"
-                            value="{{ index .form "password" }}"
-                            placeholder="Leave empty for no password">
-                        <p class="help-text">Optional password to join the server</p>
-                    </div>
-                </div>
-            </div>
-            
-            
-            <div class="form-section">
-                <h3 class="section-title row">
-                    Advanced Settings
-                    <button type="button" class="help-toggle" data-help-target="advanced-help" aria-label="Show help for advanced settings">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                    </button>
-                </h3>
-                <div class="help-box hidden" id="advanced-help">
-                    <div class="help-content">
-                        <h4>Advanced Settings Guide</h4>
-                        <ul>
-                            <li><strong>Save Interval:</strong> How often the world state is saved to disk. Lower values reduce potential data loss but increase disk I/O.</li>
-                            <li><strong>Restart Delay:</strong> Cooldown period between server stop and restart commands. Prevents rapid restart loops.</li>
-                            <li><strong>Auth Secret:</strong> Optional Steam authentication secret for private/whitelisted servers.</li>
-                            <li><strong>Game Version:</strong> Choose between Release (stable) or Beta (experimental features).</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label class="form-label" for="save_interval">Save Interval (seconds) *</label>
-                        <input type="number" id="save_interval" name="save_interval" class="form-control" required 
-                               value="{{ index .form "save_interval" }}" min="60" max="3600"
-                               placeholder="300">
-                        <p class="help-text">How often to save the world (60-3600)</p>
-                    </div>
 
-                    <div class="form-group">
-                        <label class="form-label" for="restart_delay_seconds">Restart Delay (seconds)</label>
-                        <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" min="0" max="3600"
-                               value="{{ index .form "restart_delay_seconds" }}" placeholder="10">
-                        <p class="help-text">Wait time between stop and restart (0-3600)</p>
+                <div class="form-section">
+                    <h3 class="form-section-title">Startup Options</h3>
+                    <div class="form-grid">
+                        <div class="form-group form-span-all">
+                            <label class="form-label" for="welcome_message">Welcome Message</label>
+                            <input type="text" id="welcome_message" name="welcome_message" class="form-control" value="{{ index .form "welcome_message" }}" placeholder="e.g. Welcome to [ServerName]!">
+                        </div>
+                        <div class="form-group form-span-all">
+                            <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
+                            <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control" value="{{ index .form "welcome_back_message" }}" placeholder="e.g. Welcome back, [LastPlayer]!">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
+                            <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index .form "welcome_delay_seconds") 1 }}">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="max_auto_saves">Max Auto Saves</label>
+                            <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="max_quick_saves">Max Quick Saves</label>
+                            <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" value="{{ or (index .form "max_quick_saves") 5 }}" min="1" max="1000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="beta">Game Version *</label>
+                            <select id="beta" name="beta" class="form-control" required>
+                                <option value="false" {{ if ne (index .form "beta") "true" }}selected{{ end }}>Release</option>
+                                <option value="true" {{ if eq (index .form "beta") "true" }}selected{{ end }}>Beta</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (seconds)</label>
-                        <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" min="0" max="3600"
-                               value="{{ or (index .form "shutdown_delay_seconds") 2 }}" placeholder="2">
-                        <p class="help-text">Time to wait after Stop is pressed before issuing QUIT (0-3600)</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
-                        <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
-                               value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
-                        <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
-                        <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120"
-                               value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" placeholder="10">
-                        <p class="help-text">Max wait for initial BepInEx bootstrap (Windows). Default 10.</p>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="auth_secret">Auth Secret</label>
-                        <input type="text" id="auth_secret" name="auth_secret" class="form-control"
-                               value="{{ index .form "auth_secret" }}"
-                               placeholder="Optional authentication secret">
-                        <p class="help-text">Steam authentication secret (optional)</p>
-                    </div>
-                </div>
-            </div>
-            
-            
-            <div class="form-section">
-                <h3 class="section-title">Startup Options</h3>
-                <div class="form-grid">
-                    <div class="form-group form-grid-full">
-                        <label class="form-label" for="welcome_message">Welcome Message</label>
-                        <input type="text" id="welcome_message" name="welcome_message" class="form-control"
-                               value="{{ index .form "welcome_message" }}"
-                               placeholder="Optional message sent to chat when a player connects">
-                        <p class="help-text">If set, this message will be broadcast to chat on player connect.</p>
-                    </div>
-                    <div class="form-group form-grid-full">
-                        <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
-                        <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control"
-                               value="{{ index .form "welcome_back_message" }}"
-                               placeholder="Optional message sent to chat when a returning player connects">
-                        <p class="help-text">If set, this message will be sent instead for players that have connected before.</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
-                        <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index .form "welcome_delay_seconds") 1 }}" placeholder="1">
-                        <p class="help-text">Seconds to wait after player connects before sending welcome / welcome back.</p>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="auto_save" name="auto_save" {{ if index .form "auto_save" }}checked{{ end }}>
+                    <div class="form-grid-switches">
+                        <label class="form-switch">
+                            <input type="checkbox" name="server_visible" {{ if or (not .form) (index .form "server_visible") }}checked{{ end }}>
+                            <span>Server Visible</span>
+                        </label>
+                        <label class="form-switch">
+                            <input type="checkbox" name="auto_save" {{ if index .form "auto_save" }}checked{{ end }}>
                             <span>Auto Save</span>
                         </label>
-                        <p class="help-text">Toggle the dedicated server's autosave feature</p>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="checkbox-label" for="player_saves" title="Save the game automatically when a player connects (issues 'FILE saveas' with a timestamped filename).">
-                            <input type="checkbox" id="player_saves" name="player_saves" {{ if index .form "player_saves" }}checked{{ end }}>
+                        <label class="form-switch">
+                            <input type="checkbox" name="player_saves" {{ if index .form "player_saves" }}checked{{ end }}>
                             <span>Player Saves</span>
                         </label>
-                        <p class="help-text">When enabled, a save will be created automatically on player connect.</p>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="auto_pause" name="auto_pause" {{ if index .form "auto_pause" }}checked{{ end }}>
+                        <label class="form-switch">
+                            <input type="checkbox" name="auto_pause" {{ if index .form "auto_pause" }}checked{{ end }}>
                             <span>Auto Pause</span>
                         </label>
-                        <p class="help-text">Pause server simulation when no players are connected</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="max_auto_saves" title="Maximum number of autosaves to retain on disk (default 5)">Max Auto Saves</label>
-                        <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" title="Maximum number of autosaves to retain on disk (default 5)"
-                               value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000" placeholder="5">
-                        <p class="help-text">Maximum number of autosaves to retain (default 5)</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" for="max_quick_saves" title="Maximum number of quicksaves to retain on disk (default 5)">Max Quick Saves</label>
-                        <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" title="Maximum number of quicksaves to retain on disk (default 5)"
-                               value="{{ or (index .form "max_quick_saves") 5 }}" min="1" max="1000" placeholder="5">
-                        <p class="help-text">Maximum number of quicksaves to retain (default 5)</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label" for="delete_skeleton_on_decay" title="When enabled, skeleton corpses are deleted when they decay (default off)">
-                            <input type="checkbox" id="delete_skeleton_on_decay" name="delete_skeleton_on_decay" {{ if index .form "delete_skeleton_on_decay" }}checked{{ end }} title="Delete skeleton corpses when they decay">
+                        <label class="form-switch">
+                            <input type="checkbox" name="delete_skeleton_on_decay" {{ if index .form "delete_skeleton_on_decay" }}checked{{ end }}>
                             <span>Delete Skeleton On Decay</span>
                         </label>
-                        <p class="help-text">When enabled, delete skeletons on decay (default off)</p>
-                    </div>
-                    <!-- Steam P2P removed/disabled -->
-                    <div class="form-group">
-                        <label class="form-label" for="disconnect_timeout" title="Milliseconds before clients are disconnected due to inactivity (default 10000)">Disconnect Timeout (ms)</label>
-                        <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" title="Milliseconds before clients are disconnected due to inactivity (default 10000)"
-                               value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000" placeholder="10000">
-                        <p class="help-text">Timeout before disconnecting clients (default 10000)</p>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="auto_start" name="auto_start" {{ if index .form "auto_start" }}checked{{ end }}>
-                            <span>Auto Start</span>
+                        <label class="form-switch">
+                            <input type="checkbox" name="auto_start" {{ if index .form "auto_start" }}checked{{ end }}>
+                            <span>Auto Start on SDSM Launch</span>
                         </label>
-                        <p class="help-text">Start server automatically when SDSM starts</p>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="auto_update" name="auto_update" {{ if index .form "auto_update" }}checked{{ end }}>
-                            <span>Auto Update</span>
+                        <label class="form-switch">
+                            <input type="checkbox" name="auto_update" {{ if index .form "auto_update" }}checked{{ end }}>
+                            <span>Auto Update on Start</span>
                         </label>
-                        <p class="help-text">Update server files before starting</p>
                     </div>
                 </div>
-            </div>
-            
-            
-            <div class="update-button-container">
-                <a href="/dashboard" class="btn btn-ghost">
-                    {{ template "icon_dashboard" . }}
-                    <span class="ml-4">Cancel</span>
-                </a>
-                <button type="submit" class="btn btn-primary btn-min-lg">
-                    {{ template "icon_add" . }}
-                    <span class="ml-4">Create Server</span>
-                </button>
-            </div>
-        </form>
+
+                <div class="form-actions">
+                    <a href="/dashboard" class="btn btn-secondary" hx-get="/dashboard" hx-push-url="true">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        {{template "icons/plus.html" .}}
+                        <span>Create Server</span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
-    
-    <aside class="card" id="progressAside">
+    <aside class="card card-sticky">
         <div class="card-header">
-            <h2 class="card-title">Form Progress</h2>
+            <h3 class="card-title">Form Progress</h3>
         </div>
-        <div class="status-info mt-0">
-            <div class="status-row">
-                <span class="status-label">Completion</span>
-                <span><span id="completedCount">0</span> of <span id="totalCount">5</span> required</span>
+        <div class="card-content">
+            <div class="progress-bar">
+                <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
             </div>
+            <div class="progress-text" id="progressText">0 of 5 required fields complete</div>
+            <ul class="progress-list" id="progressList">
+                <li data-field="name">Server Name</li>
+                <li data-field="world">World</li>
+                <li data-field="start_location">Start Location</li>
+                <li data-field="start_condition">Start Condition</li>
+                <li data-field="difficulty">Difficulty</li>
+            </ul>
         </div>
-        <div class="update-progress active" id="form-progress">
-            <div class="update-progress-bar">
-                <div class="update-progress-fill w-0" id="progressFill"></div>
-            </div>
-            <div class="update-progress-text">Idle</div>
-        </div>
-        <ul class="mt-3 pl-5 text-secondary">
-            <li class="progress-item" data-field="name">Server Name</li>
-            <li class="progress-item" data-field="world">World</li>
-            <li class="progress-item" data-field="start_location">Start Location</li>
-            <li class="progress-item" data-field="start_condition">Start Condition</li>
-            <li class="progress-item" data-field="difficulty">Difficulty</li>
-        </ul>
     </aside>
 </div>
 {{end}}

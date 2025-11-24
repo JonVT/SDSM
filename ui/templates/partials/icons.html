@@ -1,71 +1,125 @@
-{{ define "icon_dashboard" }}
-<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <rect x="3" y="3" width="7" height="7" rx="1"/>
-  <rect x="14" y="3" width="7" height="7" rx="1"/>
-  <rect x="3" y="14" width="7" height="7" rx="1"/>
-  <rect x="14" y="14" width="7" height="7" rx="1"/>
-  </svg>
-{{ end }}
+{{/* Feather Icons: https://feathericons.com/ */}}
 
-{{ define "icon_manager" }}
-<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <circle cx="12" cy="12" r="3"/>
-  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09c0-.66-.38-1.26-.98-1.54a1.82 1.82 0 0 0-.63-.2c-.53-.08-1.06.07-1.46.47l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06c.4-.4.55-.93.47-1.46a2.02 2.02 0 0 0-.2-.63 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09c.66 0 1.26-.38 1.54-.98.1-.2.17-.41.2-.63.08-.53-.07-1.06-.47-1.46l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.4.4.93.55 1.46.47.22-.03.43-.1.63-.2.6-.28.98-.88.98-1.54V3a2 2 0 1 1 4 0v.09c0 .66.38 1.26.98 1.54.2.1.41.17.63.2.53.08 1.06-.07 1.46-.47l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.4.4-.55.93-.47 1.46.03.22.1.43.2.63.28.6.88.98 1.54.98H21a2 2 0 1 1 0 4h-.09c-.66 0-1.26.38-1.54.98-.1.2-.17.41-.2.63-.08.53.07 1.06.47 1.46l.06.06z"/>
-</svg>
-{{ end }}
+    {{define "icon_dashboard"}}
+    <i class="icon-dashboard" data-feather="grid"></i>
+    {{end}}
 
-{{ define "icon_logout" }}
-<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-  <polyline points="16 17 21 12 16 7"/>
-  <line x1="21" y1="12" x2="9" y2="12"/>
-</svg>
-{{ end }}
+    {{define "icon_manager"}}
+    <i class="icon-manager" data-feather="settings"></i>
+    {{end}}
 
-{{ define "icon_user" }}
-<svg class="icon-inline" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-  <circle cx="12" cy="7" r="4"/>
-</svg>
-{{ end }}
+    {{define "icon_users"}}
+    <i class="icon-users" data-feather="users"></i>
+    {{end}}
 
-{{ define "icon_add" }}
-<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <line x1="12" y1="5" x2="12" y2="19"/>
-  <line x1="5" y1="12" x2="19" y2="12"/>
-</svg>
-{{ end }}
+    {{define "icon_logs"}}
+    <i class="icon-logs" data-feather="align-left"></i>
+    {{end}}
 
-{{ define "icon_key" }}
-<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <circle cx="7" cy="12" r="3"/>
-  <path d="M10 12h11l-2 2 2 2-2 2"/>
-</svg>
-{{ end }}
+    {{define "icon_profile"}}
+    <i class="icon-profile" data-feather="user"></i>
+    {{end}}
 
-{{ define "icon_trash" }}
-<svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-  <polyline points="3 6 5 6 21 6"/>
-  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-  <path d="M10 11v6M14 11v6"/>
-  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
-</svg>
-{{ end }}
+    {{define "icon_tokens"}}
+    <i class="icon-tokens" data-feather="key"></i>
+    {{end}}
 
-{{ define "icon_bug" }}
-<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" role="img" aria-label="Bug">
-  <path d="M8 2l1.5 2M16 2l-1.5 2" />
-  <path d="M12 5c-3 0-5 2.5-5 6v5a5 5 0 0 0 10 0v-5c0-3.5-2-6-5-6z" />
-  <path d="M4 10h2M18 10h2" />
-  <path d="M4 14h2M18 14h2" />
-  <path d="M10 20v2M14 20v2" />
-</svg>
-{{ end }}
+    {{define "icon_commands"}}
+    <i class="icon-commands" data-feather="terminal"></i>
+    {{end}}
 
-{{ define "icon_save" }}
-<svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" role="img" aria-label="Save">
-  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-  <polyline points="17 21 17 13 7 13 7 21"/>
-  <polyline points="7 3 7 8 15 8"/>
-</svg>
-{{ end }}
+    {{define "icon_logout"}}
+    <i class="icon-logout" data-feather="log-out"></i>
+    {{end}}
+
+    {{define "icon_add"}}
+    <i class="icon-add" data-feather="plus"></i>
+    {{end}}
+
+    {{define "icon_trash"}}
+    <i class="icon-trash" data-feather="trash-2"></i>
+    {{end}}
+
+    {{define "icon_save"}}
+    <i class="icon-save" data-feather="save"></i>
+    {{end}}
+
+    {{define "icon_play"}}
+    <i class="icon-play" data-feather="play"></i>
+    {{end}}
+
+    {{define "icon_stop"}}
+    <i class="icon-stop" data-feather="square"></i>
+    {{end}}
+
+    {{define "icon_restart"}}
+    <i class="icon-restart" data-feather="refresh-cw"></i>
+    {{end}}
+
+    {{define "icon_edit"}}
+    <i class="icon-edit" data-feather="edit"></i>
+    {{end}}
+
+    {{define "icon_upload"}}
+    <i class="icon-upload" data-feather="upload"></i>
+    {{end}}
+
+    {{define "icon_download"}}
+    <i class="icon-download" data-feather="download"></i>
+    {{end}}
+
+    {{define "icon_chevron_down"}}
+    <i class="icon-chevron-down" data-feather="chevron-down"></i>
+    {{end}}
+
+    {{define "icon_chevron_up"}}
+    <i class="icon-chevron-up" data-feather="chevron-up"></i>
+    {{end}}
+
+    {{define "icon_x"}}
+    <i class="icon-x" data-feather="x"></i>
+    {{end}}
+
+    {{define "icon_info"}}
+    <i class="icon-info" data-feather="info"></i>
+    {{end}}
+
+    {{define "icon_warning"}}
+    <i class="icon-warning" data-feather="alert-triangle"></i>
+    {{end}}
+
+    {{define "icon_error"}}
+    <i class="icon-error" data-feather="alert-circle"></i>
+    {{end}}
+
+    {{define "icon_success"}}
+    <i class="icon-success" data-feather="check-circle"></i>
+    {{end}}
+
+    {{define "icon_arrow_left"}}
+    <i class="icon-arrow-left" data-feather="arrow-left"></i>
+    {{end}}
+
+    {{define "icon_arrow_right"}}
+    <i class="icon-arrow-right" data-feather="arrow-right"></i>
+    {{end}}
+
+    {{define "icon_external_link"}}
+    <i class="icon-external-link" data-feather="external-link"></i>
+    {{end}}
+
+    {{define "icons/refresh.html"}}
+    <i class="icon-refresh" data-feather="refresh-cw" aria-hidden="true"></i>
+    {{end}}
+
+    {{define "icons/download.html"}}
+    <i class="icon-download" data-feather="download" aria-hidden="true"></i>
+    {{end}}
+
+    {{define "icons/delete.html"}}
+    <i class="icon-delete" data-feather="trash-2" aria-hidden="true"></i>
+    {{end}}
+
+    {{define "icons/plus.html"}}
+    <i class="icon-plus" data-feather="plus" aria-hidden="true"></i>
+    {{end}}

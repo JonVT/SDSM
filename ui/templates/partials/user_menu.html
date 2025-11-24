@@ -1,122 +1,159 @@
 {{ define "user_menu" }}
-<div class="user-menu" data-user-menu>
-  <button class="avatar-btn" aria-haspopup="true" aria-expanded="false" title="Account" data-user-menu-trigger>
-    <span class="avatar-initials">{{ if .username }}{{ initials (printf "%v" .username) }}{{ else }}?{{ end }}</span>
-    <span class="role-badge" title="Role">?</span>
-  </button>
-  <div class="user-dropdown dropdown-panel dropdown-fixed" role="menu">
-    <a href="/profile" class="dropdown-item" role="menuitem">
-      {{ template "icon_user" . }}
-      <span>Update Profile</span>
-    </a>
-    <a href="/logout" class="dropdown-item" role="menuitem">
-      {{ template "icon_logout" . }}
-      <span>Logout</span>
-    </a>
-  </div>
+{{ $username := printf "%v" .username }}
+{{ $initials := initials $username }}
+{{ $role := .role }}
+{{ $isAdmin := eq $role "admin" }}
+<div class="user-menu" data-user-menu data-role="{{$role}}">
+    <button class="avatar-btn" aria-haspopup="true" aria-expanded="false" title="Account" data-user-menu-trigger>
+        <span class="avatar-ring" aria-hidden="true"></span>
+        <span class="avatar-initials">{{ if $initials }}{{ $initials }}{{ else }}?{{ end }}</span>
+        <span class="sr-only">Open account menu</span>
+        <span class="role-badge {{ if $isAdmin }}admin{{ else }}operator{{ end }}" title="{{ if $isAdmin }}Administrator{{ else }}Operator{{ end }}">{{ if $isAdmin }}A{{ else }}O{{ end }}</span>
+    </button>
+    <div class="user-dropdown dropdown-panel" role="menu">
+        <div class="user-dropdown-header">
+            <div class="avatar-preview" data-avatar-preview>{{ if $initials }}{{ $initials }}{{ else }}?{{ end }}</div>
+            <div class="user-dropdown-meta">
+                <div class="user-name" data-user-name>{{ if $username }}{{ $username }}{{ else }}Unknown User{{ end }}</div>
+                <div class="user-role" data-user-role>{{ if $isAdmin }}Administrator{{ else }}Operator{{ end }}</div>
+            </div>
+        </div>
+        <div class="dropdown-divider" role="none"></div>
+        <a href="/profile" class="dropdown-item" role="menuitem" hx-get="/profile" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/profile">
+            <i data-feather="user"></i>
+            <span>Update Profile</span>
+        </a>
+        <a href="/logout" class="dropdown-item" role="menuitem">
+            <i data-feather="log-out"></i>
+            <span>Logout</span>
+        </a>
+    </div>
 </div>
 <script>
   (function(){
-    function setupUserMenu(root){
-      if(!root) return;
-      const trigger = root.querySelector('[data-user-menu-trigger]');
-      const menu = root.querySelector('.user-dropdown');
-      const badge = root.querySelector('.role-badge');
-      if(!trigger || !menu) return;
-      if(root.dataset.bound === 'true') return;
-      root.dataset.bound = 'true';
-      function closeMenu(opts){
-        const options = opts || {};
-        const wasOpen = menu.classList.contains('active');
-        menu.classList.remove('active');
-        trigger.setAttribute('aria-expanded','false');
-        // Avoid restoring focus on close to prevent any inadvertent scroll-to-top
-        // behaviors in some browsers. The trigger is already under the pointer
-        // when toggling; for Escape, users remain in context without forced focus.
-      }
-      function openMenu(){
-        // Temporarily show to measure size
-        menu.style.visibility = 'hidden';
-        menu.style.display = 'block';
-        // Compute position near trigger, aligned to right edge
-        const rect = trigger.getBoundingClientRect();
-        const menuWidth = menu.offsetWidth;
-        const padding = 6; // small gap below button
-        let left = Math.round(rect.right - menuWidth);
-        let top = Math.round(rect.bottom + padding);
-        // Keep within viewport
-        const vw = window.innerWidth, vh = window.innerHeight;
-        if (left < 8) left = 8;
-        if (left + menuWidth > vw - 8) left = Math.max(8, vw - menuWidth - 8);
-        if (top > vh - 8) top = Math.max(8, rect.top - menu.offsetHeight - padding);
-        menu.style.left = left + 'px';
-        menu.style.top = top + 'px';
-        menu.style.visibility = '';
-        menu.classList.add('active');
-        trigger.setAttribute('aria-expanded','true');
-        // Focus first item for keyboard navigation
+    function setupUserMenu(root) {
+        if (!root || root.dataset.bound) return;
+        root.dataset.bound = 'true';
+
+        const trigger = root.querySelector('[data-user-menu-trigger]');
+        const menu = root.querySelector('.user-dropdown');
+        const badge = root.querySelector('.role-badge');
+        const nameLabel = root.querySelector('[data-user-name]');
+        const roleLabel = root.querySelector('[data-user-role]');
+        const avatarPreview = root.querySelector('[data-avatar-preview]');
+        const avatarInitials = root.querySelector('.avatar-initials');
+
+        if (!trigger || !menu) return;
+
+        const computeInitials = (value) => {
+            if (!value) return '?';
+            return value
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(part => part[0].toUpperCase())
+                .join('') || value[0].toUpperCase();
+        };
+
+        const applyRole = (role) => {
+            const normalized = (role || '').toLowerCase() === 'admin' ? 'admin' : 'operator';
+            if (badge) {
+                badge.classList.toggle('admin', normalized === 'admin');
+                badge.classList.toggle('operator', normalized !== 'admin');
+                badge.textContent = normalized === 'admin' ? 'A' : 'O';
+                badge.title = normalized === 'admin' ? 'Administrator' : 'Operator';
+            }
+            if (roleLabel) {
+                roleLabel.textContent = normalized === 'admin' ? 'Administrator' : 'Operator';
+            }
+        };
+
+        const applyName = (value) => {
+            if (value && nameLabel) {
+                nameLabel.textContent = value;
+            }
+            const initials = computeInitials(value);
+            if (avatarPreview) {
+                avatarPreview.textContent = initials;
+            }
+            if (avatarInitials) {
+                avatarInitials.textContent = initials;
+            }
+        };
+
+        const toggleMenu = (show) => {
+            const isOpen = show ?? !menu.classList.contains('active');
+            menu.classList.toggle('active', isOpen);
+            trigger.setAttribute('aria-expanded', isOpen);
+            if (isOpen) {
+                const firstItem = menu.querySelector('.dropdown-item');
+                firstItem?.focus();
+            }
+        };
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleMenu();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!root.contains(e.target)) {
+                toggleMenu(false);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && menu.classList.contains('active')) {
+                toggleMenu(false);
+                trigger.focus();
+            }
+        });
+
+        // Basic keyboard navigation
         const items = Array.from(menu.querySelectorAll('.dropdown-item'));
-        if (items.length) { try { items[0].focus(); } catch(_) {} }
-      }
-      trigger.addEventListener('click', function(e){
-        e.stopPropagation();
-        if (menu.classList.contains('active')) { closeMenu({ restoreFocus: false }); }
-        else { openMenu(); }
-      });
-      document.addEventListener('click', function(e){
-        // Close only when open, and do not restore focus on outside clicks to avoid scroll jumps
-        if(menu.classList.contains('active') && !root.contains(e.target)) closeMenu({ restoreFocus: false });
-      });
-      window.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu({ restoreFocus: false }); });
-      // Keyboard support: open with Arrow keys/Enter/Space, navigate items with arrows/Home/End
-      function focusItemAt(idx){
-        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
-        if (!items.length) return;
-        const clamped = ((idx % items.length) + items.length) % items.length;
-        try { items[clamped].focus(); } catch(_) {}
-      }
-      trigger.addEventListener('keydown', function(e){
-        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          if (!menu.classList.contains('active')) openMenu();
-          focusItemAt(0);
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          if (!menu.classList.contains('active')) openMenu();
-          const items = Array.from(menu.querySelectorAll('.dropdown-item'));
-          focusItemAt(items.length - 1);
-        }
-      });
-      menu.addEventListener('keydown', function(e){
-        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
-        if (!items.length) return;
-        const current = document.activeElement;
-        let idx = items.indexOf(current);
-        if (e.key === 'ArrowDown') { e.preventDefault(); focusItemAt((idx < 0 ? 0 : idx + 1)); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); focusItemAt((idx < 0 ? items.length - 1 : idx - 1)); }
-        else if (e.key === 'Home') { e.preventDefault(); focusItemAt(0); }
-        else if (e.key === 'End') { e.preventDefault(); focusItemAt(items.length - 1); }
-        else if (e.key === 'Escape') { e.preventDefault(); closeMenu({ restoreFocus: true }); }
-      });
-      // Keep dropdown aligned on resize/scroll if open
-      function maybeReposition(){ if(menu.classList.contains('active')) { openMenu(); } }
-      window.addEventListener('resize', maybeReposition, { passive: true });
-      window.addEventListener('scroll', maybeReposition, { passive: true });
-      // Fetch role for badge
-      try {
+        menu.addEventListener('keydown', (e) => {
+            if (!items.length) return;
+            const currentIndex = items.indexOf(document.activeElement);
+
+            let nextIndex = -1;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                nextIndex = (currentIndex + 1) % items.length;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                nextIndex = (currentIndex - 1 + items.length) % items.length;
+            }
+
+            if (nextIndex !== -1) {
+                items[nextIndex].focus();
+            }
+        });
+
+        // Fetch role for badge
         fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' })
-          .then(r => r.ok ? r.json() : null)
-          .then(data => {
-            if(!data || !badge) return;
-            const role = (data.role || '').toLowerCase();
-            if(role === 'admin') { badge.textContent = 'A'; badge.style.background = 'var(--danger-600)'; badge.title = 'Admin'; }
-            else { badge.textContent = 'O'; badge.style.background = 'var(--warning-500)'; badge.title = 'Operator'; }
-          })
-          .catch(() => {});
-      } catch(_) {}
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                if (data.username) {
+                    applyName(data.username);
+                }
+                if (data.role) {
+                    applyRole(data.role);
+                }
+            }).catch(() => {});
     }
-    document.addEventListener('DOMContentLoaded', function(){
-      document.querySelectorAll('[data-user-menu]').forEach(setupUserMenu);
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-user-menu]').forEach(setupUserMenu);
+    });
+    document.addEventListener('htmx:load', (event) => {
+        const target = event.detail?.elt || event.target;
+        if (!target) return;
+        if (target.matches && target.matches('[data-user-menu]')) {
+            setupUserMenu(target);
+        }
+        const nested = target.querySelectorAll ? target.querySelectorAll('[data-user-menu]') : [];
+        nested.forEach(setupUserMenu);
     });
   })();
 </script>

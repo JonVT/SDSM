@@ -360,7 +360,8 @@ func setupRouter() *gin.Engine {
 			}
 			return strings.ToUpper(string(rs[0])) + strings.ToUpper(string(rs[1]))
 		},
-		"buildTime": func() string { return version.String() },
+		"appVersion": func() string { return version.Version },
+		"buildTime":  func() string { return version.String() },
 	}
 	r.SetFuncMap(funcMap)
 
@@ -415,17 +416,17 @@ func setupRouter() *gin.Engine {
 
 	// Public Terms of Use page
 	r.GET("/terms", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "terms.html", gin.H{"title": "Terms of Use"})
+		c.HTML(http.StatusOK, "terms.html", gin.H{"title": "Terms of Use", "appVersion": version.Version, "buildTime": version.String()})
 	})
 
 	// Public License page
 	r.GET("/license", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "license.html", gin.H{"title": "License"})
+		c.HTML(http.StatusOK, "license.html", gin.H{"title": "License", "appVersion": version.Version, "buildTime": version.String()})
 	})
 
 	// Public Privacy page
 	r.GET("/privacy", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "privacy.html", gin.H{"title": "Privacy"})
+		c.HTML(http.StatusOK, "privacy.html", gin.H{"title": "Privacy", "appVersion": version.Version, "buildTime": version.String()})
 	})
 
 	// Authentication routes
@@ -522,14 +523,19 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/log", managerHandlers.APIServerLog)
 		api.GET("/servers/:server_id/log/tail", managerHandlers.APIServerLogTail)
 		api.GET("/servers/:server_id/log/download", managerHandlers.APIServerLogDownload)
+		api.GET("/servers/:server_id/world/saves", managerHandlers.APIServerWorldSaves)
+		api.GET("/servers/:server_id/world/download", managerHandlers.APIServerWorldDownload)
 		api.POST("/servers/:server_id/log/clear", managerHandlers.APIServerLogClear)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)
+		api.POST("/servers/:server_id/pause", managerHandlers.APIServerPause)
+		api.POST("/servers/:server_id/resume", managerHandlers.APIServerResume)
 		// legacy generic command removed; use explicit endpoints below
 		api.POST("/servers/:server_id/chat", managerHandlers.APIServerChat)
 		api.POST("/servers/:server_id/console", managerHandlers.APIServerConsole)
 		api.GET("/servers/:server_id/scon/health", managerHandlers.APIServerSCONHealth)
 		api.POST("/servers/:server_id/save", managerHandlers.APIServerSave)
+		api.POST("/servers/:server_id/quicksave", managerHandlers.APIServerQuickSave)
 		api.POST("/servers/:server_id/save-as", managerHandlers.APIServerSaveAs)
 		api.POST("/servers/:server_id/load", managerHandlers.APIServerLoad)
 		api.POST("/servers/:server_id/storm", managerHandlers.APIServerStorm)
@@ -541,9 +547,11 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
 		api.POST("/servers/:server_id/player-saves/delete-all", managerHandlers.APIServerPlayerSaveDeleteAll)
 		api.POST("/servers/:server_id/settings", managerHandlers.APIServerUpdateSettings)
+		api.POST("/servers/:server_id/rename", managerHandlers.APIServerRename)
 		api.GET("/servers/:server_id/settings/attach-defaults", managerHandlers.APIServerAttachDefaults)
 		api.POST("/servers/:server_id/language", managerHandlers.APIServerSetLanguage)
 		api.POST("/servers/:server_id/update-server", managerHandlers.APIServerUpdateServerFiles)
+		api.POST("/servers/:server_id/reinstall", managerHandlers.APIServerReinstall)
 		// Admin-only delete via API
 		api.POST("/servers/:server_id/delete", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {

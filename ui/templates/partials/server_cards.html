@@ -1,15 +1,22 @@
-{{ $list := index . "servers" }}
-{{ if gt (len $list) 0 }}
-  {{ range $list }}
-    {{ template "server_card.html" (dict "Server" . "Role" $.role) }}
-  {{ end }}
-{{ else }}
-  <div class="glass-card empty-state">
-    <div class="empty-state-icon" aria-hidden="true">🖥️</div>
-    <h3 class="card-title">No Servers Found</h3>
-    <p class="hero-subtitle">Get started by creating your first dedicated server configuration.</p>
-    <button class="btn btn-primary" onclick="window.location.href='/server/new'">
-      Create New Server
-    </button>
-  </div>
-{{ end }}
+{{$servers := .servers}}
+{{$role := .role}}
+{{if gt (len $servers) 0}}
+    {{range $servers}}
+        {{template "server_card.html" (dict "server" . "role" $role)}}
+    {{end}}
+{{else}}
+    <div class="card empty-state">
+        <div class="card-content text-center">
+            <div class="empty-icon">
+                <i data-feather="server"></i>
+            </div>
+            <h2>No Servers Found</h2>
+            <p class="text-muted">Get started by creating your first dedicated server configuration.</p>
+            <div class="mt-6">
+                <a href="/server/new" class="btn btn-primary" hx-get="/server/new" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/server/new">
+                    <i data-feather="plus"></i> Create New Server
+                </a>
+            </div>
+        </div>
+    </div>
+{{end}}

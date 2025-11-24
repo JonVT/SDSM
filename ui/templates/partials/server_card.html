@@ -1,148 +1,105 @@
-{{ define "server_card.html" }}
-{{/*
-  Renders a single server card. Dot MUST be a *models.Server.
-*/}}
-{{/* Expect dot to be a dict with keys Server and Role */}}
-{{ $srv := .Server }}
-{{ $role := .Role }}
+{{define "server_card.html"}}
+{{$ctx := .}}
+{{$server := .server}}
+{{if not $server}}
+    {{$server = .}}
+{{end}}
+{{$role := ""}}
+{{if $ctx.role}}
+    {{$role = $ctx.role}}
+{{end}}
+{{$isRunning := $server.IsRunning}}
+{{$isStarting := $server.Starting}}
+{{$isPaused := and $isRunning $server.Paused}}
+{{$statusClass := "is-stopped"}}
+{{$statusLabel := "Stopped"}}
+{{if $isStarting}}
+    {{$statusClass = "is-starting"}}
+    {{$statusLabel = "Starting"}}
+{{else if $isPaused}}
+    {{$statusClass = "is-paused"}}
+    {{$statusLabel = "Paused"}}
+{{else if $isRunning}}
+    {{$statusClass = "is-running"}}
+    {{$statusLabel = "Running"}}
+{{end}}
 
-<article class="glass-card server-card" data-server-id="{{ $srv.ID }}" data-target-url="/server/{{ $srv.ID }}">
-  <div class="card-header">
-    <div class="server-name card-title">
-      {{ if $srv.Beta }}
-      <svg class="icon-inline icon-beta" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Beta">
-        <path d="M10 2v5L4.8 16.4a2.5 2.5 0 0 0 2.2 3.6h10a2.5 2.5 0 0 0 2.2-3.6L13 7V2"/>
-        <path d="M7 14h10"/>
-      </svg>
-      {{ else }}
-      <svg class="icon-inline icon-release" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Release">
-        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-        <line x1="6" y1="6" x2="6.01" y2="6"></line>
-        <line x1="6" y1="18" x2="6.01" y2="18"></line>
-      </svg>
-      {{ end }}
-      <span data-server-name>{{ $srv.Name }}</span>
+<div class="card server-card"
+     data-server-id="{{$server.ID}}"
+     data-target-url="/server/{{$server.ID}}">
+    <div class="card-header">
+        <div class="server-name" data-server-name>{{$server.Name}}</div>
+        <div class="row gap-2">
+            <span class="status-pill {{$statusClass}}" data-status aria-label="{{$statusLabel}}" title="{{$statusLabel}}"></span>
+            <span class="status-pill {{if $server.Storming}}is-storm{{else}}is-clear{{end}}"
+                  data-storm
+                  {{if not (and $isRunning $server.Storming)}}style="display:none;"{{end}}></span>
+        </div>
     </div>
-        {{/* Determine visual variants to mirror server page semantics:
-         - Indicator classes: starting, paused, running, stopped
-         - Pill variant: is-running when running and not paused; otherwise is-stopped
-         - Text label: Starting > Stopped > Paused > Running (same precedence as server page)
-    */}}
-    <div class="status-badges">
-        <span class="status-pill storm-pill hidden" data-storm aria-label="Clear" title="Clear"></span>
-        <span class="status-pill {{ if and $srv.IsRunning $srv.Starting }}is-starting{{ else if and $srv.IsRunning (not $srv.Paused) }}is-running{{ else if and $srv.IsRunning $srv.Paused }}is-paused{{ else }}is-stopped{{ end }}" data-status aria-label="Status: {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}" title="{{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}">
-          <span class="status-dot-indicator {{ if and $srv.IsRunning $srv.Starting }}starting{{ else if not $srv.IsRunning }}stopped{{ else if $srv.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
-          <span class="sr-only">Status:</span>
-          {{ if and $srv.IsRunning $srv.Starting }}Starting{{ else if not $srv.IsRunning }}Stopped{{ else if $srv.Paused }}Paused{{ else }}Running{{ end }}
-        </span>
-    </div>
-  </div>
 
-  {{ if $srv.LastError }}
-  <div class="alert alert-danger alert-compact" role="alert" aria-live="polite">
-    <div class="alert-icon" aria-hidden="true">
-      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12" y2="16"></line>
-      </svg>
-    </div>
-    <div class="alert-content">
-      <div class="alert-title">Startup error detected</div>
-      <div class="alert-message">{{ $srv.LastError }}</div>
-      {{ if $srv.LastErrorAt }}
-      <div class="alert-meta">Occurred at <span>{{ $srv.LastErrorAt.Format "01/02/2006 15:04:05" }}</span></div>
-      {{ end }}
-    </div>
-  </div>
-  {{ end }}
+    <div class="card-content">
+        {{if $server.LastError}}
+        <div class="alert alert-danger alert-compact" data-stop-navigation="true">
+            <div class="alert-title">Startup Error</div>
+            <div class="alert-message">{{$server.LastError}}</div>
+        </div>
+        {{end}}
 
-  <div class="server-info">
-    <div class="info-item">
-      <div class="info-label">World</div>
-      <div class="info-value"><span data-world-value>{{ $srv.World }}</span></div>
+        <div class="server-info">
+            <div class="info-inline-row">
+                <div class="info-label">World</div>
+                <div class="info-value world" data-world-value>{{if $server.World}}{{$server.World}}{{else}}Unknown{{end}}</div>
+            </div>
+            <div class="info-inline-row">
+                <div class="info-label">Players</div>
+                <div class="info-value" data-player-count>{{$server.ClientCount}} / {{$server.MaxClients}}</div>
+            </div>
+            <div class="info-inline-row">
+                <div class="info-label">Port</div>
+                <div class="info-value" data-port-value>{{if gt $server.Port 0}}{{$server.Port}}{{else}}—{{end}}</div>
+            </div>
+            <div class="info-inline-row">
+                <div class="info-label">Password</div>
+                <div class="info-value">{{if $server.Password}}Enabled{{else}}Disabled{{end}}</div>
+            </div>
+        </div>
     </div>
-    <div class="info-item">
-      <div class="info-label">Port</div>
-      <div class="info-value" data-port-value>{{ $srv.Port }}</div>
-    </div>
-    <div class="info-item">
-      <div class="info-label">Players</div>
-      <div class="info-value" data-player-count>{{ $srv.ClientCount }}/{{ $srv.MaxClients }}</div>
-    </div>
-    <div class="info-item">
-      <div class="info-label">Password</div>
-      <div class="info-value">{{ if $srv.Password }}Yes{{ else }}No{{ end }}</div>
-    </div>
-  </div>
 
-  <div class="server-actions">
-    {{ if $srv.IsRunning }}
-      <button
-        class="btn btn-danger btn-pill"
-        hx-post="/api/servers/{{ $srv.ID }}/stop"
-        hx-trigger="click"
-        hx-confirm="Are you sure you want to stop this server?"
-        hx-target="closest .server-card"
-        hx-swap="outerHTML"
-        data-stop-navigation="true"
-      >
-        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <rect x="6" y="6" width="12" height="12"></rect>
-        </svg>
-        <span class="htmx-indicator" aria-hidden="true">⟳</span>
-        Stop
-      </button>
-    {{ else }}
-      <button
-        class="btn btn-success btn-pill"
-        hx-post="/api/servers/{{ $srv.ID }}/start"
-        hx-trigger="click"
-        hx-target="closest .server-card"
-        hx-swap="outerHTML"
-        data-stop-navigation="true"
-      >
-        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-        <span class="htmx-indicator" aria-hidden="true">⟳</span>
-        Start
-      </button>
-    {{ end }}
-    {{ if eq $role "admin" }}
-    <button
-      class="btn btn-info btn-pill"
-      data-action="rename-server"
-      title="Rename this server"
-      data-stop-navigation="true"
-    >
-      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
-        <path d="M14.06 4.94l3.75 3.75"></path>
-      </svg>
-      <span class="htmx-indicator" aria-hidden="true">⟳</span>
-      Rename
-    </button>
-    {{ end }}
-    <button
-      class="btn btn-danger btn-pill"
-      hx-post="/api/servers/{{ $srv.ID }}/delete"
-      hx-trigger="click"
-      hx-confirm="Are you sure you want to delete {{ $srv.Name }}? This cannot be undone."
-      hx-target="closest .server-card"
-      hx-swap="outerHTML"
-      data-stop-navigation="true"
-    >
-      <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-      </svg>
-      <span class="htmx-indicator" aria-hidden="true">⟳</span>
-      Delete
-    </button>
-  </div>
-</article>
-{{ end }}
+    <div class="card-footer" data-stop-navigation="true">
+        <div class="btn-group">
+            {{if $isRunning}}
+                <button class="btn btn-sm btn-danger"
+                        hx-post="/api/servers/{{$server.ID}}/stop"
+                        hx-confirm="Are you sure you want to stop this server?"
+                        hx-target="closest .server-card"
+                        hx-swap="outerHTML">
+                    {{template "icon_stop" .}} Stop
+                </button>
+            {{else}}
+                <button class="btn btn-sm btn-success"
+                        hx-post="/api/servers/{{$server.ID}}/start"
+                        hx-target="closest .server-card"
+                        hx-swap="outerHTML">
+                    {{template "icon_play" .}} Start
+                </button>
+            {{end}}
+            {{if eq $role "admin"}}
+            <button type="button"
+                    class="btn btn-sm btn-secondary"
+                    data-action="rename-server"
+                    data-server-id="{{$server.ID}}"
+                    data-server-name="{{$server.Name}}"
+                    data-stop-navigation="true">
+                {{template "icon_edit" .}} Rename
+            </button>
+            {{end}}
+            <a href="/server/{{$server.ID}}"
+               class="btn btn-sm btn-secondary"
+               hx-get="/server/{{$server.ID}}"
+               hx-push-url="/server/{{$server.ID}}">
+                Manage {{template "icon_arrow_right" .}}
+            </a>
+        </div>
+    </div>
+</div>
+{{end}}

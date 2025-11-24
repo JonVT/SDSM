@@ -1,165 +1,87 @@
-<div class="card card-control">
+{{define "server_status_control.html"}}
+<div class="card">
     <div class="card-header">
         <h2 class="card-title">Server Control</h2>
-        <div class="status-badges">
-            <span class="status-pill storm-pill hidden" id="storm-status-pill">Clear</span>
-            <span class="status-pill {{ if and .server.Running .server.Starting }}is-starting{{ else if and .server.Running (not .server.Paused) }}is-running{{ else if and .server.Running .server.Paused }}is-paused{{ else }}is-stopped{{ end }}" id="status-pill-container">
-                <span id="status-dot-indicator" class="status-dot-indicator {{ if and .server.Running .server.Starting }}starting{{ else if not .server.Running }}stopped{{ else if .server.Paused }}paused{{ else }}running{{ end }}" aria-hidden="true"></span>
-                <span id="status-dot-text">{{ if and .server.Running .server.Starting }}Starting{{ else if not .server.Running }}Stopped{{ else if .server.Paused }}Paused{{ else }}Running{{ end }}</span>
-            </span>
+        <div class="card-header-actions">
+            <button type="button" id="btn-rename-server" class="btn btn-sm btn-secondary">
+                <i data-feather="edit-2" class="btn-icon-left"></i> Rename
+            </button>
         </div>
     </div>
-    <!-- API-only: removed legacy POST form wrapper. Buttons now invoke JS fetch calls to /api endpoints. -->
-    <div class="control-form" data-api-only="true">
-        <div class="control-section">
-            <div class="control-row">
-                <label>Server:</label>
-                <div class="button-group">
-                    <button type="button" name="start" value="true" class="btn btn-control btn-success {{if and .server.Running (not .server.Stopping)}}hidden{{end}}" id="btn-start" title="Start the server" {{if and .server.Running (not .server.Stopping)}}disabled aria-disabled="true"{{end}}>
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <polygon points="5 3 19 12 5 21 5 3"/>
-                        </svg>
-                        {{if and .server.Running .server.Stopping}}Keep Running{{else}}Start{{end}}
+    <div class="card-body">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            
+            <div class="control-group">
+                <h4 class="control-group-title">Power</h4>
+                <div class="btn-group">
+                    <button type="button" id="btn-start" class="btn btn-success" {{if or .server.Running .server.Starting}}disabled{{end}}>
+                        <i data-feather="play"></i>
                     </button>
-                    <button type="button" name="stop" value="true" class="btn btn-control btn-danger {{if not .server.Running}}hidden{{end}}" id="btn-stop" title="Stop the server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <rect x="6" y="6" width="12" height="12" rx="2"/>
-                        </svg>
-                        Stop
+                    <button type="button" id="btn-stop" class="btn btn-danger" {{if or (not .server.Running) .server.Stopping}}disabled{{end}}>
+                        <i data-feather="square"></i>
                     </button>
-                    <button type="button" name="restart" value="true" class="btn btn-control btn-primary" id="btn-restart" title="Restart the server process" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
-                            <path d="M21 3v5h-5"/>
-                        </svg>
-                        Restart
+                </div>
+                <div class="btn-group">
+                    <button type="button" id="btn-pause" class="btn btn-secondary" {{if or (not .server.Running) .server.Paused}}disabled{{end}}>
+                        <i data-feather="pause"></i>
                     </button>
-                    <div class="split-button" id="save-split">
-                        <button type="button" class="btn btn-control btn-primary" id="btn-save-main" title="Save world to disk" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                                <polyline points="17 21 17 13 7 13 7 21"/>
-                                <polyline points="7 3 7 8 15 8"/>
-                            </svg>
-                            Save
-                        </button>
-                        <button type="button" class="btn btn-control btn-primary btn-split-caret" id="btn-save-menu" aria-haspopup="menu" aria-expanded="false" title="More save options" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
-                            <svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </button>
-                        <div id="save-menu" class="lang-dropdown dropdown-panel dropdown-primary" role="menu" aria-label="Save options">
-                            <button type="button" class="dropdown-item" id="save-as-action">Save As…</button>
-                        </div>
-                    </div>
-                    
+                    <button type="button" id="btn-resume" class="btn btn-secondary" {{if not .server.Paused}}disabled{{end}}>
+                        <i data-feather="play"></i>
+                    </button>
                 </div>
             </div>
-            <div class="status-info">
-                <div class="status-row">
-                    <span class="status-label">Started:</span>
-                    <span id="server-started-value">{{if .server.ServerStarted}}{{.server.ServerStarted.Format "01/02/2006 15:04:05"}}{{else}}Not started{{end}}</span>
-                </div>
-                <div class="status-row">
-                    <span class="status-label">Last Saved:</span>
-                    <span id="server-saved-value">{{if .server.ServerSaved}}{{.server.ServerSaved.Format "01/02/2006 15:04:05"}}{{else}}Not saved{{end}}</span>
-                </div>
-                <div class="status-row" id="port-forward-row" aria-live="polite" title="Automatic router port forwarding status (UPnP/NAT-PMP).">
-                    <span class="status-label">Port Forward:</span>
-                    <span id="port-forward-status" class="pf-status pf-status-idle">Disabled</span>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Save</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-save" class="btn btn-primary" {{if not .server.Running}}disabled{{end}}>
+                        <i data-feather="save" class="btn-icon-left"></i> Save World
+                    </button>
+                    <button type="button" id="btn-quicksave" class="btn btn-secondary" {{if not .server.Running}}disabled{{end}}>
+                        <i data-feather="zap" class="btn-icon-left"></i> Quick Save
+                    </button>
                 </div>
             </div>
-                <div class="log-preview">
-                <div id="last-log-line" class="log-line">{{if .server.LastLogLine}}{{.server.LastLogLine}}{{else}}No log data{{end}}</div>
-                <button type="button" class="btn btn-info btn-min-sm" title="View and tail server output log" id="btn-view-log">
-                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                    </svg>
-                    View Log
-                </button>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Update</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-update" class="btn btn-info" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="download-cloud" class="btn-icon-left"></i> Update Server
+                    </button>
+                    <button type="button" id="btn-reinstall" class="btn btn-warning" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="refresh-cw" class="btn-icon-left"></i> Reinstall
+                    </button>
+                </div>
             </div>
-            <div class="control-row sep-top justify-between">
-                <button type="button" id="control-more-toggle" class="card-more-link" aria-expanded="false" title="Show advanced actions">
-                    <svg class="icon-inline" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                    <span class="ml-6">More</span>
-                </button>
-                <div class="control-actions ml-auto">
-                    <div class="button-group">
-                        <div id="server-update-progress" class="update-progress compact" aria-live="polite">
-                            <div class="update-progress-bar">
-                                <div class="update-progress-fill"></div>
-                            </div>
-                            <div class="update-progress-text">Idle</div>
-                        </div>
-                        <span id="update-needed-badge" class="update-needed-badge hidden" title="Server files are out of sync with manager components">Update available</span>
-                        <button type="button" name="update_server" value="true" class="btn btn-primary" title="Download and install the latest server files" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}}>
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
-                                <path d="M21 3v5h-5"/>
-                            </svg>
-                            Update Server Files
-                        </button>
-                    <button type="button" name="delete" value="true" id="btn-delete" class="btn btn-danger" title="Delete this server and its files" {{if or .server.Running .server.Starting}}disabled aria-disabled="true"{{end}}>
-                            <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                <path d="M10 11v6"/>
-                                <path d="M14 11v6"/>
-                            </svg>
-                            Delete Server
-                        </button>
-                    </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">World</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-upload-world" class="btn btn-secondary" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="upload-cloud" class="btn-icon-left"></i> Upload World
+                    </button>
+                    <button type="button" id="btn-download-world" class="btn btn-secondary">
+                        <i data-feather="download-cloud" class="btn-icon-left"></i> Download World
+                    </button>
+                </div>
+                <div class="form-group world-download-selector">
+                    <label for="world-download-select" class="form-label">Save File</label>
+                    <select id="world-download-select" class="form-control form-control-sm" aria-label="Select save file">
+                        <option value="">Latest save (automatic)</option>
+                    </select>
+                    <p id="world-download-status" class="form-text text-muted text-xs">Loading save list…</p>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Status</h4>
+                <div id="server-status-indicator" class="status-indicator status-stopped">
+                    <div class="status-light"></div>
+                    <span class="status-text">Stopped</span>
                 </div>
             </div>
         </div>
-
-        
-        <div class="card-more-section" id="server-more-section" aria-hidden="true">
-            <div class="control-section">
-                <div class="control-row">
-                    <label class="more-label" title="Trigger in-game storms">Storms:</label>
-                    {{if .server.Running}}
-                    <button type="button" class="btn btn-control btn-storm" id="btn-storm" title="Start a storm event">
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm">
-                            <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
-                            <polyline points="13 11 9 17 15 17 11 23"/>
-                        </svg>
-                        Start
-                    </button>
-                    {{else}}
-                    <button type="button" class="btn btn-control btn-storm" id="btn-storm" title="Start a storm event" disabled aria-disabled="true">
-                        <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" title="Storm">
-                            <path d="M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 3 15"/>
-                            <polyline points="13 11 9 17 15 17 11 23"/>
-                        </svg>
-                        Start
-                    </button>
-                    {{end}}
-                </div>
-                <div class="control-row">
-                    <label class="more-label" title="Cleans up player bodies">Cleanup Players:</label>
-                    <div class="button-group">
-                        <button type="button" class="btn btn-control" id="btn-cleanup-dead" title="Cleans up player bodies">Dead</button>
-                        <button type="button" class="btn btn-control" id="btn-cleanup-disconnected" title="Cleans up player bodies">Disconnected</button>
-                        <button type="button" class="btn btn-control" id="btn-cleanup-all" title="Cleans up player bodies">All</button>
-                    </div>
-                </div>
-
-                <div class="control-row">
-                    <label class="more-label" title="Send a raw console command via SCON">Console:</label>
-                    <div class="button-group console-command-group">
-                        <input type="text" id="console-command" class="form-input-inline flex-grow-input" placeholder="Enter console command" autocomplete="off">
-                        <button type="button" class="btn btn-control btn-primary" id="btn-console-send" title="Send command to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>Send</button>
-                        <a href="/help/commands" class="btn btn-control" target="_blank" rel="noopener" title="Open console commands reference in a new tab">Commands</a>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
     </div>
 </div>
+{{end}}

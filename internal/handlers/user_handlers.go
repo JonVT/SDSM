@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -210,6 +211,16 @@ func (h *UserHandlers) UsersGET(c *gin.Context) {
 	list := h.users.Users()
 	rows := h.buildUserRows(list)
 	serverOptions := h.serverOptions()
+
+	serverOptionsJSON, err := json.Marshal(serverOptions)
+	if err != nil {
+		// Log the error and proceed without the JSON data, or handle it more gracefully
+		if h.logger != nil {
+			h.logger.Write(fmt.Sprintf("UsersGET: failed to marshal server options to JSON: %v", err))
+		}
+		serverOptionsJSON = []byte("[]") // Default to an empty array
+	}
+
 	if h.logger != nil {
 		usernames := make([]string, 0, len(rows))
 		for _, u := range rows {
@@ -221,10 +232,11 @@ func (h *UserHandlers) UsersGET(c *gin.Context) {
 	// If the request is from HTMX, render the partial view
 	if c.GetHeader("HX-Request") == "true" {
 		c.HTML(http.StatusOK, "users.html", gin.H{
-			"users":         rows,
-			"username":      c.GetString("username"),
-			"now":           time.Now(),
-			"serverOptions": serverOptions,
+			"users":              rows,
+			"username":           c.GetString("username"),
+			"now":                time.Now(),
+			"serverOptions":      serverOptions,
+			"serverOptionsJSON": string(serverOptionsJSON),
 		})
 		return
 	}
@@ -239,6 +251,7 @@ func (h *UserHandlers) UsersGET(c *gin.Context) {
 		"page":          "users",
 		"title":         "User Management",
 		"serverOptions": serverOptions,
+		"serverOptionsJSON": string(serverOptionsJSON),
 		"users":         rows,
 		"now":           time.Now(),
 	})

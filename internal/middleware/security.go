@@ -71,6 +71,22 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	}()
 
 	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/static/") ||
+			path == "/sdsm.png" ||
+			path == "/favicon.ico" ||
+			path == "/healthz" ||
+			path == "/readyz" ||
+			path == "/version" {
+			c.Next()
+			return
+		}
+
+		if strings.EqualFold(c.GetHeader("Upgrade"), "websocket") {
+			c.Next()
+			return
+		}
+
 		limiter := rl.getLimiter(c.ClientIP())
 		if !limiter.Allow() {
 			c.JSON(http.StatusTooManyRequests, gin.H{

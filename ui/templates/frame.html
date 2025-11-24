@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/ui-theme.css?v={{.buildTime}}">
+    <link rel="stylesheet" href="/static/modern.css?v={{.buildTime}}">
     <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
     <script src="/static/app.js?v={{.buildTime}}" defer></script>
 </head>
@@ -20,7 +21,7 @@
     data-role="{{.role}}"
     data-build-time="{{.buildTime}}"
 >
-    <a href="#main-content" class="sr-only">Skip to main content</a>
+    <a href="#content-area" class="sr-only">Skip to main content</a>
 
     <div id="connection-banner" class="connection-banner" role="status" aria-live="polite">
         <span id="connection-banner-text">Connection lost. Attempting to reconnect...</span>
@@ -30,15 +31,11 @@
     <aside class="sidebar">
         <div class="sidebar-header">
             <img src="/static/sdsm.png" alt="SDSM" class="sidebar-logo">
-            <div class="sidebar-title">
-                <h1>SDSM</h1>
-                <p>Server Manager</p>
-            </div>
         </div>
         
         <nav class="nav-section">
             <div class="nav-section-title">Main</div>
-            <a href="/dashboard" class="nav-item" data-target="/dashboard" hx-get="/dashboard" hx-push-url="/dashboard">
+            <a href="/dashboard" class="nav-item active" data-target="/dashboard" hx-get="/dashboard" hx-push-url="/dashboard">
                 {{ template "icon_dashboard" . }}
                 <span>Dashboard</span>
             </a>
@@ -48,95 +45,104 @@
                 <span>Manager</span>
             </a>
             <a href="/users" class="nav-item" data-target="/users" hx-get="/users" hx-push-url="/users">
-                {{ template "icon_user" . }}
+                {{ template "icon_users" . }}
                 <span>Users</span>
             </a>
             {{ end }}
         </nav>
         
         {{if .active}}
-        <div class="nav-servers">
+        <div class="nav-section">
             <div class="nav-section-title row justify-between">
                 <span>Servers</span>
                 {{ if eq .role "admin" }}
-                <a href="/server/new" class="btn btn-ghost btn-min-sm" hx-get="/server/new" hx-push-url="/server/new" title="Create new server">
+                <a href="/server/new" class="btn btn-ghost btn-icon" hx-get="/server/new" hx-push-url="/server/new" title="Create new server">
                     {{ template "icon_add" . }}
                 </a>
                 {{ end }}
             </div>
-            {{if .servers}}
-            {{range .servers}}
-            <a href="/server/{{.ID}}" class="nav-item" data-target="/server/{{.ID}}" hx-get="/server/{{.ID}}" hx-push-url="/server/{{.ID}}">
-                <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                </svg>
-                <span>{{.Name}}</span>
-                {{if .IsRunning}}
-                <span class="nav-badge">●</span>
+            <div class="nav-server-list">
+                {{if .servers}}
+                {{range .servers}}
+                <a href="/server/{{.ID}}" class="nav-item" data-target="/server/{{.ID}}" hx-get="/server/{{.ID}}" hx-push-url="/server/{{.ID}}">
+                    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                    </svg>
+                    <span class="nav-item-text">{{.Name}}</span>
+                    {{if .IsRunning}}
+                    <span class="nav-badge"></span>
+                    {{end}}
+                </a>
                 {{end}}
-            </a>
-            {{end}}
-            {{else}}
-            <div class="p-3 text-tertiary text-sm">
-                No servers configured
+                {{else}}
+                <div class="nav-empty-text">
+                    No servers configured
+                </div>
+                {{end}}
             </div>
-            {{end}}
         </div>
         {{end}}
         
         <div class="sidebar-footer">
-            {{ template "user_menu.html" . }}
+            <!-- User menu moved to topbar -->
         </div>
     </aside>
     
-    <div class="main-content-shell">
-        <header class="topbar">
-            <div class="topbar-left">
-                <h1 class="page-title" id="page-title">{{ .title }}</h1>
-            </div>
+    <div class="main-content">
+    <header class="topbar">
+        <h1 class="page-title" id="page-title">{{ .title }}</h1>
+        <div class="topbar-actions">
             <div class="datetime-display" id="datetime"></div>
-        </header>
-        <main id="content-area" class="content-area">
-            {{if eq .page "dashboard"}}
-                {{template "dashboard.html" .}}
-            {{else if eq .page "manager"}}
-                {{template "manager.html" .}}
-            {{else if eq .page "users"}}
-                {{template "users.html" .}}
-            {{else if eq .page "profile"}}
-                {{template "profile.html" .}}
-            {{else if eq .page "tokens"}}
-                {{template "tokens.html" .}}
-            {{else if eq .page "server_status"}}
-                {{template "server_status.html" .}}
-            {{else if eq .page "server_new"}}
-                {{template "server_new.html" .}}
-            {{else if eq .page "commands"}}
-                {{template "commands.html" .}}
-            {{else if eq .page "logs"}}
-                {{template "logs.html" .}}
-            {{else if eq .page "logs/sdsm"}}
-                {{template "logs.html" .}}
-            {{else if eq .page "logs/update"}}
-                {{template "logs.html" .}}
-            {{else if eq .page "help/tokens"}}
-                {{template "tokens.html" .}}
-            {{else if eq .page "help/commands"}}
-                {{template "commands.html" .}}
-            {{else if eq .page "license"}}
-                {{template "license.html" .}}
-            {{else if eq .page "privacy"}}
-                {{template "privacy.html" .}}
-            {{else if eq .page "terms"}}
-                {{template "terms.html" .}}
-            {{else if eq .page "error"}}
-                {{template "error.html" .}}
-            {{end}}
-        </main>
+            <button id="theme-toggle" class="btn btn-ghost btn-icon" type="button" title="Toggle color theme" aria-pressed="false" aria-label="Toggle color theme">
+                <svg id="theme-icon-light" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg id="theme-icon-dark" class="d-none" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <span class="sr-only">Toggle theme</span>
+            </button>
+            {{ template "user_menu" . }}
+        </div>
+    </header>
+
+    <main id="content-area" class="content-area" role="main">
+        {{if eq .page "dashboard"}}
+            {{template "dashboard.html" .}}
+        {{else if eq .page "manager"}}
+            {{template "manager.html" .}}
+        {{else if eq .page "users"}}
+            {{template "users.html" .}}
+        {{else if eq .page "profile"}}
+            {{template "profile.html" .}}
+        {{else if eq .page "tokens"}}
+            {{template "tokens.html" .}}
+        {{else if eq .page "server_status"}}
+            {{template "server_status.html" .}}
+        {{else if eq .page "server_new"}}
+            {{template "server_new.html" .}}
+        {{else if eq .page "commands"}}
+            {{template "commands.html" .}}
+        {{else if eq .page "logs"}}
+            {{template "logs.html" .}}
+        {{else if eq .page "logs/sdsm"}}
+            {{template "logs.html" .}}
+        {{else if eq .page "logs/update"}}
+            {{template "logs.html" .}}
+        {{else if eq .page "help/tokens"}}
+            {{template "tokens.html" .}}
+        {{else if eq .page "help/commands"}}
+            {{template "commands.html" .}}
+        {{else if eq .page "license"}}
+            {{template "license.html" .}}
+        {{else if eq .page "privacy"}}
+            {{template "privacy.html" .}}
+        {{else if eq .page "terms"}}
+            {{template "terms.html" .}}
+        {{else if eq .page "error"}}
+            {{template "error.html" .}}
+        {{end}}
+    </main>
+    {{template "footer" .}}
     </div>
 
     {{ template "modal_templates.html" . }}
-    {{ template "modal_scripts.html" . }}
     {{ template "toast.html" . }}
     
     <script>
@@ -145,9 +151,39 @@
             if (window.SDSM) {
                 SDSM.theme.init();
                 SDSM.health.start();
-                SDSM.nav.init();
+                if (SDSM.frame && typeof SDSM.frame.init === 'function') {
+                    SDSM.frame.init();
+                }
             }
         });
     </script>
+    <script src="/static/js/feather.min.js"></script>
+    <script src="/static/js/modals.js" defer></script>
+    <script src="/static/js/bug_report.js" defer></script>
+
+    {{if .tray_enabled}}
+    <script>
+        // Tray specific scripts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Your tray specific JavaScript code here
+        });
+    </script>
+    {{end}}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            feather.replace();
+        });
+        document.body.addEventListener('htmx:afterSwap', function() {
+            feather.replace();
+        });
+    </script>
+    {{if eq .page "dashboard"}}
+    <script>
+        // Dashboard specific scripts
+        document.addEventListener('DOMContentLoaded', function() {
+            // Your dashboard specific JavaScript code here
+        });
+    </script>
+    {{end}}
 </body>
 </html>

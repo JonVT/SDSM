@@ -1,77 +1,70 @@
 {{define "title"}}Initial Setup{{end}}
 
-{{define "content"}}
-<main class="container flex justify-center">
-    <div class="setup-modal glass-card max-w-820">
-        <div class="setup-header">
+{{define "setup.html"}}
+<div class="container-slim">
+    <div class="card">
+        <div class="card-header text-center">
             <div class="setup-icon">🔧</div>
-            <h1>
-                Initial Setup Required
-                <span class="build-marker" title="Setup progress UI enabled">setup-progress</span>
-            </h1>
-            <p>Some required components are missing. Let's get you set up!</p>
+            <h2>Initial Setup Required</h2>
+            <p class="text-muted">Some required components are missing. Let's get you set up!</p>
         </div>
+        <div class="card-content">
 
-        <div id="updatesHint" class="info-box{{if .updatesAvailable}}{{else}} hidden{{end}}">
-            <strong>Updates available:</strong> New versions detected. You can update components now.
-            <span class="ml-3">
-                <a href="/logs/updates">View change log →</a>
-            </span>
-        </div>
-
-        
-
-        <div id="errorBox" class="error-box{{if .deployErrors}} active{{end}}">
-            <h3>Installation Issues Detected</h3>
-            <ul id="errorList">
-                {{range .deployErrors}}
-                <li>{{.}}</li>
-                {{end}}
-            </ul>
-            <p class="error-hint">Review the setup log for details, then try again.</p>
-        </div>
-
-        <div class="instructions" id="install-section">
-            <h3>Pending components:</h3>
-            <ol id="install-list">
-                {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
-                <li data-component="STEAMCMD"><span class="step-badge">Step —</span> <strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
-                {{end}}
-                {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
-                <li data-component="RELEASE"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
-                {{end}}
-                {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
-                <li data-component="BETA"><span class="step-badge">Step —</span> <strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
-                {{end}}
-                {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
-                <li data-component="BEPINEX"><span class="step-badge">Step —</span> <strong>BepInEx</strong> - Modding framework for Stationeers</li>
-                {{end}}
-                {{if or .missingSCON (has .missingComponents "SCON") }}
-                <li data-component="SCON"><span class="step-badge">Step —</span> <strong>SCON</strong> - Stationeers Console plugin (copied into BepInEx/plugins)</li>
-                {{end}}
-                {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
-                <li data-component="LAUNCHPAD"><span class="step-badge">Step —</span> <strong>Stationeers LaunchPad</strong> - LaunchPad management tools for automated server setup</li>
-                {{end}}
-            </ol>
-        </div>
-
-        <div id="progress" class="progress-container">
-            <div class="progress-text">⏳ Installing components, please wait...</div>
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
+            <div id="updatesHint" class="alert alert-info {{if not .updatesAvailable}}hidden{{end}}">
+                <strong>Updates available:</strong> New versions detected. You can update components now.
+                <a href="/logs/updates" class="alert-link">View change log</a>
             </div>
-            <div id="progressDetails" class="mt-4">
-                
-            </div>
-        </div>
 
-        <div class="action-buttons">
-            <form method="POST" action="/setup/skip" id="skipForm">
-                <button type="submit" class="btn btn-ghost" id="skipBtn">Skip for Now</button>
-            </form>
-            <button type="button" class="btn btn-setup" id="setupBtn" onclick="runSetup()">🚀 Start Setup</button>
-            <button type="button" class="btn btn-setup hidden" id="updateBtn" onclick="runUpdate()">⬆️ Update Components</button>
+            <div id="errorBox" class="alert alert-danger {{if not .deployErrors}}hidden{{end}}">
+                <h4 class="alert-heading">Installation Issues Detected</h4>
+                <ul id="errorList" class="list-disc pl-5 mb-2">
+                    {{range .deployErrors}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+                <p>Review the setup log for details, then try again.</p>
+            </div>
+
+            <div class="form-section" id="install-section">
+                <h3 class="form-section-title">Pending Components:</h3>
+                <ul class="list-group" id="install-list">
+                    {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
+                    <li class="list-group-item" data-component="STEAMCMD"><strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
+                    {{end}}
+                    {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
+                    <li class="list-group-item" data-component="RELEASE"><strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
+                    {{end}}
+                    {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
+                    <li class="list-group-item" data-component="BETA"><strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
+                    {{end}}
+                    {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
+                    <li class="list-group-item" data-component="BEPINEX"><strong>BepInEx</strong> - Modding framework for Stationeers</li>
+                    {{end}}
+                    {{if or .missingSCON (has .missingComponents "SCON") }}
+                    <li class="list-group-item" data-component="SCON"><strong>SCON</strong> - Stationeers Console plugin</li>
+                    {{end}}
+                    {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
+                    <li class="list-group-item" data-component="LAUNCHPAD"><strong>Stationeers LaunchPad</strong> - Management tools for automated server setup</li>
+                    {{end}}
+                </ul>
+            </div>
+
+            <div id="progress" class="progress-container hidden">
+                <div id="progressText" class="progress-text">⏳ Installing components, please wait...</div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-bar-fill"></div>
+                </div>
+                <div id="progressDetails" class="progress-details"></div>
+            </div>
+
+            <div class="form-actions justify-center">
+                <form method="POST" action="/setup/skip" id="skipForm">
+                    <button type="submit" class="btn btn-secondary" id="skipBtn">Skip for Now</button>
+                </form>
+                <button type="button" class="btn btn-primary" id="setupBtn" onclick="runSetup()">🚀 Start Setup</button>
+                <button type="button" class="btn btn-primary hidden" id="updateBtn" onclick="runUpdate()">⬆️ Update Components</button>
+            </div>
         </div>
     </div>
-</main>
+</div>
 {{end}}

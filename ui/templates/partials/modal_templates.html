@@ -1,56 +1,51 @@
-{{ define "modal_templates" }}
-<!-- Generic reusable modal templates: confirm, prompt (input), info -->
+{{define "modal_templates"}}
 <template id="tpl-modal-confirm">
-  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="genericConfirmTitle" aria-describedby="genericConfirmDesc">
-    <div class="modal-card">
-      <header class="modal-header">
-        <span class="icon" data-icon>!</span>
-        <h3 id="genericConfirmTitle" class="modal-title" data-title>Confirm Action</h3>
-        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
-      </header>
-      <div id="genericConfirmDesc" class="modal-body" data-body>Are you sure?</div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
-        <button type="button" class="btn btn-danger" data-confirm>Confirm</button>
-      </div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h3 id="confirm-title" class="modal-title" data-title>Confirm Action</h3>
+            </header>
+            <div id="confirm-body" class="modal-body" data-body>Are you sure?</div>
+            <footer class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+                <button type="button" class="btn btn-primary" data-confirm>Confirm</button>
+            </footer>
+        </div>
     </div>
-  </div>
 </template>
 
 <template id="tpl-modal-prompt">
-  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="genericPromptTitle" aria-describedby="genericPromptDesc">
-    <div class="modal-card">
-      <header class="modal-header">
-        <span class="icon" data-icon>✎</span>
-        <h3 id="genericPromptTitle" class="modal-title" data-title>Input Required</h3>
-        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
-      </header>
-      <div id="genericPromptDesc" class="modal-body" data-body>
-        <label for="genericPromptInput" class="form-label" data-label>Enter a value</label>
-        <input id="genericPromptInput" type="text" class="input" maxlength="200" data-input />
-        <div class="input-hint" data-hint style="display:none"></div>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
-        <button type="button" class="btn btn-primary" data-confirm>OK</button>
-      </div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prompt-title" aria-describedby="prompt-body">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h3 id="prompt-title" class="modal-title" data-title>Input Required</h3>
+            </header>
+            <div id="prompt-body" class="modal-body" data-body>
+                <div class="form-group">
+                    <label for="prompt-input" class="form-label" data-label>Enter a value</label>
+                    <input id="prompt-input" type="text" class="form-control" maxlength="200" data-input />
+                    <div class="form-text hidden" data-hint></div>
+                </div>
+            </div>
+            <footer class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+                <button type="button" class="btn btn-primary" data-confirm>OK</button>
+            </footer>
+        </div>
     </div>
-  </div>
 </template>
 
 <template id="tpl-modal-info">
-  <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="genericInfoTitle" aria-describedby="genericInfoDesc">
-    <div class="modal-card">
-      <header class="modal-header">
-        <span class="icon" data-icon>ℹ</span>
-        <h3 id="genericInfoTitle" class="modal-title" data-title>Information</h3>
-        <button type="button" class="modal-close" data-close aria-label="Close">×</button>
-      </header>
-      <div id="genericInfoDesc" class="modal-body" data-body>Details...</div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-primary" data-confirm>OK</button>
-      </div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="info-title" aria-describedby="info-body">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h3 id="info-title" class="modal-title" data-title>Information</h3>
+            </header>
+            <div id="info-body" class="modal-body" data-body>Details...</div>
+            <footer class="modal-footer">
+                <button type="button" class="btn btn-primary" data-confirm>OK</button>
+            </footer>
+        </div>
     </div>
-  </div>
 </template>
-{{ end }}
+{{end}}

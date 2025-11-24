@@ -2,41 +2,32 @@
 {{define "page"}}logs{{end}}
 
 {{define "logs.html"}}
-<div class="glass-card" data-page-title="Manager Logs">
-    <h3>Manager Logs</h3>
-    <div class="logs-shell" id="logsShell">
-        <div class="log-tabs" id="logTabs" role="tablist" aria-label="Log files">
+<div class="card" data-page-title="Manager Logs">
+    <div class="card-header">
+        <h2>Manager Logs</h2>
+        <div class="card-header-actions">
+            <button id="refreshBtn" class="btn btn-sm btn-secondary" title="Reload current log">
+                {{template "icons/refresh.html" .}}
+                <span>Refresh</span>
+            </button>
+            <button id="downloadBtn" class="btn btn-sm btn-secondary" title="Download current log">
+                {{template "icons/download.html" .}}
+                <span>Download</span>
+            </button>
+            <button id="clearBtn" class="btn btn-sm btn-danger" title="Clear current log">
+                {{template "icons/delete.html" .}}
+                <span>Clear</span>
+            </button>
+        </div>
+    </div>
+    <div class="card-content">
+        <div class="tabs" id="logTabs" role="tablist" aria-label="Log files">
             <div class="empty-state" id="log-tabs-empty">Loading logs...</div>
         </div>
-        <div class="actions mt-3">
-            <button id="refreshBtn" class="btn btn-info" title="Reload current log">
-                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-                    <path d="M21 3v5h-5"></path>
-                </svg>
-                <span class="ml-6">Refresh</span>
-            </button>
-            <button id="downloadBtn" class="btn btn-info" title="Download current log">
-                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-                <span class="ml-6">Download</span>
-            </button>
-            <button id="clearBtn" class="btn btn-danger" title="Clear current log">
-                 <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
-                    <path d="M10 11v6"></path>
-                    <path d="M14 11v6"></path>
-                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                <span class="ml-6">Clear</span>
-            </button>
+        <div class="log-meta mt-2" id="logMeta"></div>
+        <div class="log-viewer mt-2" id="logContent" aria-live="polite" role="region">
+            <div class="empty-state">Select a log file to view its content.</div>
         </div>
-        <div class="log-meta mt-3" id="logMeta"></div>
-        <div class="log-view mt-3" id="logContent" aria-live="polite" role="region">Select a log file.</div>
     </div>
 </div>
 {{end}}

@@ -1,33 +1,26 @@
-<div class="card card-chat">
+{{define "server_status_chat.html"}}
+<div class="card">
     <div class="card-header">
         <h2 class="card-title">Chat</h2>
-        <span class="pill">Live Stream</span>
     </div>
-    <div class="chat-section">
-        <div class="chat-messages" id="chat-messages">
-            {{if gt (len .server.Chat) 0}}
-                {{range .server.Chat}}
-                <div class="chat-message">
-                    <span class="chat-time">{{.Datetime.Format "15:04"}}</span>
-                    <span class="chat-player">{{.Name}}:</span>
-                    <span class="chat-text">{{.Message}}</span>
+    <div class="card-body">
+        <div id="chat-log" class="chat-log">
+            <div id="chat-empty" class="empty-state">
+                <div class="empty-icon">
+                    <i data-feather="message-square"></i>
                 </div>
-                {{end}}
-            {{end}}
+                <h3 class="empty-state-title">Chat is quiet</h3>
+                <p class="empty-state-description">Messages will appear here when the server is running.</p>
+            </div>
         </div>
-        <div class="empty-state {{if gt (len .server.Chat) 0}}hidden{{end}}" id="chat-empty">No chat messages</div>
-        <!-- API-only: neutral form; JS intercepts and posts to /api/servers/:id/chat -->
-        <form class="chat-input-form" id="chat-send-form" data-api-only="true">
-            <label for="chat-input" class="sr-only">Chat message</label>
-            <input type="text" name="chat_message" id="chat-input" placeholder="Type message..." class="chat-input" autocomplete="off">
-            <button type="submit" name="send_chat" value="true" class="btn btn-primary btn-min-sm" id="chat-send-button" title="Send chat message to server" {{if not .server.Running}}disabled aria-disabled="true"{{end}}>
-                <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                    <line x1="22" y1="2" x2="11" y2="13"/>
-                </svg>
-                Send
+    </div>
+    <div class="card-footer">
+        <form id="chat-form" class="flex gap-2">
+            <input type="text" id="chat-input" class="form-control" placeholder="Say something..." autocomplete="off" {{if not .server.Running}}disabled{{end}}>
+            <button type="submit" id="chat-send" class="btn btn-primary" {{if not .server.Running}}disabled{{end}}>
+                <i data-feather="send"></i>
             </button>
-            <button type="button" class="btn btn-ghost btn-min-sm ml-6" id="chat-token-help" title="Show available chat tokens">Tokens</button>
         </form>
     </div>
 </div>
+{{end}}

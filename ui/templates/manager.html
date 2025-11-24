@@ -2,411 +2,149 @@
 {{define "page"}}manager{{end}}
 
 {{define "manager.html"}}
-<div class="container-fluid" hx-ext="ws" ws-connect="/ws" data-page-title="Manager Settings">
-    <div class="grid-split-2">
-        <section class="glass-card">
+<div data-page-title="Manager Settings" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Left Column -->
+    <div class="lg:col-span-2 flex flex-col gap-6">
+        <form id="manager-settings-form" hx-post="/update" hx-target="#manager-settings-form" hx-swap="outerHTML" class="card">
             <div class="card-header">
                 <h2 class="card-title">Manager Settings</h2>
             </div>
-            <form id="manager-settings-form" class="card-content" hx-post="/update" hx-target="#manager-settings-form" hx-swap="outerHTML">
-                <div class="form-row">
-                    <label for="root_path">Root Path</label>
-                    <input type="text" id="root_path" name="root_path" value="{{ .root_path }}">
+            <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="root_path" class="form-label">Root Path</label>
+                    <input type="text" id="root_path" name="root_path" value="{{ .root_path }}" class="form-control">
                 </div>
-                <div class="form-row">
-                    <label for="steam_id">Steam ID</label>
-                    <input type="text" id="steam_id" name="steam_id" value="{{ .steam_id }}">
+                <div class="form-group">
+                    <label for="steam_id" class="form-label">Steam ID</label>
+                    <input type="text" id="steam_id" name="steam_id" value="{{ .steam_id }}" class="form-control">
                 </div>
-                <div class="form-row">
-                    <label for="port">Web UI Port</label>
-                    <input type="number" id="port" name="port" value="{{ .port }}">
+                <div class="form-group">
+                    <label for="port" class="form-label">Web UI Port</label>
+                    <input type="number" id="port" name="port" value="{{ .port }}" class="form-control">
                 </div>
-                <div class="form-row">
-                    <label for="auto_port_forward_manager">Port Forward (UPnP)</label>
-                    <input type="checkbox" id="auto_port_forward_manager" name="auto_port_forward_manager" {{ if .auto_port_forward_manager }}checked{{ end }}>
+                 <div class="form-group">
+                    <label for="auto_update_time" class="form-label">Auto Update Time</label>
+                    <input type="time" id="auto_update_time" name="auto_update" value="{{ .auto_update_time }}" step="60" class="form-control">
                 </div>
-                <div class="form-row">
-                    <label for="tls_enabled">HTTPS (TLS)</label>
-                    <input type="checkbox" id="tls_enabled" name="tls_enabled" {{ if .tls_enabled }}checked{{ end }}>
+                <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <label class="form-group-tile items-center">
+                        <input type="checkbox" id="start_update" name="start_update" {{ if .start_update }}checked{{ end }} class="form-switch">
+                        <span>Update at Startup</span>
+                    </label>
+                    <label class="form-group-tile items-center">
+                        <input type="checkbox" id="detached_servers" name="detached_servers" {{ if .detached }}checked{{ end }} class="form-switch">
+                        <span>Detached Servers</span>
+                    </label>
+                    <label class="form-group-tile items-center">
+                        <input type="checkbox" id="tray_enabled" name="tray_enabled" {{ if .tray_enabled }}checked{{ end }} class="form-switch">
+                        <span>Windows Tray Icon</span>
+                    </label>
                 </div>
-                <div class="form-row">
-                    <label>HTTPS Status</label>
-                    {{- if not .tls_enabled -}}
-                        <span class="status-pill">Disabled</span>
-                    {{- else if and (ne .tls_cert "") (ne .tls_key "") -}}
-                        <span class="status-pill status-ok">Configured</span>
-                    {{- else -}}
-                        <span class="status-pill status-outdated">Missing certificate or key</span>
-                    {{- end }}
-                </div>
-                <div class="form-row advanced-tls-row">
-                    <div>
-                        <label>Advanced TLS / Generate Cert</label>
-                        <p class="form-help">Generate a self-signed certificate for quick HTTPS testing.</p>
-                    </div>
-                    <button type="button"
-                            class="btn btn-outline"
-                            hx-post="/update"
-                            hx-vals='{"generate_tls_self_signed": "1"}'
-                            hx-trigger="click">
-                        Generate Self-Signed TLS Cert
-                    </button>
-                </div>
-                <div class="form-row">
-                    <label for="tls_cert">TLS Cert Path</label>
-                    <input type="text" id="tls_cert" name="tls_cert" value="{{ .tls_cert }}">
-                </div>
-                <div class="form-row">
-                    <label for="tls_key">TLS Key Path</label>
-                    <input type="text" id="tls_key" name="tls_key" value="{{ .tls_key }}">
-                </div>
-                <div class="form-row">
-                    <label for="auto_update_time">Auto Update Time</label>
-                    <input type="time" id="auto_update_time" name="auto_update" value="{{ .auto_update_time }}" step="60">
-                </div>
-                <div class="form-row">
-                    <label for="start_update">Update at Startup</label>
-                    <input type="checkbox" id="start_update" name="start_update" {{ if .start_update }}checked{{ end }}>
-                </div>
-                <div class="form-row">
-                    <label for="detached_servers">Detached Servers</label>
-                    <input type="checkbox" id="detached_servers" name="detached_servers" {{ if .detached }}checked{{ end }}>
-                </div>
-                <div class="form-row">
-                    <label for="tray_enabled">Windows Tray Icon</label>
-                    <input type="checkbox" id="tray_enabled" name="tray_enabled" {{ if .tray_enabled }}checked{{ end }}>
-                </div>
-                <div class="form-row">
-                    <button type="submit" name="update_config" value="1" class="btn btn-primary">Save Settings</button>
-                </div>
-            </form>
-        </section>
-
-        <section class="glass-card">
-            <div class="card-header">
-                <h2 class="card-title">Version Status</h2>
-                <button class="btn btn-ghost"
-                        hx-get="/api/manager/versions"
-                        hx-target="#version-status-grid"
-                        hx-swap="innerHTML">
-                    Refresh
+            </div>
+            <div class="card-footer">
+                <button type="submit" name="update_config" value="1" class="btn btn-primary">
+                    <i data-feather="save"></i>
+                    <span>Save All Settings</span>
                 </button>
             </div>
-            <div id="version-status-grid"
-                  class="card-content"
-                 hx-get="/api/manager/versions"
-                 hx-trigger="load"
-                 hx-target="this"
-                 hx-swap="innerHTML">
-                <!-- Version info will be loaded here by HTMX -->
-            </div>
-        </section>
-    </div>
+        </form>
 
-    <section class="glass-card mt-4">
-        <div class="card-header">
-            <h2 class="card-title">Discord Integration</h2>
-        </div>
-        <div class="card-content discord-config">
-            <div class="discord-intro">
-                <div>
-                    <p class="card-subtitle">Configure the default Discord webhook and tailor the embeds sent for each event.</p>
-                    <p class="discord-hint">Templates support chat tokens such as <code>{{`{{server_name}}`}}</code>, <code>{{`{{event}}`}}</code>, <code>{{`{{detail}}`}}</code>, <code>{{`{{timestamp}}`}}</code>, plus deploy-only tokens <code>{{`{{component}}`}}</code>, <code>{{`{{duration}}`}}</code>, <code>{{`{{errors}}`}}</code>, and <code>{{`{{status}}`}}</code>.</p>
-                </div>
-                <a class="btn btn-ghost btn-min-sm" href="/tokens" hx-get="/tokens" hx-push-url="/tokens">
-                    Token Reference
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Discord Integration</h2>
+                 <a class="btn btn-ghost" href="/tokens" hx-get="/tokens" hx-push-url="/tokens" hx-target="#content-area" hx-swap="innerHTML">
+                    <i data-feather="info"></i>
+                    <span>Token Reference</span>
                 </a>
             </div>
-
-            <div class="form-row">
-                <label for="discord_default_webhook">Default Discord Webhook</label>
-                <input type="text" id="discord_default_webhook" name="discord_default_webhook" value="{{ .discord_default_webhook }}" form="manager-settings-form" placeholder="https://discord.com/api/webhooks/...">
-            </div>
-            <div class="form-row">
-                <label class="checkbox-row">
-                    <input type="checkbox" name="notify_enable_server" form="manager-settings-form" {{ if .notify_enable_server }}checked{{ end }}>
-                    <span>Enable server lifecycle notifications</span>
-                </label>
-            </div>
-
-            <div class="discord-event-group">
-                <div class="discord-section-heading">
-                    <h3 class="card-subtitle">Server Events</h3>
-                    <p class="discord-hint">Customize message templates and accent colors per lifecycle event.</p>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_start" form="manager-settings-form" {{ if .notify_on_start }}checked{{ end }}>
-                            <span>Server Started</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_start">Message</label>
-                            <input type="text" id="notify_msg_start" name="notify_msg_start" form="manager-settings-form" value="{{ .notify_msg_start }}" placeholder="Server {{`{{server_name}}`}} started.">
-                        </div>
-                        <div>
-                            <label for="notify_color_start">Color</label>
-                            <input type="text" id="notify_color_start" name="notify_color_start" form="manager-settings-form" value="{{ .notify_color_start }}" placeholder="#16A34A">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_stopping" form="manager-settings-form" {{ if .notify_on_stopping }}checked{{ end }}>
-                            <span>Server Stopping</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_stopping">Message</label>
-                            <input type="text" id="notify_msg_stopping" name="notify_msg_stopping" form="manager-settings-form" value="{{ .notify_msg_stopping }}" placeholder="Server {{`{{server_name}}`}} stopping.">
-                        </div>
-                        <div>
-                            <label for="notify_color_stopping">Color</label>
-                            <input type="text" id="notify_color_stopping" name="notify_color_stopping" form="manager-settings-form" value="{{ .notify_color_stopping }}" placeholder="#F59E0B">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_stopped" form="manager-settings-form" {{ if .notify_on_stopped }}checked{{ end }}>
-                            <span>Server Stopped</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_stopped">Message</label>
-                            <input type="text" id="notify_msg_stopped" name="notify_msg_stopped" form="manager-settings-form" value="{{ .notify_msg_stopped }}" placeholder="Server {{`{{server_name}}`}} stopped.">
-                        </div>
-                        <div>
-                            <label for="notify_color_stopped">Color</label>
-                            <input type="text" id="notify_color_stopped" name="notify_color_stopped" form="manager-settings-form" value="{{ .notify_color_stopped }}" placeholder="#DC2626">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_restart" form="manager-settings-form" {{ if .notify_on_restart }}checked{{ end }}>
-                            <span>Server Restart</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_restart">Message</label>
-                            <input type="text" id="notify_msg_restart" name="notify_msg_restart" form="manager-settings-form" value="{{ .notify_msg_restart }}" placeholder="Server {{`{{server_name}}`}} restart event.">
-                        </div>
-                        <div>
-                            <label for="notify_color_restart">Color</label>
-                            <input type="text" id="notify_color_restart" name="notify_color_restart" form="manager-settings-form" value="{{ .notify_color_restart }}" placeholder="#F59E0B">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_update_started" form="manager-settings-form" {{ if .notify_on_update_started }}checked{{ end }}>
-                            <span>Update Started</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_update_started">Message</label>
-                            <input type="text" id="notify_msg_update_started" name="notify_msg_update_started" form="manager-settings-form" value="{{ .notify_msg_update_started }}" placeholder="Server {{`{{server_name}}`}} update started.">
-                        </div>
-                        <div>
-                            <label for="notify_color_update_started">Color</label>
-                            <input type="text" id="notify_color_update_started" name="notify_color_update_started" form="manager-settings-form" value="{{ .notify_color_update_started }}" placeholder="#2563EB">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_update_completed" form="manager-settings-form" {{ if .notify_on_update_completed }}checked{{ end }}>
-                            <span>Update Completed</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_update_completed">Message</label>
-                            <input type="text" id="notify_msg_update_completed" name="notify_msg_update_completed" form="manager-settings-form" value="{{ .notify_msg_update_completed }}" placeholder="Server {{`{{server_name}}`}} update completed.">
-                        </div>
-                        <div>
-                            <label for="notify_color_update_completed">Color</label>
-                            <input type="text" id="notify_color_update_completed" name="notify_color_update_completed" form="manager-settings-form" value="{{ .notify_color_update_completed }}" placeholder="#16A34A">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="discord-event">
-                    <div class="form-row discord-event-header">
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="notify_on_update_failed" form="manager-settings-form" {{ if .notify_on_update_failed }}checked{{ end }}>
-                            <span>Update Failed</span>
-                        </label>
-                    </div>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_update_failed">Message</label>
-                            <input type="text" id="notify_msg_update_failed" name="notify_msg_update_failed" form="manager-settings-form" value="{{ .notify_msg_update_failed }}" placeholder="Server {{`{{server_name}}`}} update failed.">
-                        </div>
-                        <div>
-                            <label for="notify_color_update_failed">Color</label>
-                            <input type="text" id="notify_color_update_failed" name="notify_color_update_failed" form="manager-settings-form" value="{{ .notify_color_update_failed }}" placeholder="#DC2626">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-row mt-4">
-                <label class="checkbox-row">
-                    <input type="checkbox" name="notify_enable_deploy" form="manager-settings-form" {{ if .notify_enable_deploy }}checked{{ end }}>
-                    <span>Enable deployment notifications</span>
-                </label>
-            </div>
-
-            <div class="discord-toggle-panel">
-                <div class="discord-section-heading">
-                    <h3 class="card-subtitle">Deployment Components</h3>
-                    <p class="discord-hint">Choose which deploy targets emit Discord notifications.</p>
-                </div>
-                <div class="discord-toggle-grid">
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_release" form="manager-settings-form" {{ if .notify_deploy_release }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">Release Channel</span>
-                            <span class="toggle-desc">rocketstation_DedicatedServer (stable)</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_beta" form="manager-settings-form" {{ if .notify_deploy_beta }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">Beta Channel</span>
-                            <span class="toggle-desc">rocketstation_DedicatedServer (beta)</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_bepinex" form="manager-settings-form" {{ if .notify_deploy_bepinex }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">BepInEx</span>
-                            <span class="toggle-desc">Mod loader and plugin bundle</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_launchpad" form="manager-settings-form" {{ if .notify_deploy_launchpad }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">Stationeers LaunchPad</span>
-                            <span class="toggle-desc">LaunchPad utility updates</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_scon" form="manager-settings-form" {{ if .notify_deploy_scon }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">SCON</span>
-                            <span class="toggle-desc">Stationeers Console (SCON) agent</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_steamcmd" form="manager-settings-form" {{ if .notify_deploy_steamcmd }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">SteamCMD</span>
-                            <span class="toggle-desc">Steam command-line updates</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                    <label class="discord-toggle-card">
-                        <input type="checkbox" class="sr-only" name="notify_deploy_servers" form="manager-settings-form" {{ if .notify_deploy_servers }}checked{{ end }}>
-                        <div class="discord-toggle-content">
-                            <span class="toggle-title">Server Copies</span>
-                            <span class="toggle-desc">Re-copy managed servers after deploys</span>
-                        </div>
-                        <span class="toggle-indicator" aria-hidden="true"></span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="discord-event-group">
-                <div class="discord-section-heading">
-                    <h3 class="card-subtitle">Deployment Events</h3>
-                    <p class="discord-hint">Single set of templates shared across all deployment types.</p>
-                </div>
-                <div class="discord-event">
-                    <label class="form-label">Deployment Started</label>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_deploy_started">Message</label>
-                            <input type="text" id="notify_msg_deploy_started" name="notify_msg_deploy_started" form="manager-settings-form" value="{{ .notify_msg_deploy_started }}" placeholder="Deployment started: {{`{{component}}`}}.">
-                        </div>
-                        <div>
-                            <label for="notify_color_deploy_started">Color</label>
-                            <input type="text" id="notify_color_deploy_started" name="notify_color_deploy_started" form="manager-settings-form" value="{{ .notify_color_deploy_started }}" placeholder="#2563EB">
-                        </div>
-                    </div>
-                </div>
-                <div class="discord-event">
-                    <label class="form-label">Deployment Completed</label>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_deploy_completed">Message</label>
-                            <input type="text" id="notify_msg_deploy_completed" name="notify_msg_deploy_completed" form="manager-settings-form" value="{{ .notify_msg_deploy_completed }}" placeholder="Deployment completed: {{`{{component}}`}} in {{`{{duration}}`}}.">
-                        </div>
-                        <div>
-                            <label for="notify_color_deploy_completed">Color</label>
-                            <input type="text" id="notify_color_deploy_completed" name="notify_color_deploy_completed" form="manager-settings-form" value="{{ .notify_color_deploy_completed }}" placeholder="#16A34A">
-                        </div>
-                    </div>
-                </div>
-                <div class="discord-event">
-                    <label class="form-label">Deployment Completed (Errors)</label>
-                    <div class="form-grid-2 discord-event-body">
-                        <div>
-                            <label for="notify_msg_deploy_completed_error">Message</label>
-                            <input type="text" id="notify_msg_deploy_completed_error" name="notify_msg_deploy_completed_error" form="manager-settings-form" value="{{ .notify_msg_deploy_completed_error }}" placeholder="Deployment completed with errors: {{`{{component}}`}} ({{`{{errors}}`}}).">
-                        </div>
-                        <div>
-                            <label for="notify_color_deploy_completed_error">Color</label>
-                            <input type="text" id="notify_color_deploy_completed_error" name="notify_color_deploy_completed_error" form="manager-settings-form" value="{{ .notify_color_deploy_completed_error }}" placeholder="#DC2626">
-                        </div>
-                    </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="discord_default_webhook" class="form-label">Default Discord Webhook</label>
+                    <input type="text" id="discord_default_webhook" name="discord_default_webhook" value="{{ .discord_default_webhook }}" form="manager-settings-form" placeholder="https://discord.com/api/webhooks/..." class="form-control">
+                     <p class="help-text">Templates support tokens like {{`{{server_name}}`}}, {{`{{event}}`}}, etc.</p>
                 </div>
             </div>
         </div>
-    </section>
+    </div>
 
-    <section class="glass-card mt-4">
+    <!-- Right Column -->
+    <div class="flex flex-col gap-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Connectivity</h2>
+            </div>
+            <div class="card-body grid gap-4">
+                <div class="form-group">
+                    <label for="tls_cert" class="form-label">TLS Cert Path</label>
+                    <input type="text" id="tls_cert" name="tls_cert" value="{{ .tls_cert }}" class="form-control" form="manager-settings-form">
+                </div>
+                <div class="form-group">
+                    <label for="tls_key" class="form-label">TLS Key Path</label>
+                    <input type="text" id="tls_key" name="tls_key" value="{{ .tls_key }}" class="form-control" form="manager-settings-form">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="form-group-tile items-center">
+                        <input type="checkbox" id="auto_port_forward_manager" name="auto_port_forward_manager" {{ if .auto_port_forward_manager }}checked{{ end }} class="form-switch" form="manager-settings-form">
+                        <span>Port Forward (UPnP)</span>
+                    </label>
+                    <label class="form-group-tile items-center">
+                        <input type="checkbox" id="tls_enabled" name="tls_enabled" {{ if .tls_enabled }}checked{{ end }} class="form-switch" form="manager-settings-form">
+                        <span>HTTPS (TLS)</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">HTTPS Status</label>
+                    <div>
+                        {{- if not .tls_enabled -}}
+                            <span class="badge badge-warn">Disabled</span>
+                        {{- else if and (ne .tls_cert "") (ne .tls_key "") -}}
+                            <span class="badge badge-success">Configured</span>
+                        {{- else -}}
+                            <span class="badge badge-danger">Missing Certificate or Key</span>
+                        {{- end }}
+                    </div>
+                </div>
+                 <div class="form-group">
+                    <label class="form-label">Generate Self-Signed Cert</label>
+                    <button type="button" class="btn btn-secondary" hx-post="/update" hx-vals='{"generate_tls_self_signed": "1"}' hx-target="#manager-settings-form" hx-swap="outerHTML">
+                        <i data-feather="shield"></i>
+                        <span>Generate</span>
+                    </button>
+                    <p class="help-text">For quick HTTPS testing. Not for production.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Manager Control</h2>
+            </div>
+            <div class="card-body flex flex-wrap gap-4">
+                <button class="btn btn-danger" hx-post="/update" hx-vals='{"shutdown": "1"}' hx-confirm="Are you sure you want to shut down the manager?">
+                    <i data-feather="power"></i>
+                    <span>Shutdown Manager</span>
+                </button>
+                <button class="btn btn-secondary" hx-post="/update" hx-vals='{"restart": "1"}' hx-confirm="Are you sure you want to restart the manager?">
+                    <i data-feather="refresh-cw"></i>
+                    <span>Restart Manager</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Full Width Below -->
+    <div class="card lg:col-span-3">
         <div class="card-header">
-            <h2 class="card-title">Manager Control</h2>
-        </div>
-        <div class="card-content actions-grid">
-            <button class="btn btn-warning"
-                    hx-post="/update"
-                    hx-vals='{"shutdown": "1"}'
-                    hx-trigger="click">
-                Shutdown Manager
-            </button>
-            <button class="btn btn-secondary"
-                    hx-post="/update"
-                    hx-vals='{"restart": "1"}'
-                    hx-trigger="click">
-                Restart Manager
+            <h2 class="card-title">Version Status</h2>
+            <button class="btn btn-ghost" hx-get="/api/manager/versions" hx-target="#version-status-grid" hx-swap="innerHTML">
+                <i data-feather="refresh-cw"></i>
+                <span>Refresh</span>
             </button>
         </div>
-    </section>
+        <div id="version-status-grid" class="card-body" hx-get="/api/manager/versions" hx-trigger="load" hx-swap="innerHTML">
+            <!-- Version info will be loaded here -->
+        </div>
+    </div>
 </div>
 {{end}}

@@ -4,208 +4,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Stationeers Dedicated Server Manager - Secure Login">
-    <title>Login - Stationeers Server Manager</title>
-    <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}">
+    <title>Login - SDSM</title>
+    <link rel="icon" href="/static/sdsm.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(_){}})();</script>
+    <link rel="stylesheet" href="/static/modern.css?v={{.buildTime}}">
     <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
-    <script src="/static/app.js?v={{buildTime}}" defer></script>
+    <script src="/static/app.js?v={{.buildTime}}" defer></script>
 </head>
-<body class="page-shell">
-    <div class="container">
-        <header class="hero-card">
-            <div class="hero-main">
-                <img src="/static/sdsm.png" alt="SDSM logo" class="hero-logo" width="72" height="72">
-                <div class="hero-heading">
-                    <h1 class="hero-title">Sign In</h1>
-                    <p class="hero-subtitle">Secure access to your SDSM manager</p>
-                </div>
+<body class="bg-page">
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md">
+            <div class="text-center mb-8">
+                <img src="/static/sdsm.png" alt="SDSM Logo" class="w-24 h-24 mx-auto mb-4">
+                <h1 class="text-3xl font-bold text-primary">Welcome to SDSM</h1>
+                <p class="text-secondary">Sign in to manage your servers.</p>
             </div>
-            <div class="hero-actions row">
-                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-                    <span id="theme-icon">🌙</span>
-                </button>
-            </div>
-        </header>
-    </div>
 
-    <main class="container">
-        <div class="login-container">
-            <div class="login-card">
-            <div class="login-header">
-                <img src="/static/sdsm.png" alt="SDSM logo" class="login-logo" width="96" height="96">
-                <h1 class="login-title">Welcome Back</h1>
-                <p class="login-subtitle">Please sign in to your account</p>
-            </div>
-            
-            {{ if .error }}
-            <div class="error-message" role="alert">
-                {{ .error }}
-            </div>
-            {{ end }}
-            
-            
-            <form 
-                method="POST" 
-                action="/login"
-                id="login-form"
-                novalidate
-            >
-                {{ if .redirect }}
-                <input type="hidden" name="redirect" value="{{ .redirect }}">
-                {{ end }}
-                
-                <div class="form-group">
-                    <label for="username" class="form-label">Username</label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        class="form-input" 
-                        required
-                        autocomplete="username"
-                        placeholder="Enter your username"
-                    >
+            <div class="card">
+                <div class="card-body">
+                    {{ if .error }}
+                    <div class="alert alert-danger mb-4">
+                        <p>{{ .error }}</p>
+                    </div>
+                    {{ end }}
+
+                    <form method="POST" action="/login" id="login-form" class="grid gap-4">
+                        {{ if .redirect }}
+                        <input type="hidden" name="redirect" value="{{ .redirect }}">
+                        {{ end }}
+                        
+                        <div class="form-group">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" id="username" name="username" class="form-control" required autocomplete="username" placeholder="e.g. admin">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password" placeholder="••••••••">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full">
+                            <span>Sign In</span>
+                        </button>
+                    </form>
                 </div>
-                
-                <div class="form-group">
-                    <label for="password" class="form-label">Password</label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        class="form-input" 
-                        required
-                        autocomplete="current-password"
-                        placeholder="Enter your password"
-                    >
-                </div>
-                
-                <div class="form-group">
-                    <button 
-                        type="submit" 
-                        class="btn btn-primary btn-lg w-full" 
-                        id="login-button"
-                    >
-                        <span id="button-text">Sign In</span>
-                        <div id="loading-indicator" class="loading hidden ml-2"></div>
-                    </button>
-                </div>
-            </form>
-            
-            <div class="text-center mt-6 pt-6 border-t">
-                <p class="text-sm text-secondary">
-                    Stationeers Dedicated Server Manager v2.0
-                </p>
             </div>
+             <div class="text-center mt-6">
+                <p class="text-sm text-tertiary">Stationeers Dedicated Server Manager</p>
             </div>
         </div>
-    </main>
-    
-    {{ template "modal_templates" . }}
-    {{ template "modal_scripts" . }}
-    {{ template "footer" . }}
-    
+    </div>
+    {{template "footer" .}}
     <script>
-        // Login page-specific initialization
         document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('login-form');
-            const usernameInput = document.getElementById('username');
-            const passwordInput = document.getElementById('password');
-            
-            // Real-time validation using SDSM helper
-            usernameInput.addEventListener('input', () => SDSM.forms.validateInput(usernameInput, 3));
-            passwordInput.addEventListener('input', () => SDSM.forms.validateInput(passwordInput, 6));
-            
-            // Enhanced form submission
-            form.addEventListener('submit', function(e) {
-                const username = usernameInput.value.trim();
-                const password = passwordInput.value;
-                
-                if (!username || !password) {
-                    e.preventDefault();
-                    showError('Please fill in all fields');
-                    return;
-                }
-                
-                if (username.length < 3) {
-                    e.preventDefault();
-                    showError('Username must be at least 3 characters');
-                    return;
-                }
-                
-                if (password.length < 6) {
-                    e.preventDefault();
-                    showError('Password must be at least 6 characters');
-                    return;
-                }
-                
-                // Show loading state
-                setLoadingState(true);
-            });
-            
             // Auto-focus first empty field
+            const usernameInput = document.getElementById('username');
             if (!usernameInput.value) {
                 usernameInput.focus();
             } else {
-                passwordInput.focus();
+                document.getElementById('password').focus();
             }
-            
-            // Show initial server errors in modal if present
-            try {
-                const inlineErr = document.querySelector('.error-message[role="alert"]');
-                if (inlineErr) {
-                    const msg = (inlineErr.textContent || '').trim();
-                    if (msg && window.openInfo) {
-                        window.openInfo({ title:'Login Error', message: msg, confirmText:'Close' });
-                    }
-                }
-            } catch(_) {}
         });
-        
-        function setLoadingState(loading) {
-            const form = document.getElementById('login-form');
-            const button = document.getElementById('login-button');
-            const buttonText = document.getElementById('button-text');
-            const loadingIndicator = document.getElementById('loading-indicator');
-            
-            if (loading) {
-                form.classList.add('form-loading');
-                button.disabled = true;
-                buttonText.textContent = 'Signing In...';
-                loadingIndicator.classList.remove('hidden');
-            } else {
-                form.classList.remove('form-loading');
-                button.disabled = false;
-                buttonText.textContent = 'Sign In';
-                loadingIndicator.classList.add('hidden');
-            }
-        }
-        
-        function showError(message) {
-            try {
-                if (window.openInfo) {
-                    window.openInfo({ title: 'Login Error', message: String(message || 'An error occurred'), confirmText: 'Close' });
-                    return;
-                }
-            } catch(_) {}
-            
-            // Fallback inline banner if modal helpers unavailable
-            const existingError = document.querySelector('.error-message');
-            if (existingError) { existingError.remove(); }
-            
-            const errorDiv = document.createElement('div');
-            errorDiv.className = 'error-message';
-            errorDiv.setAttribute('role', 'alert');
-            errorDiv.textContent = String(message || 'An error occurred');
-            
-            const form = document.getElementById('login-form');
-            form.parentNode.insertBefore(errorDiv, form);
-            
-            setTimeout(() => { if (errorDiv.parentNode) { errorDiv.remove(); } }, 5000);
-        }
     </script>
 </body>
 </html>

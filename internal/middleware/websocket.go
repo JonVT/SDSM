@@ -4,11 +4,18 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"sdsm/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	writeWait  = 10 * time.Second
+	pongWait   = 60 * time.Second
+	pingPeriod = 50 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -37,6 +44,9 @@ func NewHub(logger *utils.Logger) *Hub {
 }
 
 func (h *Hub) Run() {
+	pingTicker := time.NewTicker(pingPeriod)
+	defer pingTicker.Stop()
+
 	for {
 		select {
 		case conn := <-h.register:
@@ -55,15 +65,38 @@ func (h *Hub) Run() {
 			h.logf("WebSocket client disconnected")
 
 		case message := <-h.broadcast:
-			h.mutex.RLock()
-			for conn := range h.clients {
-				if err := conn.WriteMessage(websocket.TextMessage, message); err != nil {
-					h.logf("WebSocket write error: %v", err)
-					delete(h.clients, conn)
-					conn.Close()
-				}
-			}
-			h.mutex.RUnlock()
+			h.writeToClients(websocket.TextMessage, message)
+
+		case <-pingTicker.C:
+			h.writePingToClients()
+		}
+	}
+}
+
+func (h *Hub) writeToClients(messageType int, payload []byte) {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	for conn := range h.clients {
+		if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+			h.logf("WebSocket set write deadline error: %v", err)
+		}
+		if err := conn.WriteMessage(messageType, payload); err != nil {
+			h.logf("WebSocket write error: %v", err)
+			conn.Close()
+			delete(h.clients, conn)
+		}
+	}
+}
+
+func (h *Hub) writePingToClients() {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+	for conn := range h.clients {
+		deadline := time.Now().Add(writeWait)
+		if err := conn.WriteControl(websocket.PingMessage, nil, deadline); err != nil {
+			h.logf("WebSocket ping error: %v", err)
+			conn.Close()
+			delete(h.clients, conn)
 		}
 	}
 }
@@ -86,6 +119,12 @@ func (h *Hub) HandleWebSocket() gin.HandlerFunc {
 			return
 		}
 
+		conn.SetReadLimit(1024)
+		_ = conn.SetReadDeadline(time.Now().Add(pongWait))
+		conn.SetPongHandler(func(string) error {
+			return conn.SetReadDeadline(time.Now().Add(pongWait))
+		})
+
 		h.register <- conn
 
 		defer func() {
@@ -93,9 +132,8 @@ func (h *Hub) HandleWebSocket() gin.HandlerFunc {
 		}()
 
 		for {
-			_, _, err := conn.ReadMessage()
-			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived) {
 					h.logf("WebSocket error: %v", err)
 				}
 				break

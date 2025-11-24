@@ -2,24 +2,26 @@
 {{define "page"}}error{{end}}
 
 {{define "error.html"}}
-<div class="error-container">
-    <div class="error-card">
-        <div class="error-icon">⚠️</div>
-        <h1 class="error-title">Oops! Something went wrong</h1>
-        <p class="error-message">
-            {{ if .error }}
-                {{ .error }}
-            {{ else }}
-                An unexpected error occurred. Please try again or contact support if the problem persists.
-            {{ end }}
-        </p>
-        <div class="error-actions">
-            <button onclick="history.back()" class="btn btn-ghost">
-                Go Back
-            </button>
-            <a href="/dashboard" class="btn btn-primary" hx-get="/dashboard" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/dashboard">
-                Dashboard
-            </a>
+<div class="container-slim">
+    <div class="card text-center">
+        <div class="card-content">
+            <div class="error-icon-lg">⚠️</div>
+            <h1 class="card-title mt-4">Oops! Something Went Wrong</h1>
+            <p class="text-muted">
+                {{if .error}}
+                    {{.error}}
+                {{else}}
+                    An unexpected error occurred. Please try again or check the logs for more details.
+                {{end}}
+            </p>
+            <div class="form-actions justify-center mt-6">
+                <button onclick="history.back()" class="btn btn-secondary">
+                    <i class="icon-arrow-left"></i> Go Back
+                </button>
+                <a href="/dashboard" class="btn btn-primary" hx-get="/dashboard" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/dashboard">
+                    <i class="icon-dashboard"></i> Go to Dashboard
+                </a>
+            </div>
         </div>
     </div>
 </div>

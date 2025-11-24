@@ -2,53 +2,56 @@
 {{define "page"}}profile{{end}}
 
 {{define "profile.html"}}
-<div class="glass-card profile-form">
-    <h3>Change Password</h3>
-    <div id="profile-flags" data-success="{{ if .success }}{{ .success }}{{ end }}" data-error="{{ if .error }}{{ .error }}{{ end }}" hidden></div>
-    {{ if .error }}
-    <div class="alert alert-error mb-3" role="alert">
-        <div class="alert-content">
-            <div class="alert-title">Update Failed</div>
-            <div class="alert-message">{{ .error }}</div>
-        </div>
+<div class="card" data-page-title="Profile">
+    <div class="card-header">
+        <h2>Change Password</h2>
     </div>
-    {{ end }}
-    {{ if .success }}
-    <div class="alert alert-success mb-3" role="status">
-        <div class="alert-content">
-            <div class="alert-title">Success</div>
-            <div class="alert-message">{{ .success }}</div>
-        </div>
+    <div class="card-content">
+        <form 
+            id="profile-form" 
+            class="form-grid"
+        >
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" value="{{ .username }}" class="form-control" disabled>
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <input type="text" value="{{ if .role }}{{ .role }}{{ else }}user{{ end }}" class="form-control" disabled>
+            </div>
+            <div class="form-group">
+                <label for="current_password">Current Password</label>
+                <input id="current_password" name="current_password" type="password" class="form-control" required autocomplete="current-password">
+            </div>
+            <div class="form-group">
+                <label for="new_password">New Password</label>
+                <input id="new_password" name="new_password" type="password" class="form-control" minlength="8" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password</label>
+                <input id="confirm_password" name="confirm_password" type="password" class="form-control" minlength="8" required autocomplete="new-password">
+            </div>
+            <div id="password-hint" class="form-hint" aria-live="polite"></div>
+            
+            {{ if .error }}
+            <div class="form-group form-span-all">
+                <div class="alert alert-danger" role="alert">
+                    {{ .error }}
+                </div>
+            </div>
+            {{ end }}
+            {{ if .success }}
+            <div class="form-group form-span-all">
+                <div class="alert alert-success" role="status">
+                    {{ .success }}
+                </div>
+            </div>
+            {{ end }}
+
+            <div class="form-actions form-span-all">
+                <button id="btn-update-password" type="submit" class="btn btn-primary">Update Password</button>
+            </div>
+        </form>
     </div>
-    {{ end }}
-    <form id="profile-form" action="javascript:void(0)" method="dialog">
-        <div class="form-row form-row-160">
-            <label>Username</label>
-            <input type="text" value="{{ .username }}" disabled>
-        </div>
-        <div class="form-row form-row-160">
-            <label>Role</label>
-            <input type="text" value="{{ if .role }}{{ .role }}{{ else }}user{{ end }}" disabled>
-        </div>
-        <div class="form-row form-row-160">
-            <label for="current_password">Current Password</label>
-            <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
-        </div>
-        <div class="form-row form-row-160">
-            <label for="new_password">New Password</label>
-            <input id="new_password" name="new_password" type="password" minlength="8" required autocomplete="new-password">
-        </div>
-        <div class="form-row form-row-160">
-            <label for="confirm_password">Confirm Password</label>
-            <input id="confirm_password" name="confirm_password" type="password" minlength="8" required autocomplete="new-password">
-        </div>
-        <div class="form-row form-row-160">
-            <label></label>
-            <div id="password-hint" class="hint" aria-live="polite"></div>
-        </div>
-        <div class="form-row form-row-one">
-            <button id="btn-update-password" type="button" class="btn btn-primary">Update Password</button>
-        </div>
-    </form>
 </div>
 {{end}}

@@ -1,53 +1,50 @@
-{{define "user_row"}}
-<tr id="user-row-{{.Username}}" class="user-row" data-username="{{.Username}}" data-role="{{.Role}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}">
-    <td>
-        <div class="user-cell">
-            <div class="user-avatar" aria-hidden="true">{{initials .Username}}</div>
+{{define "user_row.html"}}
+<tr id="user-row-{{.Username}}" data-username="{{.Username}}" data-role="{{.Role}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}">
+    <td class="font-medium">
+        <div class="flex items-center gap-3">
+            <div class="avatar">{{initials .Username}}</div>
             <div>
-                <div class="user-name">{{.Username}}</div>
-                <div class="user-meta">
+                <div>{{.Username}}</div>
+                <div class="text-sm text-muted">
                     {{if .CreatedAt.IsZero}}
                         User account
                     {{else}}
-                        Joined {{.CreatedAt.Format "2006-01-02"}}
+                        Joined {{.CreatedAt.Format "Jan 2, 2006"}}
                     {{end}}
                 </div>
             </div>
         </div>
     </td>
     <td>
-        <div class="role-select-wrapper">
-            <label class="sr-only" for="role-{{.Username}}">Role for {{.Username}}</label>
-            <select id="role-{{.Username}}" class="role-select" name="role" hx-patch="/api/users/{{.Username}}/role" hx-trigger="change" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-indicator="#global-htmx-indicator">
-                <option value="operator" {{if eq .Role "operator"}}selected{{end}}>Operator</option>
-                <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
-            </select>
-        </div>
+        <select id="role-{{.Username}}" class="form-select" name="role" hx-patch="/api/users/{{.Username}}/role" hx-trigger="change" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-indicator="#global-htmx-indicator">
+            <option value="operator" {{if eq .Role "operator"}}selected{{end}}>Operator</option>
+            <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
+        </select>
     </td>
     <td>
-        <div class="access-chip access-{{.AccessState}}">{{.AccessSummary}}</div>
-        {{if .AccessDetails}}
-        <div class="access-detail-list" aria-label="Server access list for {{.Username}}">
-            {{range .AccessDetails}}
-            <span class="access-pill" title="{{.}}">{{.}}</span>
+        <div class="flex flex-col gap-1">
+            <span class="badge badge-{{.AccessState}}">{{.AccessSummary}}</span>
+            {{if and (eq .Role "operator") (not .AssignedAllServers) (not .AccessDetails)}}
+                <span class="text-xs text-muted">No servers assigned</span>
             {{end}}
         </div>
-        {{else if and (eq .Role "operator") (not .AssignedAllServers)}}
-        <div class="text-xs text-secondary">No servers assigned</div>
-        {{end}}
     </td>
-    <td class="text-end">
-        <div class="btn-group user-actions" role="group" aria-label="Actions for {{.Username}}">
-            <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#resetPasswordModal" data-username="{{.Username}}">
-                Reset Password
+    <td class="text-right">
+        <div class="btn-group">
+            <button type="button" class="btn btn-secondary" onclick="SDSM.users.showResetPasswordModal('{{.Username}}')">
+                <i data-feather="key"></i>
+                <span>Password</span>
             </button>
-            <button type="button" class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#accessModal" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" data-can-edit="{{if .CanEditAccess}}true{{else}}false{{end}}" {{if not .CanEditAccess}}disabled title="Admins already have access to all servers"{{end}}>
-                Manage Access
+            <button type="button" class="btn btn-secondary" onclick="SDSM.users.showAccessModal(this)" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" {{if not .CanEditAccess}}disabled title="Admins have access to all servers"{{end}}>
+                <i data-feather="unlock"></i>
+                <span>Access</span>
             </button>
-            <button type="button" class="btn btn-sm btn-danger" hx-delete="/api/users/{{.Username}}" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-confirm="Delete user {{.Username}}?" hx-indicator="#global-htmx-indicator">
-                Delete
+            <button type="button" class="btn btn-danger" hx-delete="/api/users/{{.Username}}" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-confirm="Are you sure you want to delete the user '{{.Username}}'?" hx-indicator="#global-htmx-indicator">
+                <i data-feather="trash-2"></i>
+                <span>Delete</span>
             </button>
         </div>
     </td>
 </tr>
 {{end}}
+

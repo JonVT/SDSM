@@ -1,116 +1,51 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Setup - SDSM</title>
-  <link rel="stylesheet" href="/static/ui-theme.css?v={{buildTime}}" />
-  <link rel="icon" href="/static/sdsm.png" type="image/png" />
-  <script>(function(){try{var t=localStorage.getItem('theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(_){}})();</script>
-  <script src="/static/app.js?v={{buildTime}}" defer></script>
-  
-  <script>
-    function validateForm(e){
-      const p = document.getElementById('password').value;
-      const c = document.getElementById('confirm').value;
-      if(p.length < 8){
-        e.preventDefault();
-        showError('Password must be at least 8 characters.');
-        return false;
-      }
-      if(p !== c){
-        e.preventDefault();
-        showError('Passwords do not match.');
-        return false;
-      }
-      return true;
-    }
-    function showError(msg){
-      try {
-        if (window.openInfo) {
-          window.openInfo({ title: 'Setup Error', message: String(msg||'An error occurred'), confirmText: 'Close' });
-          return;
-        }
-      } catch(_) {}
-      let box = document.getElementById('error-box');
-      if(!box){
-        box = document.createElement('div');
-        box.className = 'error';
-        box.id = 'error-box';
-        const form = document.getElementById('setup-form');
-        form.parentNode.insertBefore(box, form);
-      }
-      box.textContent = String(msg||'An error occurred');
-    }
-  </script>
-  <meta name="robots" content="noindex" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
-  </head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Setup - SDSM</title>
+    <link rel="stylesheet" href="/static/modern.css?v={{buildTime}}" />
+    <link rel="icon" href="/static/sdsm.png" type="image/png" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
+</head>
 <body>
-  <div class="container pt-6">
-    <header class="hero-card">
-      <div class="hero-main">
-        <img src="/sdsm.png" alt="SDSM" class="hero-logo" width="72" height="72" />
-        <div class="hero-heading">
-          <h1 class="hero-title">Admin Setup</h1>
-          <p class="hero-subtitle">Create the initial administrator account.</p>
+    <div class="container-slim">
+        <div class="card">
+            <div class="card-header text-center">
+                <img src="/static/sdsm.png" alt="SDSM Logo" class="logo-lg">
+                <h2>Admin Setup</h2>
+                <p class="text-muted">Create the initial administrator account to secure your SDSM instance.</p>
+            </div>
+            <div class="card-content">
+                {{if .error}}
+                <div id="error-box" class="alert alert-danger" role="alert">{{.error}}</div>
+                {{end}}
+                <form id="setup-form" method="POST" action="/admin/setup">
+                    <div class="form-group">
+                        <label for="username" class="form-label">Username</label>
+                        <input id="username" class="form-control" value="admin" disabled />
+                        <div class="form-text">The admin username is fixed and cannot be changed.</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="password" class="form-label">Password</label>
+                        <input id="password" name="password" type="password" class="form-control" placeholder="Enter a strong password (min. 8 characters)" required autocomplete="new-password" />
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm" class="form-label">Confirm Password</label>
+                        <input id="confirm" name="confirm" type="password" class="form-control" placeholder="Re-enter your password" required autocomplete="new-password" />
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary w-full">Set Admin Password & Finish Setup</button>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center">
+                <p class="text-muted text-sm">For headless setups, you can pre-configure a read-only user via the <code>SDSM_VIEWER_USERNAME</code> and <code>SDSM_VIEWER_PASSWORD</code> environment variables.</p>
+            </div>
         </div>
-      </div>
-      <div class="hero-actions row">
-        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-          <span id="theme-icon">🌙</span>
-        </button>
-      </div>
-    </header>
-  </div>
-
-  <main class="container setup-center">
-    <div class="glass-card max-w-520 mx-auto">
-      <div class="text-center mb-4">
-        <img src="/sdsm.png" alt="SDSM" width="64" height="64" class="opacity-90" />
-      </div>
-      <h1 class="title">Create Admin Account</h1>
-      <p class="subtitle">Welcome! Set a secure password for the built-in <strong>admin</strong> user to finish setup.</p>
-      {{ if .error }}<div class="error" role="alert">{{ .error }}</div>{{ end }}
-      <form id="setup-form" method="POST" action="/admin/setup" onsubmit="validateForm(event)">
-        <div class="form-group">
-          <label class="form-label">Username</label>
-          <input class="form-input" value="admin" disabled />
-          <div class="hint">The admin username is fixed to "admin".</div>
-        </div>
-        <div class="form-group">
-          <label for="password" class="form-label">Password</label>
-          <input id="password" name="password" type="password" class="form-input" placeholder="Enter a strong password" required autocomplete="new-password" />
-        </div>
-        <div class="form-group">
-          <label for="confirm" class="form-label">Confirm Password</label>
-          <input id="confirm" name="confirm" type="password" class="form-input" placeholder="Re-enter your password" required autocomplete="new-password" />
-        </div>
-        <div class="form-group mt-3">
-          <button type="submit" class="btn btn-primary w-full">Set Admin Password</button>
-        </div>
-      </form>
-      <p class="hint">If running headless, set env SDSM_VIEWER_USERNAME/SDSM_VIEWER_PASSWORD for an optional read-only user before first login.</p>
     </div>
-  </main>
-  {{ template "modal_templates" . }}
-  {{ template "modal_scripts" . }}
-  {{ template "footer" . }}
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      SDSM.theme.init();
-
-      // If server rendered an error, surface as modal in addition to inline
-      try {
-        const inlineErr = document.querySelector('.error[role="alert"]');
-        if (inlineErr) {
-          const msg = (inlineErr.textContent || '').trim();
-          if (msg && window.openInfo) {
-            window.openInfo({ title: 'Setup Error', message: msg, confirmText: 'Close' });
-          }
-        }
-      } catch(_) {}
-    });
-  </script>
+    {{template "footer" .}}
+    <script src="/static/js/admin_setup.js?v={{buildTime}}"></script>
 </body>
 </html>
