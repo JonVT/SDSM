@@ -138,8 +138,8 @@
         {{else if eq .page "error"}}
             {{template "error.html" .}}
         {{end}}
+        {{template "footer" .}}
     </main>
-    {{template "footer" .}}
     </div>
 
     {{ template "modal_templates.html" . }}
