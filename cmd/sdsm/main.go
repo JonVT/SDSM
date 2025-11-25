@@ -369,7 +369,7 @@ func setupRouter() *gin.Engine {
 	r.SetFuncMap(funcMap)
 
 	// Load templates from embedded filesystem using a glob pattern for simplicity.
-	t, err := htmltmpl.New("").Funcs(funcMap).ParseFS(ui.Assets, "templates/*.html", "templates/partials/*.html")
+	t, err := htmltmpl.New("").Funcs(funcMap).ParseFS(ui.Assets, "templates/*.html", "templates/partials/*.html", "templates/manager/*.html")
 	if err != nil {
 		log.Fatalf("FATAL: failed to parse templates: %v", err)
 	}
@@ -588,6 +588,7 @@ func setupRouter() *gin.Engine {
 		api.GET("/manager/log/tail", managerHandlers.APIManagerLogTail)
 		api.POST("/manager/log/clear", managerHandlers.APIManagerLogClear)
 		api.GET("/manager/log/download", managerHandlers.APIManagerLogDownload)
+		api.GET("/paths/browse", managerHandlers.APIPathBrowser)
 
 		// Admin-only user management API
 		api.GET("/users", func(c *gin.Context) {

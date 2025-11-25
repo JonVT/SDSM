@@ -48,4 +48,62 @@
         </div>
     </div>
 </template>
+
+<template id="tpl-modal-path-picker">
+    <div class="modal path-picker-overlay" role="dialog" aria-modal="true" aria-labelledby="path-picker-title">
+        <div class="modal-content path-picker">
+            <header class="modal-header">
+                <div>
+                    <h3 id="path-picker-title" class="modal-title" data-title>Select Path</h3>
+                    <p class="modal-subtitle text-secondary hidden" data-description></p>
+                </div>
+                <button type="button" class="btn btn-ghost btn-icon" data-close aria-label="Close path picker">
+                    <i data-feather="x"></i>
+                </button>
+            </header>
+            <div class="modal-body path-picker-body">
+                <div class="path-picker-toolbar">
+                    <div class="path-picker-breadcrumbs" data-breadcrumbs></div>
+                    <div class="path-picker-actions">
+                        <button type="button" class="btn btn-ghost btn-icon" data-go-root title="Go to root">
+                            <i data-feather="home"></i>
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-icon" data-go-parent title="Go up one folder">
+                            <i data-feather="arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-ghost btn-icon" data-refresh title="Refresh list">
+                            <i data-feather="refresh-cw"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="path-picker-current">
+                    <span class="label">Current:</span>
+                    <span class="value" data-current-path></span>
+                </div>
+                <div class="path-picker-manual">
+                    <input type="text" class="form-control" data-path-input placeholder="Jump to relative path" aria-label="Path to open">
+                    <button type="button" class="btn btn-neutral" data-path-go>Go</button>
+                </div>
+                <div class="path-picker-list" data-entries role="tree" aria-label="Available paths"></div>
+                <div class="path-picker-empty hidden" data-empty-state>This folder is empty.</div>
+                <div class="path-picker-error hidden" data-error-region role="alert"></div>
+            </div>
+            <footer class="modal-footer path-picker-footer">
+                <div class="path-picker-selection">
+                    <div class="label">Selected</div>
+                    <div class="value" data-selected-path>No path selected</div>
+                </div>
+                <div class="path-picker-buttons">
+                    <button type="button" class="btn btn-ghost" data-use-current>Use current folder</button>
+                    <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+                    <button type="button" class="btn btn-primary" data-confirm disabled>Use Path</button>
+                </div>
+            </footer>
+            <div class="path-picker-loading hidden" data-loading>
+                <div class="spinner"></div>
+                <span>Loading...</span>
+            </div>
+        </div>
+    </div>
+</template>
 {{end}}

@@ -320,49 +320,7 @@ h4 { font-size: 1rem; }
     transform: rotate(180deg);
 }
 
-/* Cards */
-.card {
-    background-color: var(--bg-surface-1);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-    display: flex;
-    flex-direction: column;
-}
-
-.card.server-deck-card {
-    background: linear-gradient(155deg, var(--bg-surface-1), var(--bg-surface-2));
-    border-color: color-mix(in srgb, var(--border-default) 80%, transparent);
-    box-shadow: var(--shadow-lg);
-}
-
-.card.server-deck-card .card-body {
-    background: color-mix(in srgb, var(--bg-surface-1) 85%, transparent);
-    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-}
-.card-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border-subtle);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.card-title {
-    font-size: 1.125rem;
-    font-weight: 600;
-}
-.card-body {
-    padding: 1.5rem;
-    flex: 1;
-}
-.card-footer {
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border-subtle);
-    background-color: var(--bg-surface-2);
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-}
+/* Cards inherit base styling from ui-theme.css to ensure consistency across screens */
 
 /* Forms */
 .form-group {

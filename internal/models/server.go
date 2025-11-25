@@ -129,30 +129,30 @@ type ServerConfig struct {
 // Server represents a managed dedicated server instance, including
 // runtime state, settings, logs, and client/chat history.
 type Server struct {
-	ID   int       `json:"id"`
-	Proc *exec.Cmd `json:"-"`
-	Thrd chan bool `json:"-"`
-	pid  int       `json:"-"`
-	Logger         *utils.Logger  `json:"-"`
-	Paths          *utils.Paths   `json:"-"`
-	Name           string         `json:"name"`
-	World          string         `json:"world"`
-	WorldID        string         `json:"world_id"`
-	Language       string         `json:"language"`
-	StartLocation  string         `json:"start_location"`
-	StartCondition string         `json:"start_condition"`
-	Difficulty     string         `json:"difficulty"`
-	Port           int            `json:"port"`
-	SaveInterval   int            `json:"save_interval"`
-	AuthSecret     string         `json:"auth_secret"`
-	Password       string         `json:"password"`
-	MaxClients     int            `json:"max_clients"`
-	Visible        bool           `json:"visible"`
-	Beta           bool           `json:"beta"`
-	AutoStart      bool           `json:"auto_start"`
-	AutoUpdate     bool           `json:"auto_update"`
-	AutoSave       bool           `json:"auto_save"`
-	AutoPause      bool           `json:"auto_pause"`
+	ID             int           `json:"id"`
+	Proc           *exec.Cmd     `json:"-"`
+	Thrd           chan bool     `json:"-"`
+	pid            int           `json:"-"`
+	Logger         *utils.Logger `json:"-"`
+	Paths          *utils.Paths  `json:"-"`
+	Name           string        `json:"name"`
+	World          string        `json:"world"`
+	WorldID        string        `json:"world_id"`
+	Language       string        `json:"language"`
+	StartLocation  string        `json:"start_location"`
+	StartCondition string        `json:"start_condition"`
+	Difficulty     string        `json:"difficulty"`
+	Port           int           `json:"port"`
+	SaveInterval   int           `json:"save_interval"`
+	AuthSecret     string        `json:"auth_secret"`
+	Password       string        `json:"password"`
+	MaxClients     int           `json:"max_clients"`
+	Visible        bool          `json:"visible"`
+	Beta           bool          `json:"beta"`
+	AutoStart      bool          `json:"auto_start"`
+	AutoUpdate     bool          `json:"auto_update"`
+	AutoSave       bool          `json:"auto_save"`
+	AutoPause      bool          `json:"auto_pause"`
 	// Additional server settings persisted in sdsm.config
 	MaxAutoSaves          int  `json:"max_auto_saves"`
 	MaxQuickSaves         int  `json:"max_quick_saves"`
@@ -198,6 +198,7 @@ type Server struct {
 	WelcomeBackMessage  string        `json:"welcome_back_message"`
 	WelcomeDelaySeconds int           `json:"welcome_delay_seconds"`
 	ServerStarted       *time.Time    `json:"server_started,omitempty"`
+	LastStoppedAt       *time.Time    `json:"last_stopped_at,omitempty"`
 	ServerSaved         *time.Time    `json:"server_saved,omitempty"`
 	Clients             []*Client     `json:"-"`
 	Chat                []*Chat       `json:"-"`
@@ -268,8 +269,8 @@ type Server struct {
 	NotifyColorUpdateStarted   string `json:"notify_color_update_started"`
 	NotifyColorUpdateCompleted string `json:"notify_color_update_completed"`
 	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
-	resourceMu                sync.RWMutex
-	resourceUsage             *ServerResourceUsage
+	resourceMu                 sync.RWMutex
+	resourceUsage              *ServerResourceUsage
 }
 
 // PID returns the best-known operating system process ID for the running server.
@@ -306,17 +307,49 @@ func (s *Server) UptimeString() string {
 	if uptime <= 0 {
 		return "—"
 	}
-	days := uptime / (24 * time.Hour)
-	hours := (uptime % (24 * time.Hour)) / time.Hour
-	minutes := (uptime % time.Hour) / time.Minute
-	switch {
-	case days > 0:
+	return formatDurationCompact(uptime)
+}
+
+func formatDurationCompact(d time.Duration) string {
+	if d <= 0 {
+		return "0m"
+	}
+	days := d / (24 * time.Hour)
+	if days > 0 {
+		hours := (d % (24 * time.Hour)) / time.Hour
 		return fmt.Sprintf("%dd %02dh", days, hours)
-	case hours > 0:
+	}
+	hours := d / time.Hour
+	if hours > 0 {
+		minutes := (d % time.Hour) / time.Minute
 		return fmt.Sprintf("%dh %02dm", hours, minutes)
-	default:
+	}
+	minutes := d / time.Minute
+	if minutes > 0 {
 		return fmt.Sprintf("%dm", minutes)
 	}
+	seconds := d / time.Second
+	if seconds <= 0 {
+		seconds = 1
+	}
+	return fmt.Sprintf("%ds", seconds)
+}
+
+// Downtime returns how long the server has been offline since the last stop event.
+func (s *Server) Downtime() time.Duration {
+	if s == nil || s.LastStoppedAt == nil {
+		return 0
+	}
+	return time.Since(*s.LastStoppedAt)
+}
+
+// DowntimeString renders the offline duration in a compact format (e.g., "2h 05m").
+func (s *Server) DowntimeString() string {
+	downtime := s.Downtime()
+	if downtime <= 0 {
+		return "0m"
+	}
+	return formatDurationCompact(downtime)
 }
 
 // UpdateResourceUsage stores a fresh telemetry snapshot for the server.
@@ -1888,6 +1921,8 @@ func (s *Server) Stop() {
 			s.Running = false
 			s.Stopping = false
 			s.Starting = false
+			now := time.Now()
+			s.LastStoppedAt = &now
 		}
 		return
 	}
@@ -2063,6 +2098,8 @@ func (s *Server) performFinalShutdown() {
 			s.Stopping = false
 			s.Starting = false
 			s.ServerStarted = nil
+			now := time.Now()
+			s.LastStoppedAt = &now
 		}
 		return
 	}
@@ -2076,8 +2113,9 @@ func (s *Server) performFinalShutdown() {
 	s.Running = false
 	s.Stopping = false
 	s.Starting = false
-	s.ServerStarted = nil
 	now := time.Now()
+	s.ServerStarted = nil
+	s.LastStoppedAt = &now
 	s.markAllClientsDisconnected(now)
 	s.rewritePlayersLog()
 	if s.Proc == nil {
@@ -2610,6 +2648,8 @@ func (s *Server) Start() {
 		s.Proc = nil
 		s.pid = 0
 		s.ServerStarted = nil
+		stopped := time.Now()
+		s.LastStoppedAt = &stopped
 		// stdin fallback removed
 		close(stop)
 		if s.Thrd == stop {
@@ -2681,6 +2721,8 @@ func (s *Server) AttachToRunning(pid int) {
 		srv.Starting = false
 		srv.Stopping = false
 		srv.ServerStarted = nil
+		stopped := time.Now()
+		srv.LastStoppedAt = &stopped
 		close(stop)
 		if srv.Thrd == stop {
 			srv.Thrd = nil
@@ -2900,17 +2942,9 @@ func (s *Server) tailServerLogFromOffset(path string, stop <-chan bool, window i
 		if size > window {
 			start = size - window
 		}
-		if start > 0 {
-			if _, err := f.Seek(start, io.SeekStart); err != nil {
-				// If seek fails, fallback to start of file
-				_, _ = f.Seek(0, io.SeekStart)
-			} else {
-				// Discard partial first line to start cleanly at next newline
-				br := bufio.NewReader(f)
-				if _, err := br.ReadString('\n'); err == nil || errors.Is(err, io.EOF) {
-					// position is already advanced by ReadString; reset reader below
-				}
-			}
+		if _, err := f.Seek(start, io.SeekStart); err != nil {
+			f.Close()
+			return false
 		}
 		file = f
 		reader = bufio.NewReader(file)

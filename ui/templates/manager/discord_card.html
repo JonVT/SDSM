@@ -1,0 +1,18 @@
+{{define "manager_discord_card"}}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Discord Integration</h2>
+        <a class="btn btn-ghost" href="/tokens" hx-get="/tokens" hx-push-url="/tokens" hx-target="#content-area" hx-swap="innerHTML">
+            <i data-feather="info"></i>
+            <span>Token Reference</span>
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="form-group">
+            <label for="discord_default_webhook" class="form-label">Default Discord Webhook</label>
+            <input type="text" id="discord_default_webhook" name="discord_default_webhook" value="{{ .discord_default_webhook }}" form="manager-settings-form" placeholder="https://discord.com/api/webhooks/..." class="form-control">
+            <p class="help-text">Templates support tokens like {{`{{server_name}}`}}, {{`{{event}}`}}, etc.</p>
+        </div>
+    </div>
+</div>
+{{end}}

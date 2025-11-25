@@ -11,8 +11,15 @@
 {{$isRunning := $server.IsRunning}}
 {{$isStarting := $server.Starting}}
 {{$isPaused := and $isRunning $server.Paused}}
+{{$usage := $server.ResourceUsage}}
 {{$statusClass := "is-stopped"}}
 {{$statusLabel := "Stopped"}}
+{{$statusPrefix := ""}}
+{{$statusSuffix := ""}}
+{{$relativeMode := ""}}
+{{$relativeSource := ""}}
+{{$isoFormat := "2006-01-02T15:04:05Z07:00"}}
+{{$uptimeText := ""}}
 {{if $isStarting}}
     {{$statusClass = "is-starting"}}
     {{$statusLabel = "Starting"}}
@@ -24,16 +31,76 @@
     {{$statusLabel = "Running"}}
 {{end}}
 
+{{if $server.LastError}}
+    {{$statusClass = "is-error"}}
+    {{$statusLabel = "Error"}}
+    {{$statusPrefix = "Crashed"}}
+    {{$statusSuffix = "ago"}}
+    {{$relativeMode = "downtime"}}
+    {{if $server.LastStoppedAt}}
+        {{$relativeSource = $server.LastStoppedAt.Format $isoFormat}}
+    {{end}}
+    {{if $server.LastStoppedAt}}
+        {{$uptimeText = printf "Crashed %s ago" ($server.DowntimeString)}}
+    {{else}}
+        {{$uptimeText = "Crashed"}}
+    {{end}}
+{{else if $server.Stopping}}
+    {{$statusClass = "is-stopping"}}
+    {{$statusLabel = "Stopping"}}
+    {{$uptimeText = "Stopping..."}}
+{{else if $isStarting}}
+    {{$uptimeText = "Starting..."}}
+{{else if $isPaused}}
+    {{$statusPrefix = "Paused"}}
+    {{$relativeMode = "uptime"}}
+    {{if $server.ServerStarted}}
+        {{$relativeSource = $server.ServerStarted.Format $isoFormat}}
+    {{end}}
+    {{$uptimeText = printf "Paused · Up for %s" ($server.UptimeString)}}
+{{else if $isRunning}}
+    {{$statusPrefix = "Running for"}}
+    {{$relativeMode = "uptime"}}
+    {{if $server.ServerStarted}}
+        {{$relativeSource = $server.ServerStarted.Format $isoFormat}}
+    {{end}}
+    {{$uptimeText = printf "Running for %s" ($server.UptimeString)}}
+{{else if $server.LastStoppedAt}}
+    {{$statusPrefix = "Stopped"}}
+    {{$statusSuffix = "ago"}}
+    {{$relativeMode = "downtime"}}
+    {{$relativeSource = $server.LastStoppedAt.Format $isoFormat}}
+    {{$uptimeText = printf "Stopped %s ago" ($server.DowntimeString)}}
+{{else}}
+    {{$uptimeText = "Never started"}}
+{{end}}
+
 <div class="card server-card"
      data-server-id="{{$server.ID}}"
      data-target-url="/server/{{$server.ID}}">
     <div class="card-header">
-        <div class="server-name" data-server-name>{{$server.Name}}</div>
-        <div class="row gap-2">
-            <span class="status-pill {{$statusClass}}" data-status aria-label="{{$statusLabel}}" title="{{$statusLabel}}"></span>
-            <span class="status-pill {{if $server.Storming}}is-storm{{else}}is-clear{{end}}"
+        <div class="server-heading">
+            <div class="server-name" data-server-name>{{$server.Name}}</div>
+            <div class="server-status-row">
+                <span class="status-pill {{$statusClass}}" data-status aria-label="{{$statusLabel}}" title="{{$statusLabel}}">
+                    {{$statusLabel}}
+                </span>
+                <span class="server-uptime"
+                      data-status-uptime
+                      {{if $relativeMode}}data-relative-mode="{{$relativeMode}}"{{end}}
+                      {{if $relativeSource}}data-relative-source="{{$relativeSource}}"{{end}}
+                      {{if $statusPrefix}}data-relative-prefix="{{$statusPrefix}}"{{end}}
+                      {{if $statusSuffix}}data-relative-suffix="{{$statusSuffix}}"{{end}}>
+                    {{$uptimeText}}
+                </span>
+            </div>
+        </div>
+        <div class="server-flags">
+            <span class="status-pill storm-pill {{if $server.Storming}}is-storm{{else}}is-clear{{end}}"
                   data-storm
-                  {{if not (and $isRunning $server.Storming)}}style="display:none;"{{end}}></span>
+                  {{if not (and $isRunning $server.Storming)}}style="display:none;"{{end}}>
+                {{if $server.Storming}}Storm{{else}}Clear{{end}}
+            </span>
         </div>
     </div>
 
@@ -61,6 +128,25 @@
             <div class="info-inline-row">
                 <div class="info-label">Password</div>
                 <div class="info-value">{{if $server.Password}}Enabled{{else}}Disabled{{end}}</div>
+            </div>
+        </div>
+
+        <div class="resource-usage" data-resource-usage>
+            <div class="usage-row">
+                <div class="usage-label">CPU</div>
+                <div class="usage-meter" aria-hidden="true">
+                    <div class="usage-bar-fill cpu" data-cpu-bar style="width: {{if $usage}}{{printf "%.1f" $usage.CPUPercent}}{{else}}0{{end}}%;"></div>
+                </div>
+                <div class="usage-value" data-cpu-text>{{if $usage}}{{printf "%.0f%%" $usage.CPUPercent}}{{else}}—{{end}}</div>
+            </div>
+            <div class="usage-row">
+                <div class="usage-label">RAM</div>
+                <div class="usage-meter" aria-hidden="true">
+                    <div class="usage-bar-fill memory" data-memory-bar style="width: {{if $usage}}{{printf "%.1f" $usage.MemoryPercent}}{{else}}0{{end}}%;"></div>
+                </div>
+                <div class="usage-value" data-memory-text data-memory-bytes="{{if $usage}}{{$usage.MemoryRSSBytes}}{{else}}0{{end}}">
+                    {{if $usage}}{{printf "%.0f%%" $usage.MemoryPercent}}{{else}}—{{end}}
+                </div>
             </div>
         </div>
     </div>

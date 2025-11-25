@@ -355,6 +355,76 @@
       }
     },
 
+    // Relative time helpers for uptime/downtime badges
+    relativeTime: {
+      intervalId: null,
+      selector: '[data-relative-mode][data-relative-source]',
+
+      formatDuration(seconds) {
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          return '0m';
+        }
+        const day = 86400;
+        const hour = 3600;
+        const minute = 60;
+        if (seconds >= day) {
+          const days = Math.floor(seconds / day);
+          const hours = Math.floor((seconds % day) / hour);
+          return `${days}d ${hours.toString().padStart(2, '0')}h`;
+        }
+        if (seconds >= hour) {
+          const hours = Math.floor(seconds / hour);
+          const minutes = Math.floor((seconds % hour) / minute);
+          return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+        }
+        const minutes = Math.floor(seconds / minute);
+        if (minutes > 0) {
+          return `${minutes}m`;
+        }
+        return `${Math.max(1, Math.floor(seconds))}s`;
+      },
+
+      render(el) {
+        if (!el || !el.dataset) {
+          return;
+        }
+        const mode = el.dataset.relativeMode;
+        const source = el.dataset.relativeSource;
+        if (!mode || !source) {
+          return;
+        }
+        const parsed = Date.parse(source);
+        if (Number.isNaN(parsed)) {
+          return;
+        }
+        const diffSeconds = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+        const label = this.formatDuration(diffSeconds);
+        const prefix = (el.dataset.relativePrefix || '').trim();
+        const suffix = (el.dataset.relativeSuffix || '').trim();
+        let text = label;
+        if (prefix) {
+          text = `${prefix} ${text}`.trim();
+        }
+        if (suffix) {
+          text = `${text} ${suffix}`.trim();
+        }
+        el.textContent = text;
+      },
+
+      refresh(root) {
+        const scope = root && root.querySelectorAll ? root : document;
+        scope.querySelectorAll(this.selector).forEach((el) => this.render(el));
+      },
+
+      init() {
+        if (this.intervalId) {
+          return;
+        }
+        this.refresh();
+        this.intervalId = setInterval(() => this.refresh(), 60000);
+      }
+    },
+
     // WebSocket Management
     ws: {
       connect: function(forceReconnect) {
@@ -452,6 +522,67 @@
 
     // UI Update Helpers
     ui: {
+      formatBytes: function(bytes) {
+        const value = Number(bytes);
+        if (!Number.isFinite(value) || value <= 0) {
+          return '';
+        }
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let size = value;
+        let unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+          size /= 1024;
+          unitIndex++;
+        }
+        const precision = unitIndex <= 1 ? 0 : 1;
+        return `${size.toFixed(precision)} ${units[unitIndex]}`;
+      },
+
+      updateUsageBars: function(card, usage) {
+        if (!card) return;
+        const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
+        const cpuBar = card.querySelector('[data-cpu-bar]');
+        const cpuText = card.querySelector('[data-cpu-text]');
+        const memBar = card.querySelector('[data-memory-bar]');
+        const memText = card.querySelector('[data-memory-text]');
+
+        if (cpuBar) {
+          const pct = clamp(usage?.cpuPercent);
+          cpuBar.style.width = `${pct}%`;
+          if (pct === 0 && !usage?.cpuPercent) {
+            cpuBar.style.opacity = 0.45;
+          } else {
+            cpuBar.style.opacity = 1;
+          }
+          if (cpuText) {
+            cpuText.textContent = pct > 0 ? `${Math.round(pct)}%` : '—';
+          }
+        } else if (cpuText) {
+          const pct = clamp(usage?.cpuPercent);
+          cpuText.textContent = pct > 0 ? `${Math.round(pct)}%` : '—';
+        }
+
+        if (memBar || memText) {
+          const pct = clamp(usage?.memoryPercent);
+          const bytes = Number(usage?.memoryBytes) || 0;
+          if (memBar) {
+            memBar.style.width = `${pct}%`;
+            memBar.style.opacity = pct > 0 ? 1 : 0.45;
+          }
+          if (memText) {
+            let label = pct > 0 ? `${Math.round(pct)}%` : '—';
+            const pretty = this.formatBytes(bytes);
+            if (pretty) {
+              label = `${label} (${pretty})`;
+            }
+            memText.textContent = label;
+            if (pretty) {
+              memText.setAttribute('title', `${pct.toFixed(1)}% · ${pretty}`);
+            }
+          }
+        }
+      },
+
       updateManagerProgress: function(snapshot) {
         if (!snapshot || !Array.isArray(snapshot.components)) return;
 
@@ -489,38 +620,174 @@
 
         const statusBadge = card.querySelector('[data-status]');
         const stormBadge = card.querySelector('[data-storm]');
+        const uptimeEl = card.querySelector('[data-status-uptime]');
+
+        const summary = (() => {
+          const startedAt = typeof status.startedAt === 'string' ? status.startedAt : '';
+          const stoppedAt = typeof status.lastStoppedAt === 'string' ? status.lastStoppedAt : '';
+          const uptimeSeconds = Number.isFinite(status.uptimeSeconds) ? status.uptimeSeconds : 0;
+          const downtimeSeconds = Number.isFinite(status.downtimeSeconds) ? status.downtimeSeconds : 0;
+          const format = (secs) => SDSM.relativeTime.formatDuration(secs);
+          const base = {
+            className: 'is-stopped',
+            label: 'Stopped',
+            text: stoppedAt ? `Stopped ${format(downtimeSeconds)} ago` : 'Stopped',
+            mode: stoppedAt ? 'downtime' : '',
+            prefix: stoppedAt ? 'Stopped' : '',
+            suffix: stoppedAt ? 'ago' : '',
+            source: stoppedAt,
+            seconds: downtimeSeconds
+          };
+
+          if (status.lastError) {
+            return {
+              className: 'is-error',
+              label: 'Error',
+              text: stoppedAt ? `Crashed ${format(downtimeSeconds)} ago` : 'Crashed',
+              mode: stoppedAt ? 'downtime' : '',
+              prefix: stoppedAt ? 'Crashed' : '',
+              suffix: stoppedAt ? 'ago' : '',
+              source: stoppedAt,
+              seconds: downtimeSeconds
+            };
+          }
+
+          if (status.stopping) {
+            return {
+              className: 'is-stopping',
+              label: 'Stopping',
+              text: 'Stopping...',
+              mode: '',
+              prefix: '',
+              suffix: '',
+              source: '',
+              seconds: 0
+            };
+          }
+
+          if (status.starting) {
+            return {
+              className: 'is-starting',
+              label: 'Starting',
+              text: 'Starting...',
+              mode: '',
+              prefix: '',
+              suffix: '',
+              source: '',
+              seconds: 0
+            };
+          }
+
+          if (status.running && status.paused) {
+            return {
+              className: 'is-paused',
+              label: 'Paused',
+              text: `Paused · Up for ${format(uptimeSeconds)}`,
+              mode: startedAt ? 'uptime' : '',
+              prefix: 'Paused · Up for',
+              suffix: '',
+              source: startedAt,
+              seconds: uptimeSeconds
+            };
+          }
+
+          if (status.running) {
+            return {
+              className: 'is-running',
+              label: 'Running',
+              text: `Running for ${format(uptimeSeconds)}`,
+              mode: startedAt ? 'uptime' : '',
+              prefix: 'Running for',
+              suffix: '',
+              source: startedAt,
+              seconds: uptimeSeconds
+            };
+          }
+
+          if (stoppedAt) {
+            return base;
+          }
+
+          return {
+            className: 'is-stopped',
+            label: 'Stopped',
+            text: 'Never started',
+            mode: '',
+            prefix: '',
+            suffix: '',
+            source: '',
+            seconds: 0
+          };
+        })();
 
         if (statusBadge) {
-          const isRunning = !!status.running;
-          const isStarting = !!status.starting && isRunning;
-          const isPaused = !!status.paused && isRunning && !isStarting;
+          statusBadge.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting', 'is-stopping', 'is-error');
+          if (summary.className) {
+            statusBadge.classList.add(summary.className);
+          }
+          statusBadge.textContent = summary.label;
+          statusBadge.setAttribute('aria-label', `Status: ${summary.label}`);
+          statusBadge.setAttribute('title', summary.label);
+        }
 
-          statusBadge.classList.remove('status-running', 'status-idle', 'is-running', 'is-stopped', 'is-paused', 'is-starting');
-          statusBadge.classList.toggle('is-starting', isStarting);
-          statusBadge.classList.toggle('is-running', isRunning && !isPaused && !isStarting);
-          statusBadge.classList.toggle('is-paused', isRunning && isPaused);
-          statusBadge.classList.toggle('is-stopped', !isRunning);
-
-          const label = isStarting ? 'Starting' : (!isRunning ? 'Stopped' : (isPaused ? 'Paused' : 'Running'));
-          statusBadge.setAttribute('aria-label', `Status: ${label}`);
-          statusBadge.setAttribute('title', label);
+        if (uptimeEl) {
+          if (summary.mode && (summary.source || summary.seconds > 0)) {
+            let source = summary.source;
+            if (!source && summary.seconds > 0) {
+              const offset = Math.max(0, summary.seconds) * 1000;
+              source = new Date(Date.now() - offset).toISOString();
+            }
+            if (source) {
+              uptimeEl.dataset.relativeMode = summary.mode;
+              uptimeEl.dataset.relativeSource = source;
+              if (summary.prefix) {
+                uptimeEl.dataset.relativePrefix = summary.prefix;
+              } else {
+                delete uptimeEl.dataset.relativePrefix;
+              }
+              if (summary.suffix) {
+                uptimeEl.dataset.relativeSuffix = summary.suffix;
+              } else {
+                delete uptimeEl.dataset.relativeSuffix;
+              }
+              SDSM.relativeTime.render(uptimeEl);
+            } else {
+              delete uptimeEl.dataset.relativeMode;
+              delete uptimeEl.dataset.relativeSource;
+              delete uptimeEl.dataset.relativePrefix;
+              delete uptimeEl.dataset.relativeSuffix;
+              uptimeEl.textContent = summary.text;
+            }
+          } else {
+            delete uptimeEl.dataset.relativeMode;
+            delete uptimeEl.dataset.relativeSource;
+            delete uptimeEl.dataset.relativePrefix;
+            delete uptimeEl.dataset.relativeSuffix;
+            uptimeEl.textContent = summary.text;
+          }
         }
 
         if (stormBadge) {
           const isRunning = !!status.running;
           const isStorming = !!status.storming && isRunning;
+          stormBadge.classList.remove('is-storm', 'is-clear');
 
           if (isRunning && isStorming) {
             stormBadge.style.display = '';
-            stormBadge.classList.remove('is-storm', 'is-clear');
             stormBadge.classList.add('is-storm');
             stormBadge.setAttribute('aria-label', 'Storm');
             stormBadge.setAttribute('title', 'Storm');
-            stormBadge.textContent = '';
+            stormBadge.textContent = 'Storm';
           } else {
             stormBadge.style.display = 'none';
           }
         }
+
+        this.updateUsageBars(card, {
+          cpuPercent: status.cpuPercent,
+          memoryPercent: status.memoryPercent,
+          memoryBytes: status.memoryRSSBytes
+        });
 
         if (status.name !== undefined) {
           const nameEl = card.querySelector('[data-server-name]');
@@ -723,6 +990,20 @@
             button.textContent = button.dataset.originalText || button.textContent;
           }
         });
+      },
+
+      syncTlsFields: function(forcedState) {
+        const toggle = document.getElementById('tls_enabled');
+        const enabled = typeof forcedState === 'boolean' ? forcedState : (toggle ? toggle.checked : false);
+        const nodes = document.querySelectorAll('[data-requires-tls]');
+        nodes.forEach((node) => {
+          node.disabled = !enabled;
+          if (!enabled) {
+            node.setAttribute('aria-disabled', 'true');
+          } else {
+            node.removeAttribute('aria-disabled');
+          }
+        });
       }
     },
 
@@ -856,6 +1137,9 @@
       // Initialize keyboard shortcuts
       this.keyboard.init();
 
+      // Kick off relative time updates for uptime badges
+      this.relativeTime.init();
+
       const themeToggleBtn = document.getElementById('theme-toggle');
       if (themeToggleBtn && !themeToggleBtn.dataset.boundThemeToggle) {
         themeToggleBtn.dataset.boundThemeToggle = 'true';
@@ -912,8 +1196,136 @@
               }
             }
           }
+
+          this.relativeTime.refresh(e.target);
+
+          const swapRoot = e.target instanceof Element ? e.target : null;
+          if (swapRoot && (swapRoot.id === 'manager-settings-form' || swapRoot.querySelector('#manager-settings-form'))) {
+            this.forms.syncTlsFields();
+          }
         });
       }
+
+      document.body.addEventListener('click', (event) => {
+        const targetEl = event.target instanceof Element ? event.target : null;
+        if (!targetEl) return;
+
+        const pathPickerBtn = targetEl.closest('[data-path-picker]');
+        if (pathPickerBtn) {
+          if (pathPickerBtn.disabled) return;
+          event.preventDefault();
+          const targetId = pathPickerBtn.getAttribute('data-path-picker');
+          if (!targetId) return;
+          const input = document.getElementById(targetId);
+          if (!input) return;
+
+          const label = pathPickerBtn.getAttribute('data-picker-label') || 'Filesystem Path';
+          const placeholder = pathPickerBtn.getAttribute('data-picker-placeholder') || input.placeholder || '';
+          const currentValue = input.value || '';
+          const defaultValue = currentValue || placeholder || '';
+          const pickerDescription = pathPickerBtn.getAttribute('data-picker-description') || label;
+          const pickerMode = pathPickerBtn.getAttribute('data-picker-mode') || 'directory';
+          const confirmLabel = pathPickerBtn.getAttribute('data-picker-confirm') || 'Use Path';
+
+          const applyValue = (value) => {
+            if (value === null || typeof value === 'undefined') return;
+            const finalValue = value.toString().trim();
+            if (!finalValue) return;
+            input.value = finalValue;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+
+          const fallbackPrompt = () => {
+            const response = window.prompt(label, defaultValue);
+            if (response !== null) {
+              applyValue(response);
+            }
+          };
+
+          const hasPromptTemplate = !!document.getElementById('tpl-modal-prompt');
+          const canUseModalPrompt = Boolean(window.SDSM && SDSM.modal && typeof SDSM.modal.prompt === 'function' && hasPromptTemplate);
+          const hasPathPickerTemplate = !!document.getElementById('tpl-modal-path-picker');
+          const canUsePathPicker = Boolean(window.SDSM && SDSM.pathPicker && typeof SDSM.pathPicker.open === 'function' && hasPathPickerTemplate);
+
+          if (canUsePathPicker) {
+            SDSM.pathPicker.open({
+              title: pathPickerBtn.getAttribute('data-picker-title') || 'Select Path',
+              description: pickerDescription,
+              confirmText: confirmLabel,
+              initialPath: currentValue || placeholder,
+              mode: pickerMode
+            }).then((value) => {
+              if (typeof value === 'string' && value.trim() !== '') {
+                applyValue(value);
+              }
+            }).catch((err) => {
+              console.error('Path picker widget failed:', err);
+              if (canUseModalPrompt) {
+                SDSM.modal.prompt({
+                  title: 'Select Path',
+                  label,
+                  placeholder,
+                  defaultValue,
+                  confirmText: 'Apply'
+                }).then((value) => {
+                  if (value === null) return;
+                  applyValue(value);
+                }).catch((modalErr) => {
+                  console.error('Fallback prompt modal failed:', modalErr);
+                  fallbackPrompt();
+                });
+              } else {
+                fallbackPrompt();
+              }
+            });
+          } else if (canUseModalPrompt) {
+            SDSM.modal.prompt({
+              title: 'Select Path',
+              label,
+              placeholder,
+              defaultValue,
+              confirmText: 'Apply'
+            }).then((value) => {
+              if (value === null) return;
+              applyValue(value);
+            }).catch((err) => {
+              console.error('Path picker modal failed:', err);
+              fallbackPrompt();
+            });
+          } else {
+            fallbackPrompt();
+          }
+          return;
+        }
+
+        const pickerBtn = targetEl.closest('[data-show-picker]');
+        if (pickerBtn) {
+          if (pickerBtn.disabled) return;
+          event.preventDefault();
+          const targetId = pickerBtn.getAttribute('data-show-picker');
+          if (!targetId) return;
+          const input = document.getElementById(targetId);
+          if (!input) return;
+          try {
+            if (typeof input.showPicker === 'function') {
+              input.showPicker();
+            } else {
+              input.focus();
+            }
+          } catch (err) {
+            input.focus();
+          }
+        }
+      });
+
+      document.body.addEventListener('change', (event) => {
+        if (event.target && event.target.id === 'tls_enabled') {
+          this.forms.syncTlsFields(event.target.checked);
+        }
+      });
+
+      this.forms.syncTlsFields();
 
       document.body.addEventListener('click', (event) => {
         const renameBtn = event.target.closest('[data-action="rename-server"]');
@@ -937,6 +1349,10 @@
         }
         if (this.state.statsPollTimer) {
           clearInterval(this.state.statsPollTimer);
+        }
+        if (this.relativeTime && this.relativeTime.intervalId) {
+          clearInterval(this.relativeTime.intervalId);
+          this.relativeTime.intervalId = null;
         }
       });
     }

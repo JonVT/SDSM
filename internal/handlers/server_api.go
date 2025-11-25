@@ -28,6 +28,24 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 	if h == nil || h.hub == nil || s == nil {
 		return
 	}
+	formatTimestamp := func(ts *time.Time) string {
+		if ts == nil {
+			return ""
+		}
+		return ts.Format(time.RFC3339)
+	}
+	usage := s.ResourceUsage()
+	var cpuPercent, memPercent float64
+	var memRSS uint64
+	var usageSample string
+	if usage != nil {
+		cpuPercent = usage.CPUPercent
+		memPercent = usage.MemoryPercent
+		memRSS = usage.MemoryRSSBytes
+		if !usage.SampledAt.IsZero() {
+			usageSample = usage.SampledAt.Format(time.RFC3339)
+		}
+	}
 	payload := map[string]any{
 		"type":     "server_status",
 		"serverId": s.ID,
@@ -50,8 +68,22 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 				}
 				return 0
 			}(),
-			"paused":   s.Paused,
-			"storming": s.Storming,
+			"paused":        s.Paused,
+			"storming":      s.Storming,
+			"startedAt":     formatTimestamp(s.ServerStarted),
+			"lastStoppedAt": formatTimestamp(s.LastStoppedAt),
+			"uptimeSeconds": s.UptimeSeconds(),
+			"downtimeSeconds": func() int64 {
+				if s.LastStoppedAt == nil {
+					return 0
+				}
+				return int64(time.Since(*s.LastStoppedAt) / time.Second)
+			}(),
+			"lastError":         s.LastError,
+			"cpuPercent":        cpuPercent,
+			"memoryPercent":     memPercent,
+			"memoryRSSBytes":    memRSS,
+			"resourceSampledAt": usageSample,
 			// Port forwarding status (transient)
 			"autoPortForward":         s.AutoPortForward,
 			"useGameUPnP":             s.UseGameUPnP,
@@ -164,12 +196,15 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		return
 	}
 
-	var started, saved string
+	var started, saved, stopped string
 	if s.ServerStarted != nil {
 		started = s.ServerStarted.Format(time.RFC3339)
 	}
 	if s.ServerSaved != nil {
 		saved = s.ServerSaved.Format(time.RFC3339)
+	}
+	if s.LastStoppedAt != nil {
+		stopped = s.LastStoppedAt.Format(time.RFC3339)
 	}
 
 	liveClients := s.LiveClients()
@@ -251,18 +286,39 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 			}
 			return 0
 		}(),
-		"port":           s.Port,
-		"max_clients":    s.MaxClients,
-		"player_count":   len(liveClients),
-		"players":        players,
-		"last_log_line":  lastLine,
-		"server_started": started,
-		"server_saved":   saved,
-		"paused":         s.Paused,
-		"storming":       s.Storming,
-		"clients":        history,
-		"chat_messages":  chatMessages,
-		"banned":         banned,
+		"port":            s.Port,
+		"max_clients":     s.MaxClients,
+		"player_count":    len(liveClients),
+		"players":         players,
+		"last_log_line":   lastLine,
+		"server_started":  started,
+		"server_saved":    saved,
+		"last_stopped_at": stopped,
+		"uptime_seconds":  s.UptimeSeconds(),
+		"downtime_seconds": func() int64 {
+			if s.LastStoppedAt == nil {
+				return 0
+			}
+			return int64(time.Since(*s.LastStoppedAt) / time.Second)
+		}(),
+		"paused":        s.Paused,
+		"storming":      s.Storming,
+		"clients":       history,
+		"chat_messages": chatMessages,
+		"banned":        banned,
+	}
+	if usage := s.ResourceUsage(); usage != nil {
+		usagePayload := gin.H{
+			"cpu_percent":      usage.CPUPercent,
+			"memory_percent":   usage.MemoryPercent,
+			"memory_rss_bytes": usage.MemoryRSSBytes,
+			"disk_percent":     usage.DiskPercent,
+			"disk_usage_bytes": usage.DiskUsageBytes,
+		}
+		if !usage.SampledAt.IsZero() {
+			usagePayload["sampled_at"] = usage.SampledAt.Format(time.RFC3339)
+		}
+		resp["resource_usage"] = usagePayload
 	}
 	// Include update indicator
 	resp["update_needed"] = updateNeeded

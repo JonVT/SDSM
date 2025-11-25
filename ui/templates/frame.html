@@ -143,7 +143,7 @@
     </main>
     </div>
 
-    {{ template "modal_templates.html" . }}
+    {{ template "modal_templates" . }}
     {{ template "toast.html" . }}
     
     <script>
@@ -159,6 +159,7 @@
         });
     </script>
     <script src="/static/js/feather.min.js"></script>
+    <script src="/static/js/path_picker.js" defer></script>
     <script src="/static/js/modals.js" defer></script>
     <script src="/static/js/bug_report.js" defer></script>
 
@@ -171,12 +172,26 @@
     </script>
     {{end}}
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            feather.replace();
-        });
-        document.body.addEventListener('htmx:afterSwap', function() {
-            feather.replace();
-        });
+        (function () {
+            const runFeatherIcons = () => {
+                if (window.feather && typeof window.feather.replace === 'function') {
+                    window.feather.replace();
+                }
+            };
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', runFeatherIcons, { once: true });
+            } else {
+                runFeatherIcons();
+            }
+
+            const bindFeatherRefresh = (eventName) => {
+                document.addEventListener(eventName, runFeatherIcons);
+            };
+
+            bindFeatherRefresh('htmx:afterSwap');
+            bindFeatherRefresh('htmx:load');
+        })();
     </script>
     {{if eq .page "dashboard"}}
     <script>
