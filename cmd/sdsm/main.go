@@ -331,6 +331,21 @@ func setupRouter() *gin.Engine {
 		}
 	}
 
+	updateHandler := func(c *gin.Context) {
+		if c.GetString("role") != "admin" {
+			acceptsJSON := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json")
+			ajax := c.GetHeader("HX-Request") == "true" || strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
+			if acceptsJSON || ajax {
+				handlers.ToastError(c, "Permission Denied", "Admin privileges required.")
+				c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+			} else {
+				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+			}
+			return
+		}
+		managerHandlers.UpdatePOST(c)
+	}
+
 	// Load templates from embedded filesystem
 	funcMap := htmltmpl.FuncMap{
 		"add": func(a, b int) int { return a + b },
@@ -417,20 +432,20 @@ func setupRouter() *gin.Engine {
 		})
 	})
 
-	// Public Terms of Use page
-	r.GET("/terms", func(c *gin.Context) {
+	termsPageHandler := func(c *gin.Context) {
 		c.HTML(http.StatusOK, "terms.html", gin.H{"title": "Terms of Use", "appVersion": version.Version, "buildTime": version.String()})
-	})
-
-	// Public License page
-	r.GET("/license", func(c *gin.Context) {
+	}
+	licensePageHandler := func(c *gin.Context) {
 		c.HTML(http.StatusOK, "license.html", gin.H{"title": "License", "appVersion": version.Version, "buildTime": version.String()})
-	})
-
-	// Public Privacy page
-	r.GET("/privacy", func(c *gin.Context) {
+	}
+	privacyPageHandler := func(c *gin.Context) {
 		c.HTML(http.StatusOK, "privacy.html", gin.H{"title": "Privacy", "appVersion": version.Version, "buildTime": version.String()})
-	})
+	}
+
+	// Public policy pages
+	r.GET("/terms", termsPageHandler)
+	r.GET("/license", licensePageHandler)
+	r.GET("/privacy", privacyPageHandler)
 
 	// Authentication routes
 	auth := r.Group("/")
@@ -589,6 +604,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/manager/log/clear", managerHandlers.APIManagerLogClear)
 		api.GET("/manager/log/download", managerHandlers.APIManagerLogDownload)
 		api.GET("/paths/browse", managerHandlers.APIPathBrowser)
+		api.POST("/manager/update", updateHandler)
 
 		// Admin-only user management API
 		api.GET("/users", func(c *gin.Context) {
@@ -640,6 +656,28 @@ func setupRouter() *gin.Engine {
 			}
 			userHandlers.APIUsersSetAssignments(c)
 		})
+	}
+
+	managerPageHandler := func(c *gin.Context) {
+		if c.GetString("role") != "admin" {
+			c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+			return
+		}
+		managerHandlers.ManagerGET(c)
+	}
+	usersPageHandler := func(c *gin.Context) {
+		if c.GetString("role") != "admin" {
+			c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
+			return
+		}
+		userHandlers.UsersGET(c)
+	}
+	newServerPageHandler := func(c *gin.Context) {
+		if c.GetString("role") != "admin" {
+			c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
+			return
+		}
+		managerHandlers.NewServerGET(c)
 	}
 
 	// Protected web routes
@@ -696,13 +734,7 @@ func setupRouter() *gin.Engine {
 		// Help pages
 		protected.GET("/help/tokens", managerHandlers.TokensHelpGET)
 		protected.GET("/help/commands", managerHandlers.CommandsHelpGET)
-		protected.GET("/manager", func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
-				return
-			}
-			managerHandlers.ManagerGET(c)
-		})
+		protected.GET("/manager", managerPageHandler)
 		// Profile page for self-service password change
 		protected.GET("/profile", profileHandlers.ProfileGET)
 		// Debug endpoint to verify identity and role
@@ -713,28 +745,8 @@ func setupRouter() *gin.Engine {
 			})
 		})
 		// Admin-only user management
-		protected.GET("/users", func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
-				return
-			}
-			userHandlers.UsersGET(c)
-		})
+		protected.GET("/users", usersPageHandler)
 		// Users POST removed; UI uses /api endpoints.
-		updateHandler := func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				acceptsJSON := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json")
-				ajax := c.GetHeader("HX-Request") == "true" || strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
-				if acceptsJSON || ajax {
-					handlers.ToastError(c, "Permission Denied", "Admin privileges required.")
-					c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
-				} else {
-					c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required.", "username": c.GetString("username"), "role": c.GetString("role")})
-				}
-				return
-			}
-			managerHandlers.UpdatePOST(c)
-		}
 		protected.POST("/update", updateHandler)
 		protected.POST("/manager/update", updateHandler)
 		// Graceful shutdown with optional server stop based on detached mode
@@ -753,13 +765,7 @@ func setupRouter() *gin.Engine {
 		protected.GET("/logs/updates", managerHandlers.UpdateLogGET)
 		protected.GET("/logs/sdsm", managerHandlers.ManagerLogGET)
 		// Admin-only: server creation
-		protected.GET("/server/new", func(c *gin.Context) {
-			if c.GetString("role") != "admin" {
-				c.HTML(http.StatusForbidden, "error.html", gin.H{"error": "Admin privileges required."})
-				return
-			}
-			managerHandlers.NewServerGET(c)
-		})
+		protected.GET("/server/new", newServerPageHandler)
 		// /server/new POST removed; creation flows moved to /api/servers
 		protected.GET("/server/:server_id/status.json", managerHandlers.APIServerStatus)
 		protected.GET("/server/:server_id/clients", managerHandlers.ServerClientsGET)
@@ -768,6 +774,23 @@ func setupRouter() *gin.Engine {
 		// /server/:server_id POST removed; actions use /api/servers/:id/*
 		protected.GET("/server/:server_id/progress", managerHandlers.ServerProgressGET)
 		protected.GET("/server/:server_id/world-image", managerHandlers.ServerWorldImage)
+	}
+
+	pagesAPI := r.Group("/api/pages")
+	pagesAPI.Use(app.authService.RequireAuth())
+	pagesAPI.Use(middleware.EnsureRoleContext(app.userStore, app.manager.Log, "UI-Pages"))
+	{
+		pagesAPI.GET("/dashboard", managerHandlers.Dashboard)
+		pagesAPI.GET("/manager", managerPageHandler)
+		pagesAPI.GET("/users", usersPageHandler)
+		pagesAPI.GET("/profile", profileHandlers.ProfileGET)
+		pagesAPI.GET("/help/tokens", managerHandlers.TokensHelpGET)
+		pagesAPI.GET("/help/commands", managerHandlers.CommandsHelpGET)
+		pagesAPI.GET("/server/new", newServerPageHandler)
+		pagesAPI.GET("/server/:server_id", managerHandlers.ServerGET)
+		pagesAPI.GET("/license", licensePageHandler)
+		pagesAPI.GET("/privacy", privacyPageHandler)
+		pagesAPI.GET("/terms", termsPageHandler)
 	}
 
 	// WebSocket endpoint

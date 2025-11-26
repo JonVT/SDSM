@@ -6,7 +6,7 @@
             <p class="card-subtitle">Tune how SDSM runs, updates, and secures access.</p>
         </div>
     </div>
-    <form id="manager-settings-form" hx-post="/update" hx-target="#manager-settings-form" hx-swap="outerHTML" class="config-form flex flex-col gap-4">
+    <form id="manager-settings-form" hx-post="/api/manager/update" hx-target="#manager-settings-form" hx-swap="outerHTML" class="config-form flex flex-col gap-4">
         <div class="form-group">
             <label for="steam_id">Steam ID</label>
             <input type="text" id="steam_id" name="steam_id" value="{{ .steam_id }}" class="form-control">
@@ -29,7 +29,7 @@
             <label for="auto_port_forward_manager">Port Forward (UPnP)</label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="auto_port_forward_manager" name="auto_port_forward_manager" {{ if .auto_port_forward_manager }}checked{{ end }} class="form-checkbox">
-                <span class="text-secondary text-sm" aria-live="polite">Attempt UPnP/NAT-PMP port forwarding for the manager UI port. <strong>Only enable this if you know what you're doing.</strong></span>
+                <span class="text-secondary text-sm" aria-live="polite">Attempt UPnP/NAT-PMP port forwarding for the manager UI port. <br><strong>WARNING:</strong> Only enable this if you know what you're doing.</span>
             </div>
         </div>
         <div class="form-group">
@@ -73,7 +73,7 @@
         <div class="form-group">
             <label>Certificates</label>
             <div class="flex wrap gap-2">
-                <button type="button" class="btn btn-secondary" hx-post="/update" hx-vals='{"generate_tls_self_signed": "1"}' hx-target="#manager-settings-form" hx-swap="outerHTML" data-requires-tls="true" {{ if not .tls_enabled }}disabled{{ end }}>
+                <button type="button" class="btn btn-secondary" hx-post="/api/manager/update" hx-vals='{"generate_tls_self_signed": "1"}' hx-target="#manager-settings-form" hx-swap="outerHTML" data-requires-tls="true" {{ if not .tls_enabled }}disabled{{ end }}>
                     <i data-feather="shield"></i>
                     <span>Generate Cert</span>
                 </button>
@@ -113,6 +113,6 @@
             </button>
         </div>
     </form>
-    <p class="text-secondary text-sm">NOTE: Changes may restart SDSM so updates to TLS and ports can take effect.</p>
+    <p class="text-secondary text-sm"><strong>Note:</strong> Changes may restart SDSM so updates to TLS and ports can take effect.</p>
 </div>
 {{end}}

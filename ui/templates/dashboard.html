@@ -2,7 +2,7 @@
 {{define "page"}}dashboard{{end}}
 
 {{define "dashboard.html"}}
-<div data-page-title="Dashboard">
+<div data-page-title="Dashboard" data-dashboard-root>
     <div class="dashboard-stack">
     {{ $totalServers := len .servers }}
     {{ $activeServers := 0 }}
@@ -35,59 +35,30 @@
 
     {{ if eq .role "admin" }}
     <div class="admin-overview-grid grid gap-4 md:grid-cols-2">
-        {{ with .managerInfo }}
-        <div class="card manager-card">
+        <div class="card manager-card" data-manager-card>
             <div class="card-header">
                 <h2 class="card-title">Manager</h2>
-                {{ if .updating }}
-                    <span class="status-pill is-info">
-                        <span class="dot" aria-hidden="true"></span>
-                        <span>Updating…</span>
-                    </span>
-                {{ else }}
-                    {{ $total := .components_total }}
-                    {{ $healthy := .components_uptodate }}
-                    {{ if le $total 0 }}
-                        <span class="status-pill is-warning">
-                            <span class="dot" aria-hidden="true"></span>
-                            <span>Status Unknown</span>
-                        </span>
-                    {{ else if eq $healthy 0 }}
-                        <span class="status-pill is-critical">
-                            <span class="dot" aria-hidden="true"></span>
-                            <span>No software up to date</span>
-                            <span class="status-meta">{{$healthy}}/{{$total}} healthy</span>
-                        </span>
-                    {{ else if lt $healthy $total }}
-                        <span class="status-pill is-warning">
-                            <span class="dot" aria-hidden="true"></span>
-                            <span>Updates required</span>
-                            <span class="status-meta">{{$healthy}}/{{$total}} healthy</span>
-                        </span>
-                    {{ else }}
-                        <span class="status-pill is-healthy">
-                            <span class="dot" aria-hidden="true"></span>
-                            <span>All software up to date</span>
-                            <span class="status-meta">{{$healthy}}/{{$total}} healthy</span>
-                        </span>
-                    {{ end }}
-                {{ end }}
+                <span class="status-pill is-warning" data-manager-status-pill>
+                    <span class="dot" aria-hidden="true"></span>
+                    <span data-manager-status-text>Loading…</span>
+                    <span class="status-meta" data-manager-status-meta></span>
+                </span>
             </div>
             <div class="card-body">
                 <div class="manager-info-fields text-sm">
                     <div class="manager-info-field">
                         <div class="text-tertiary text-xs uppercase tracking-wide">Web UI Port</div>
-                        <div class="text-lg font-semibold">{{ .port }}</div>
+                        <div class="text-lg font-semibold" data-manager-port>—</div>
                     </div>
                     <div class="manager-info-field path-field">
                         <div class="text-tertiary text-xs uppercase tracking-wide">Root Path</div>
-                        <div class="font-mono break-words">{{ if .root_path }}{{ .root_path }}{{ else }}Not configured{{ end }}</div>
+                        <div class="font-mono break-words" data-manager-root>Loading…</div>
                     </div>
                 </div>
                 <div class="row gap-3 mt-4 flex-wrap">
                     <button type="button"
                             class="btn btn-danger"
-                            hx-post="/update"
+                            hx-post="/api/manager/update"
                             hx-vals='{"shutdown":"1"}'
                             hx-target="this"
                             hx-swap="none"
@@ -98,7 +69,7 @@
                     </button>
                     <button type="button"
                             class="btn btn-secondary"
-                            hx-post="/update"
+                            hx-post="/api/manager/update"
                             hx-vals='{"restart":"1"}'
                             hx-target="this"
                             hx-swap="none"
@@ -110,13 +81,11 @@
                 </div>
             </div>
         </div>
-        {{ end }}
 
-        {{ with .userStats }}
-        <div class="card users-card">
+        <div class="card users-card" data-user-card>
             <div class="card-header">
                 <h2 class="card-title">Users</h2>
-                <a href="/users" class="btn btn-info" hx-get="/users" hx-push-url="/users">
+                <a href="/users" class="btn btn-info" hx-get="/api/pages/users" hx-push-url="/users">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
                     <span>Manage Users</span>
                 </a>
@@ -125,23 +94,20 @@
                 <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
                         <div class="text-tertiary text-xs uppercase tracking-wide">Total</div>
-                        <div class="text-2xl font-semibold">{{ .total }}</div>
+                        <div class="text-2xl font-semibold" data-user-total>—</div>
                     </div>
                     <div>
                         <div class="text-tertiary text-xs uppercase tracking-wide">Admins</div>
-                        <div class="text-xl font-semibold">{{ .admins }}</div>
+                        <div class="text-xl font-semibold" data-user-admins>—</div>
                     </div>
                     <div>
                         <div class="text-tertiary text-xs uppercase tracking-wide">Operators</div>
-                        <div class="text-xl font-semibold">{{ .operators }}</div>
+                        <div class="text-xl font-semibold" data-user-operators>—</div>
                     </div>
                 </div>
-                {{ if eq .total 0 }}
-                <p class="text-tertiary text-sm mt-4">No users have been created yet.</p>
-                {{ end }}
+                <p class="text-tertiary text-sm mt-4 hidden" data-user-empty>No users have been created yet.</p>
             </div>
         </div>
-        {{ end }}
     </div>
     {{ end }}
 
@@ -177,7 +143,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
                     <span>Stop All Servers</span>
                 </button>
-                <a href="/server/new" class="btn btn-primary" hx-get="/server/new" hx-push-url="/server/new">
+                <a href="/server/new" class="btn btn-primary" hx-get="/api/pages/server/new" hx-push-url="/server/new">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     <span>New Server</span>
                 </a>
@@ -198,7 +164,7 @@
             <div class="text-center p-6">
                 <p class="text-tertiary">No servers have been configured.</p>
                 {{ if eq .role "admin" }}
-                <a href="/server/new" class="btn btn-primary mt-4" hx-get="/server/new" hx-push-url="/server/new">Create Your First Server</a>
+                <a href="/server/new" class="btn btn-primary mt-4" hx-get="/api/pages/server/new" hx-push-url="/server/new">Create Your First Server</a>
                 {{ end }}
             </div>
             {{ end }}

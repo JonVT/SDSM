@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sdsm/internal/manager"
 	"sdsm/internal/middleware"
 	"sdsm/internal/models"
 	"sdsm/internal/utils"
@@ -4036,6 +4037,43 @@ func (h *ManagerHandlers) APIManagerStatus(c *gin.Context) {
 		"manager_port_forward_active":        h.manager.ManagerPortForwardActive,
 		"manager_port_forward_external_port": h.manager.ManagerPortForwardExternalPort,
 	}
+
+	rootPath := ""
+	if h.manager.Paths != nil {
+		rootPath = h.manager.Paths.RootPath
+	}
+	resp["port"] = h.manager.Port
+	resp["root_path"] = rootPath
+	resp["updates_available"] = h.manager.UpdatesAvailable()
+
+	tracked := []manager.DeployType{
+		manager.DeployTypeRelease,
+		manager.DeployTypeBeta,
+		manager.DeployTypeBepInEx,
+		manager.DeployTypeLaunchPad,
+		manager.DeployTypeSCON,
+	}
+	componentsTotal := len(tracked)
+	componentsUpToDate := componentsTotal
+	outdated := make(map[manager.DeployType]struct{}, componentsTotal)
+	for _, comp := range h.manager.ComponentsNeedingUpdate() {
+		switch comp {
+		case manager.DeployTypeServers, manager.DeployTypeSteamCMD, manager.DeployTypeAll:
+			continue
+		}
+		outdated[comp] = struct{}{}
+	}
+	componentsOutdated := len(outdated)
+	if componentsOutdated > componentsTotal {
+		componentsOutdated = componentsTotal
+	}
+	componentsUpToDate = componentsTotal - componentsOutdated
+	if componentsUpToDate < 0 {
+		componentsUpToDate = 0
+	}
+	resp["components_total"] = componentsTotal
+	resp["components_outdated"] = componentsOutdated
+	resp["components_uptodate"] = componentsUpToDate
 	if strings.TrimSpace(h.manager.ManagerPortForwardLastError) != "" {
 		resp["manager_port_forward_last_error"] = h.manager.ManagerPortForwardLastError
 	}

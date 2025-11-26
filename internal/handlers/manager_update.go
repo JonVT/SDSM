@@ -44,10 +44,14 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		portStr := c.PostForm("port")
 		language := middleware.SanitizeString(c.PostForm("language"))
 		// Discord webhooks
+		dcManager := strings.TrimSpace(c.PostForm("discord_manager_webhook"))
 		dcDefault := strings.TrimSpace(c.PostForm("discord_default_webhook"))
 		// Notification prefs (booleans)
 		notifyEnableDeploy := c.PostForm("notify_enable_deploy") == "on"
 		notifyEnableServer := c.PostForm("notify_enable_server") == "on"
+		notifyDeployOnStarted := c.PostForm("notify_deploy_on_started") == "on"
+		notifyDeployOnCompleted := c.PostForm("notify_deploy_on_completed") == "on"
+		notifyDeployOnCompletedError := c.PostForm("notify_deploy_on_completed_error") == "on"
 		notifyOnStart := c.PostForm("notify_on_start") == "on"
 		notifyOnStopping := c.PostForm("notify_on_stopping") == "on"
 		notifyOnStopped := c.PostForm("notify_on_stopped") == "on"
@@ -117,6 +121,8 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 		startupUpdate := c.PostForm("start_update") == "on"
 
 		h.manager.UpdateConfig(steamID, rootPath, port, updateTime, startupUpdate)
+		h.manager.DiscordManagerWebhook = dcManager
+		h.manager.DiscordDefaultWebhook = dcDefault
 		h.manager.DetachedServers = detachedServers
 		// Only meaningful on Windows; allow user to toggle off to disable tray next start.
 		h.manager.TrayEnabled = trayEnabled
@@ -213,14 +219,12 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			}
 		}
 		h.manager.Save()
-		// Update Discord default webhook (bug report webhook is immutable)
-		if dcDefault != "" {
-			h.manager.DiscordDefaultWebhook = dcDefault
-			h.manager.Save()
-		}
 		// Apply notification preferences
 		h.manager.NotifyEnableDeploy = notifyEnableDeploy
 		h.manager.NotifyEnableServer = notifyEnableServer
+		h.manager.NotifyDeployOnStarted = notifyDeployOnStarted
+		h.manager.NotifyDeployOnCompleted = notifyDeployOnCompleted
+		h.manager.NotifyDeployOnCompletedError = notifyDeployOnCompletedError
 		h.manager.NotifyOnStart = notifyOnStart
 		h.manager.NotifyOnStopping = notifyOnStopping
 		h.manager.NotifyOnStopped = notifyOnStopped

@@ -157,13 +157,19 @@ type Manager struct {
 	SCONURLLinuxOverride   string `json:"scon_url_linux_override"`
 	SCONURLWindowsOverride string `json:"scon_url_windows_override"`
 	// Discord integration
-	// DiscordDefaultWebhook is the per-manager default webhook for notifications (servers, updates)
+	// DiscordManagerWebhook is used for manager-level events (deployments, alerts)
+	DiscordManagerWebhook string `json:"discord_manager_webhook"`
+	// DiscordDefaultWebhook is the per-manager default webhook for server notifications
 	DiscordDefaultWebhook string `json:"discord_default_webhook"`
 	// Notification preferences (manager defaults)
 	// NotifyEnableDeploy controls whether deployment/update notifications are sent to Discord.
 	NotifyEnableDeploy bool `json:"notify_enable_deploy"`
 	// NotifyEnableServer controls whether server lifecycle/update notifications are sent by default.
 	NotifyEnableServer bool `json:"notify_enable_server"`
+	// Deploy event toggles control whether individual manager events emit notifications
+	NotifyDeployOnStarted        bool `json:"notify_deploy_on_started"`
+	NotifyDeployOnCompleted      bool `json:"notify_deploy_on_completed"`
+	NotifyDeployOnCompletedError bool `json:"notify_deploy_on_completed_error"`
 	// Per-event defaults for server notifications. Servers can override these individually.
 	NotifyOnStart           bool `json:"notify_on_start"`
 	NotifyOnStopping        bool `json:"notify_on_stopping"`
@@ -318,15 +324,18 @@ func NewManagerWithConfig(configPath string) *Manager {
 		AllowIFrame:                false,
 		WindowsDiscoveryWMIEnabled: true,
 		// Default notification preferences
-		NotifyEnableDeploy:      true,
-		NotifyEnableServer:      true,
-		NotifyOnStart:           true,
-		NotifyOnStopping:        true,
-		NotifyOnStopped:         true,
-		NotifyOnRestart:         true,
-		NotifyOnUpdateStarted:   true,
-		NotifyOnUpdateCompleted: true,
-		NotifyOnUpdateFailed:    true,
+		NotifyEnableDeploy:           true,
+		NotifyEnableServer:           true,
+		NotifyDeployOnStarted:        true,
+		NotifyDeployOnCompleted:      true,
+		NotifyDeployOnCompletedError: true,
+		NotifyOnStart:                true,
+		NotifyOnStopping:             true,
+		NotifyOnStopped:              true,
+		NotifyOnRestart:              true,
+		NotifyOnUpdateStarted:        true,
+		NotifyOnUpdateCompleted:      true,
+		NotifyOnUpdateFailed:         true,
 		// Default templates
 		NotifyMsgStart:           "Server {{server_name}} started.",
 		NotifyMsgStopping:        "Server {{server_name}} stopping.",
@@ -1123,10 +1132,20 @@ func (m *Manager) load() (bool, error) {
 	m.SCONURLLinuxOverride = strings.TrimSpace(temp.SCONURLLinuxOverride)
 	m.SCONURLWindowsOverride = strings.TrimSpace(temp.SCONURLWindowsOverride)
 	// Discord integration fields
+	m.DiscordManagerWebhook = strings.TrimSpace(temp.DiscordManagerWebhook)
 	m.DiscordDefaultWebhook = strings.TrimSpace(temp.DiscordDefaultWebhook)
 	// Notification preferences (manager defaults)
 	m.NotifyEnableDeploy = temp.NotifyEnableDeploy
 	m.NotifyEnableServer = temp.NotifyEnableServer
+	if fieldExists["notify_deploy_on_started"] {
+		m.NotifyDeployOnStarted = temp.NotifyDeployOnStarted
+	}
+	if fieldExists["notify_deploy_on_completed"] {
+		m.NotifyDeployOnCompleted = temp.NotifyDeployOnCompleted
+	}
+	if fieldExists["notify_deploy_on_completed_error"] {
+		m.NotifyDeployOnCompletedError = temp.NotifyDeployOnCompletedError
+	}
 	m.NotifyOnStart = temp.NotifyOnStart
 	m.NotifyOnStopping = temp.NotifyOnStopping
 	m.NotifyOnStopped = temp.NotifyOnStopped

@@ -181,7 +181,7 @@
             {{end}}
             <a href="/server/{{$server.ID}}"
                class="btn btn-sm btn-secondary"
-               hx-get="/server/{{$server.ID}}"
+               hx-get="/api/pages/server/{{$server.ID}}"
                hx-push-url="/server/{{$server.ID}}">
                 Manage {{template "icon_arrow_right" .}}
             </a>

@@ -19,7 +19,11 @@ func (m *Manager) DiscordNotify(content string, embeds ...discord.Embed) {
 	if m == nil {
 		return
 	}
-	m.DiscordNotifyTo(strings.TrimSpace(m.DiscordDefaultWebhook), content, embeds...)
+	target := strings.TrimSpace(m.DiscordManagerWebhook)
+	if target == "" {
+		target = strings.TrimSpace(m.DiscordDefaultWebhook)
+	}
+	m.DiscordNotifyTo(target, content, embeds...)
 }
 
 // DiscordNotifyTo posts a message to the specified webhook. Best-effort.
@@ -69,6 +73,9 @@ func (m *Manager) notifyDeployStart(dt DeployType) {
 	if m == nil || !m.NotifyEnableDeploy || !m.deployNotificationsEnabled(dt) {
 		return
 	}
+	if !m.NotifyDeployOnStarted {
+		return
+	}
 	// Tokens: component, status, timestamp
 	tokens := map[string]string{
 		"component": string(dt),
@@ -91,6 +98,14 @@ func (m *Manager) notifyDeployComplete(dt DeployType, duration time.Duration, er
 	if m == nil || !m.NotifyEnableDeploy || !m.deployNotificationsEnabled(dt) {
 		return
 	}
+	isError := len(errs) > 0
+	if isError {
+		if !m.NotifyDeployOnCompletedError {
+			return
+		}
+	} else if !m.NotifyDeployOnCompleted {
+		return
+	}
 	durStr := duration.Truncate(time.Millisecond).String()
 	tokens := map[string]string{
 		"component": string(dt),
@@ -99,7 +114,7 @@ func (m *Manager) notifyDeployComplete(dt DeployType, duration time.Duration, er
 	}
 	var msg string
 	var colorHex string
-	if len(errs) > 0 {
+	if isError {
 		tokens["status"] = "completed-error"
 		tokens["errors"] = strings.Join(errs, "; ")
 		msg = renderTemplate(m.NotifyMsgDeployCompletedError, tokens)

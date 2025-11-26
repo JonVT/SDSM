@@ -348,7 +348,7 @@ func (h *ManagerHandlers) buildWorldSelectionDataForLanguage(language string) (
 	return worldIDs, worldDisplays, worldData
 }
 
-func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models.Server, username interface{}, errMsg string) {
+func (h *ManagerHandlers) serverStatusPayload(c *gin.Context, s *models.Server, username interface{}, errMsg string) gin.H {
 	// Refresh runtime flags so the template does not show stale state after restarts.
 	s.IsRunning()
 
@@ -470,6 +470,13 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 		payload["error"] = errMsg
 	}
 
+	payload["currentServerPath"] = fmt.Sprintf("server/%d", s.ID)
+
+	return payload
+}
+
+func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models.Server, username interface{}, errMsg string) {
+	payload := h.serverStatusPayload(c, s, username, errMsg)
 	c.HTML(status, "server_status.html", payload)
 }
 
@@ -823,82 +830,16 @@ func (h *ManagerHandlers) Dashboard(c *gin.Context) {
 		rootPath = h.manager.Paths.RootPath
 	}
 
-	componentsTotal := 0
-	componentsUpToDate := 0
-	componentsOutdated := 0
-	if h.manager != nil {
-		tracked := []manager.DeployType{
-			manager.DeployTypeRelease,
-			manager.DeployTypeBeta,
-			manager.DeployTypeBepInEx,
-			manager.DeployTypeLaunchPad,
-			manager.DeployTypeSCON,
-		}
-		componentsTotal = len(tracked)
-		componentsUpToDate = componentsTotal
-		outdated := make(map[manager.DeployType]struct{}, componentsTotal)
-		for _, comp := range h.manager.ComponentsNeedingUpdate() {
-			switch comp {
-			case manager.DeployTypeServers, manager.DeployTypeSteamCMD, manager.DeployTypeAll:
-				continue
-			}
-			outdated[comp] = struct{}{}
-		}
-		componentsOutdated = len(outdated)
-		if componentsOutdated > componentsTotal {
-			componentsOutdated = componentsTotal
-		}
-		componentsUpToDate = componentsTotal - componentsOutdated
-		if componentsUpToDate < 0 {
-			componentsUpToDate = 0
-		}
-	}
-	managerInfo := gin.H{
-		"port":                h.manager.Port,
-		"root_path":           rootPath,
-		"updating":            h.manager.IsUpdating(),
-		"updates_available":   h.manager.UpdatesAvailable(),
-		"components_total":    componentsTotal,
-		"components_outdated": componentsOutdated,
-		"components_uptodate": componentsUpToDate,
-	}
-
-	totalUsers := 0
-	adminUsers := 0
-	operatorUsers := 0
-	if h.userStore != nil {
-		users := h.userStore.Users()
-		totalUsers = len(users)
-		for _, u := range users {
-			switch u.Role {
-			case manager.RoleAdmin:
-				adminUsers++
-			case manager.RoleOperator:
-				operatorUsers++
-			}
-		}
-	}
-	userStats := gin.H{
-		"total":     totalUsers,
-		"admins":    adminUsers,
-		"operators": operatorUsers,
-	}
-	systemTelemetry := h.manager.SystemTelemetry()
-	systemHealth := fmt.Sprintf("%.0f%%", h.manager.SystemHealthPercent())
-
 	data := gin.H{
-		"servers":         servers,
-		"user":            user,
-		"username":        username,
-		"role":            role,
-		"buildTime":       h.manager.BuildTime(),
-		"active":          h.manager.IsActive(),
-		"managerInfo":     managerInfo,
-		"userStats":       userStats,
-		"systemTelemetry": systemTelemetry,
-		"systemHealth":    systemHealth,
-		"page":            "dashboard",
-		"title":           "Dashboard",
+		"servers":   servers,
+		"user":      user,
+		"username":  username,
+		"role":      role,
+		"buildTime": h.manager.BuildTime(),
+		"active":    h.manager.IsActive(),
+		"rootPath":  rootPath,
+		"page":      "dashboard",
+		"title":     "Dashboard",
 	}
 
 	// If this is an HTMX request, render only the content
@@ -953,9 +894,13 @@ func (h *ManagerHandlers) ManagerGET(c *gin.Context) {
 		"tls_enabled":                         h.manager.TLSEnabled,
 		"tls_cert":                            h.manager.TLSCertPath,
 		"tls_key":                             h.manager.TLSKeyPath,
+		"discord_manager_webhook":             h.manager.DiscordManagerWebhook,
 		"discord_default_webhook":             h.manager.DiscordDefaultWebhook,
 		"notify_enable_deploy":                h.manager.NotifyEnableDeploy,
 		"notify_enable_server":                h.manager.NotifyEnableServer,
+		"notify_deploy_on_started":            h.manager.NotifyDeployOnStarted,
+		"notify_deploy_on_completed":          h.manager.NotifyDeployOnCompleted,
+		"notify_deploy_on_completed_error":    h.manager.NotifyDeployOnCompletedError,
 		"notify_on_start":                     h.manager.NotifyOnStart,
 		"notify_on_stopping":                  h.manager.NotifyOnStopping,
 		"notify_on_stopped":                   h.manager.NotifyOnStopped,

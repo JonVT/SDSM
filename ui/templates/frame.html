@@ -20,6 +20,7 @@
     data-username="{{.username}}"
     data-role="{{.role}}"
     data-build-time="{{.buildTime}}"
+    data-page="{{.page}}"
 >
     <a href="#content-area" class="sr-only">Skip to main content</a>
 
@@ -35,16 +36,16 @@
         
         <nav class="nav-section">
             <div class="nav-section-title">Main</div>
-            <a href="/dashboard" class="nav-item{{if eq .page "dashboard"}} active{{end}}" data-target="/dashboard" hx-get="/dashboard" hx-push-url="/dashboard">
+            <a href="/dashboard" class="nav-item{{if eq .page "dashboard"}} active{{end}}" data-target="/dashboard" hx-get="/api/pages/dashboard" hx-push-url="/dashboard">
                 {{ template "icon_dashboard" . }}
                 <span>Dashboard</span>
             </a>
             {{ if eq .role "admin" }}
-            <a href="/manager" class="nav-item{{if eq .page "manager"}} active{{end}}" data-target="/manager" hx-get="/manager" hx-push-url="/manager">
+            <a href="/manager" class="nav-item{{if eq .page "manager"}} active{{end}}" data-target="/manager" hx-get="/api/pages/manager" hx-push-url="/manager">
                 {{ template "icon_manager" . }}
                 <span>Manager</span>
             </a>
-            <a href="/users" class="nav-item{{if eq .page "users"}} active{{end}}" data-target="/users" hx-get="/users" hx-push-url="/users">
+            <a href="/users" class="nav-item{{if eq .page "users"}} active{{end}}" data-target="/users" hx-get="/api/pages/users" hx-push-url="/users">
                 {{ template "icon_users" . }}
                 <span>Users</span>
             </a>
@@ -56,7 +57,7 @@
             <div class="nav-section-title row justify-between">
                 <span>Servers</span>
                 {{ if eq .role "admin" }}
-                <a href="/server/new" class="btn btn-ghost btn-icon" hx-get="/server/new" hx-push-url="/server/new" title="Create new server">
+                <a href="/server/new" class="btn btn-ghost btn-icon" hx-get="/api/pages/server/new" hx-push-url="/server/new" title="Create new server">
                     {{ template "icon_add" . }}
                 </a>
                 {{ end }}
@@ -65,7 +66,9 @@
                 {{if .servers}}
                 {{range .servers}}
                 {{- $serverPath := printf "server/%v" .ID -}}
-                <a href="/server/{{.ID}}" class="nav-item{{if eq $.page $serverPath}} active{{end}}" data-target="/server/{{.ID}}" hx-get="/server/{{.ID}}" hx-push-url="/server/{{.ID}}">
+                {{- $currentServer := $.currentServerPath -}}
+                {{- $isActive := or (eq $.page $serverPath) (and $currentServer (eq $currentServer $serverPath)) -}}
+                <a href="/server/{{.ID}}" class="nav-item{{if $isActive}} active{{end}}" data-target="/server/{{.ID}}" hx-get="/api/pages/server/{{.ID}}" hx-push-url="/server/{{.ID}}">
                     <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
                     </svg>

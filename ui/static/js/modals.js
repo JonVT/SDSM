@@ -256,6 +256,18 @@
                 cleanup(modal, prev, trapDisposer);
                 resolve();
             };
+
+            if (typeof opts.onRender === 'function') {
+                try {
+                    opts.onRender({
+                        modal,
+                        close: finish,
+                        confirmButton: okBtn
+                    });
+                } catch (err) {
+                    console.error('modal info onRender failed:', err);
+                }
+            }
             
             okBtn.addEventListener('click', finish);
             modal.addEventListener('click', e => {

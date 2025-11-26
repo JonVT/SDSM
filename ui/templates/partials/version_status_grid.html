@@ -5,162 +5,185 @@
         <span class="col-deployed">Deployed</span>
         <span class="col-latest">Latest</span>
         <span class="col-status">Status</span>
-        <span class="col-action">Action</span>
     </div>
 
     {{/* SteamCMD */}}
     {{ $steamOutdated := and .steamcmd_deployed (ne .steamcmd_deployed .steamcmd_latest) }}
-    <div class="versions-row" data-component="steamcmd">
+    <div class="versions-row" data-component="steamcmd" data-outdated="{{if $steamOutdated}}true{{else}}false{{end}}">
         <span class="col-component">SteamCMD</span>
         <span class="col-deployed">{{.steamcmd_deployed}}</span>
         <span class="col-latest">{{.steamcmd_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $steamOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $steamOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $steamOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $steamOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_steamcmd":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="steamcmd"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_steamcmd":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 
     {{/* Release */}}
     {{ $releaseOutdated := and .release_deployed (ne .release_deployed .release_latest) }}
-    <div class="versions-row" data-component="release">
+    <div class="versions-row" data-component="release" data-outdated="{{if $releaseOutdated}}true{{else}}false{{end}}">
         <span class="col-component">Release</span>
         <span class="col-deployed">{{.release_deployed}}</span>
         <span class="col-latest">{{.release_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $releaseOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $releaseOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $releaseOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $releaseOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_release":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="release"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_release":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 
     {{/* Beta */}}
     {{ $betaOutdated := and .beta_deployed (ne .beta_deployed .beta_latest) }}
-    <div class="versions-row" data-component="beta">
+    <div class="versions-row" data-component="beta" data-outdated="{{if $betaOutdated}}true{{else}}false{{end}}">
         <span class="col-component">Beta</span>
         <span class="col-deployed">{{.beta_deployed}}</span>
         <span class="col-latest">{{.beta_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $betaOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $betaOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $betaOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $betaOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_beta":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="beta"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_beta":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 
     {{/* BepInEx */}}
     {{ $bepOutdated := and .bepinex_deployed (ne .bepinex_deployed .bepinex_latest) }}
-    <div class="versions-row" data-component="bepinex">
+    <div class="versions-row" data-component="bepinex" data-outdated="{{if $bepOutdated}}true{{else}}false{{end}}">
         <span class="col-component">BepInEx</span>
         <span class="col-deployed">{{.bepinex_deployed}}</span>
         <span class="col-latest">{{.bepinex_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $bepOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $bepOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $bepOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $bepOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_bepinex":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="bepinex"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_bepinex":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 
     {{/* LaunchPad */}}
     {{ $lpOutdated := and .launchpad_deployed (ne .launchpad_deployed .launchpad_latest) }}
-    <div class="versions-row" data-component="launchpad">
+    <div class="versions-row" data-component="launchpad" data-outdated="{{if $lpOutdated}}true{{else}}false{{end}}">
         <span class="col-component">LaunchPad</span>
         <span class="col-deployed">{{.launchpad_deployed}}</span>
         <span class="col-latest">{{.launchpad_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $lpOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $lpOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $lpOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $lpOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_launchpad":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="launchpad"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_launchpad":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 
     {{/* SCON */}}
     {{ $sconOutdated := and .scon_deployed (ne .scon_deployed .scon_latest) }}
-    <div class="versions-row" data-component="scon">
+    <div class="versions-row" data-component="scon" data-outdated="{{if $sconOutdated}}true{{else}}false{{end}}">
         <span class="col-component">SCON</span>
         <span class="col-deployed">{{.scon_deployed}}</span>
         <span class="col-latest">{{.scon_latest}}</span>
         <span class="col-status">
-            <span class="status-pill {{if $sconOutdated}}status-outdated{{else}}status-ok{{end}}">
-                {{if $sconOutdated}}Update available{{else}}Up to date{{end}}
-            </span>
+            <div class="version-status-row">
+                {{if $sconOutdated}}
+                <span class="status-pill status-outdated">
+                    Update available
+                </span>
+                {{end}}
+                <button type="button"
+                    class="btn btn-min-sm version-action {{if $sconOutdated}}version-action--outdated{{else}}version-action--current{{end}}"
+                    hx-post="/api/manager/update"
+                        hx-vals='{"update_scon":"1"}'
+                        hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
+                        hx-swap="none"
+                        hx-trigger="click">
+                    <i data-feather="arrow-up-circle" aria-hidden="true"></i>
+                    <span>Update</span>
+                </button>
+            </div>
             <div class="progress-bar">
                 <div class="progress-fill" data-progress="scon"></div>
             </div>
-        </span>
-        <span class="col-action">
-            <button class="btn btn-ghost btn-min-sm"
-                    hx-post="/update"
-                    hx-vals='{"update_scon":"1"}'
-                    hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
-                    hx-swap="none"
-                    hx-trigger="click">
-                Update
-            </button>
         </span>
     </div>
 </div>

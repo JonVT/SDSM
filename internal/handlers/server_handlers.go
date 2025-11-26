@@ -38,16 +38,23 @@ func (h *ManagerHandlers) ServerGET(c *gin.Context) {
 		return
 	}
 
-	// Otherwise, render the full frame, which will then load the content.
-	c.HTML(http.StatusOK, "frame.html", gin.H{
-		"username":  username,
-		"role":      role,
-		"servers":   h.manager.Servers,
-		"buildTime": h.manager.BuildTime(),
-		"active":    h.manager.IsActive(),
-		"page":      "server/" + c.Param("server_id"),
-		"title":     s.Name,
-	})
+	// Otherwise, render the full frame with the server status payload embedded.
+	serverPayload := h.serverStatusPayload(c, s, username, "")
+	frameData := gin.H{
+		"username":          username,
+		"role":              role,
+		"servers":           h.manager.Servers,
+		"buildTime":         h.manager.BuildTime(),
+		"active":            h.manager.IsActive(),
+		"page":              "server_status",
+		"title":             s.Name,
+		"currentServerPath": serverPayload["currentServerPath"],
+	}
+	for key, value := range serverPayload {
+		frameData[key] = value
+	}
+
+	c.HTML(http.StatusOK, "frame.html", frameData)
 }
 
 // ServerPOST removed: legacy multi-action form handler replaced by distinct /api/servers/:id/* endpoints.

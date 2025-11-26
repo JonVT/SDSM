@@ -4,11 +4,11 @@
         <h2 class="card-title">Manager Control</h2>
     </div>
     <div class="card-body flex flex-wrap gap-4">
-        <button class="btn btn-danger" hx-post="/update" hx-vals='{"shutdown": "1"}' hx-confirm="Are you sure you want to shut down the manager?">
+        <button class="btn btn-danger" hx-post="/api/manager/update" hx-vals='{"shutdown": "1"}' hx-confirm="Are you sure you want to shut down the manager?">
             <i data-feather="power"></i>
             <span>Shutdown Manager</span>
         </button>
-        <button class="btn btn-secondary" hx-post="/update" hx-vals='{"restart": "1"}' hx-confirm="Are you sure you want to restart the manager?">
+        <button class="btn btn-secondary" hx-post="/api/manager/update" hx-vals='{"restart": "1"}' hx-confirm="Are you sure you want to restart the manager?">
             <i data-feather="refresh-cw"></i>
             <span>Restart Manager</span>
         </button>

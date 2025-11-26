@@ -22,7 +22,10 @@
       ws: null,
       healthTimer: null,
       healthLost: false,
-      statsPollTimer: null
+      statsPollTimer: null,
+      role: '',
+      username: '',
+      page: ''
     },
 
     // API helpers
@@ -593,23 +596,59 @@
           if (!row) return;
 
           const progressEl = row.querySelector(`.progress-fill[data-progress="${key}"]`);
-          const pill = row.querySelector('.status-pill');
+          const statusRow = row.querySelector('.version-status-row');
+          const isOutdated = (row.dataset.outdated || '').toLowerCase() === 'true';
+
+          const ensurePill = () => {
+            let pill = row.querySelector('.status-pill');
+            if (!pill && statusRow) {
+              pill = document.createElement('span');
+              pill.className = 'status-pill status-running';
+              statusRow.insertBefore(pill, statusRow.firstChild);
+            }
+            return pill;
+          };
+
+          const removePill = () => {
+            const pill = row.querySelector('.status-pill');
+            if (pill && !isOutdated) {
+              pill.remove();
+            }
+          };
 
           if (progressEl && typeof comp.percent === 'number') {
             const pct = Math.max(0, Math.min(100, comp.percent));
             progressEl.style.width = pct + '%';
           }
 
-          if (pill) {
-            pill.classList.remove('status-ok', 'status-outdated', 'status-running', 'status-error');
-            if (snapshot.updating && comp.running) {
+          if (snapshot.updating && comp.running) {
+            const pill = ensurePill();
+            if (pill) {
+              pill.classList.remove('status-outdated', 'status-error');
               pill.classList.add('status-running');
               pill.textContent = comp.stage || 'Updating...';
-            } else if (comp.error) {
+              pill.removeAttribute('title');
+            }
+          } else if (comp.error) {
+            const pill = ensurePill();
+            if (pill) {
+              pill.classList.remove('status-running', 'status-outdated');
               pill.classList.add('status-error');
               pill.textContent = 'Error';
-              pill.title = comp.error;
+              if (comp.error) {
+                pill.title = comp.error;
+              }
             }
+          } else if (isOutdated) {
+            const pill = ensurePill();
+            if (pill) {
+              pill.classList.remove('status-running', 'status-error');
+              pill.classList.add('status-outdated');
+              pill.textContent = 'Update available';
+              pill.removeAttribute('title');
+            }
+          } else {
+            removePill();
           }
         });
       },
@@ -967,6 +1006,220 @@
       }
     },
 
+    dashboard: {
+      root: null,
+      managerCard: null,
+      userCard: null,
+      refreshInterval: null,
+
+      init(scope) {
+        const container = this.findContainer(scope);
+        if (!container) {
+          if (!scope || scope === document) {
+            this.destroy();
+          }
+          return;
+        }
+        this.root = container;
+        this.managerCard = container.querySelector('[data-manager-card]');
+        this.userCard = container.querySelector('[data-user-card]');
+        this.refresh();
+        this.startPolling();
+      },
+
+      findContainer(scope) {
+        const searchRoot = scope instanceof Element ? scope : document;
+        if (searchRoot && searchRoot instanceof Element && searchRoot.hasAttribute('data-dashboard-root')) {
+          return searchRoot;
+        }
+        return searchRoot && searchRoot.querySelector ? searchRoot.querySelector('[data-dashboard-root]') : null;
+      },
+
+      startPolling() {
+        if (this.refreshInterval) {
+          clearInterval(this.refreshInterval);
+        }
+        if (!this.managerCard) {
+          this.refreshInterval = null;
+          return;
+        }
+        this.refreshInterval = window.setInterval(() => this.refreshManagerCard(), 30000);
+      },
+
+      destroy() {
+        if (this.refreshInterval) {
+          clearInterval(this.refreshInterval);
+          this.refreshInterval = null;
+        }
+        this.root = null;
+        this.managerCard = null;
+        this.userCard = null;
+      },
+
+      refresh() {
+        this.refreshManagerCard();
+        this.refreshUserStats();
+      },
+
+      refreshManagerCard() {
+        if (!this.managerCard) {
+          return;
+        }
+        SDSM.api.request('/api/manager/status', { method: 'GET' })
+          .then((data) => this.renderManagerCard(data))
+          .catch((err) => this.renderManagerError(err));
+      },
+
+      renderManagerCard(data = {}) {
+        if (!this.managerCard) {
+          return;
+        }
+        const portEl = this.managerCard.querySelector('[data-manager-port]');
+        const rootEl = this.managerCard.querySelector('[data-manager-root]');
+        const pill = this.managerCard.querySelector('[data-manager-status-pill]');
+        const statusText = this.managerCard.querySelector('[data-manager-status-text]') || pill;
+        const meta = this.managerCard.querySelector('[data-manager-status-meta]');
+
+        this.setText(portEl, data.port ? String(data.port) : '—');
+        const rootPath = (data.root_path || '').toString().trim();
+        this.setText(rootEl, rootPath || 'Not configured');
+
+        if (!pill) {
+          return;
+        }
+        const classes = ['is-info', 'is-warning', 'is-critical', 'is-healthy'];
+        pill.classList.remove(...classes);
+
+        const total = Number(data.components_total) || 0;
+        const healthy = Number(data.components_uptodate) || 0;
+        let pillClass = 'is-warning';
+        let label = 'Status Unknown';
+        let metaLabel = '';
+
+        if (data.updating) {
+          pillClass = 'is-info';
+          label = 'Updating…';
+        } else if (total <= 0) {
+          pillClass = 'is-warning';
+          label = 'Status Unknown';
+        } else if (healthy <= 0) {
+          pillClass = 'is-critical';
+          label = 'No software up to date';
+          metaLabel = `${healthy}/${total} healthy`;
+        } else if (healthy < total) {
+          pillClass = 'is-warning';
+          label = 'Updates required';
+          metaLabel = `${healthy}/${total} healthy`;
+        } else {
+          pillClass = 'is-healthy';
+          label = 'All software up to date';
+          metaLabel = `${healthy}/${total} healthy`;
+        }
+
+        pill.classList.add(pillClass);
+        this.setText(statusText, label);
+        if (meta) {
+          this.setText(meta, metaLabel);
+          this.toggleHidden(meta, !metaLabel);
+        }
+      },
+
+      renderManagerError(err) {
+        if (!this.managerCard) {
+          return;
+        }
+        console.error('Manager status failed:', err);
+        const pill = this.managerCard.querySelector('[data-manager-status-pill]');
+        const text = this.managerCard.querySelector('[data-manager-status-text]') || pill;
+        const meta = this.managerCard.querySelector('[data-manager-status-meta]');
+        if (pill) {
+          pill.classList.remove('is-info', 'is-warning', 'is-critical', 'is-healthy');
+          pill.classList.add('is-critical');
+        }
+        this.setText(text, 'Status unavailable');
+        if (meta) {
+          this.setText(meta, '');
+          this.toggleHidden(meta, true);
+        }
+      },
+
+      refreshUserStats() {
+        if (!this.userCard) {
+          return;
+        }
+        if ((SDSM.state.role || '').toLowerCase() !== 'admin') {
+          return;
+        }
+        SDSM.api.request('/api/users', { method: 'GET' })
+          .then((payload) => this.renderUserStats(payload))
+          .catch((err) => this.renderUserError(err));
+      },
+
+      renderUserStats(payload = {}) {
+        if (!this.userCard) {
+          return;
+        }
+        const users = Array.isArray(payload.users) ? payload.users : [];
+        let admins = 0;
+        let operators = 0;
+        users.forEach((user) => {
+          const role = (user.role || '').toString().toLowerCase();
+          if (role === 'admin') {
+            admins++;
+          } else if (role === 'operator') {
+            operators++;
+          }
+        });
+        const totalEl = this.userCard.querySelector('[data-user-total]');
+        const adminEl = this.userCard.querySelector('[data-user-admins]');
+        const operatorEl = this.userCard.querySelector('[data-user-operators]');
+        const emptyEl = this.userCard.querySelector('[data-user-empty]');
+
+        this.setText(totalEl, String(users.length));
+        this.setText(adminEl, String(admins));
+        this.setText(operatorEl, String(operators));
+        if (emptyEl) {
+          this.toggleHidden(emptyEl, users.length !== 0);
+        }
+      },
+
+      renderUserError(err) {
+        if (!this.userCard) {
+          return;
+        }
+        console.error('User stats failed:', err);
+        const totalEl = this.userCard.querySelector('[data-user-total]');
+        const adminEl = this.userCard.querySelector('[data-user-admins]');
+        const operatorEl = this.userCard.querySelector('[data-user-operators]');
+        const emptyEl = this.userCard.querySelector('[data-user-empty]');
+        this.setText(totalEl, '—');
+        this.setText(adminEl, '—');
+        this.setText(operatorEl, '—');
+        if (emptyEl) {
+          emptyEl.textContent = 'Unable to load user stats.';
+          this.toggleHidden(emptyEl, false);
+        }
+      },
+
+      setText(el, value) {
+        if (!el) {
+          return;
+        }
+        el.textContent = value;
+      },
+
+      toggleHidden(el, hidden) {
+        if (!el) {
+          return;
+        }
+        if (hidden) {
+          el.classList.add('hidden');
+        } else {
+          el.classList.remove('hidden');
+        }
+      }
+    },
+
     // Form Validation Helpers
     forms: {
       validateInput: function(input, minLength) {
@@ -1007,6 +1260,189 @@
       }
     },
 
+    // Token reference helpers
+    tokens: {
+      registry: {
+        'server-defaults': [
+          {
+            token: '{{server_name}}',
+            label: 'Server name',
+            description: 'The display name configured for the server.'
+          },
+          {
+            token: '{{event}}',
+            label: 'Event keyword',
+            description: 'Lifecycle keyword such as started, stopping, stopped, or restarting.'
+          },
+          {
+            token: '{{detail}}',
+            label: 'Detail text',
+            description: 'Additional context about the lifecycle event. May be empty.'
+          },
+          {
+            token: '{{timestamp}}',
+            label: 'Timestamp',
+            description: 'When the event occurred (UTC).'
+          }
+        ],
+        'deploy-events': [
+          {
+            token: '{{component}}',
+            label: 'Component',
+            description: 'Component being deployed (SteamCMD, Release, Beta, etc.).'
+          },
+          {
+            token: '{{status}}',
+            label: 'Status',
+            description: 'Deploy status keyword such as started, completed, error, or skipped.'
+          },
+          {
+            token: '{{duration}}',
+            label: 'Duration',
+            description: 'Human-friendly elapsed time for the deploy action.'
+          },
+          {
+            token: '{{errors}}',
+            label: 'Errors',
+            description: 'Condensed error summary (present only for error cases).'
+          },
+          {
+            token: '{{timestamp}}',
+            label: 'Timestamp',
+            description: 'When the deploy event occurred.'
+          }
+        ]
+      },
+
+      normalizeKey: function(context) {
+        return (context || '').toString().trim().toLowerCase();
+      },
+
+      getDefinitions: function(context) {
+        const key = this.normalizeKey(context);
+        return key ? (this.registry[key] || []) : [];
+      },
+
+      buildReferenceBody: function(defs, introText) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'token-reference';
+
+        const intro = document.createElement('p');
+        intro.className = 'token-reference-intro';
+        intro.textContent = introText || 'Click a token to copy it to your clipboard.';
+        wrapper.appendChild(intro);
+
+        const grid = document.createElement('div');
+        grid.className = 'token-reference-grid';
+
+        defs.forEach((def) => {
+          const row = document.createElement('div');
+          row.className = 'token-reference-row';
+
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'token-chip';
+          chip.textContent = def.token;
+          chip.setAttribute('data-token-value', def.token);
+          chip.setAttribute('aria-label', `Copy ${def.token}`);
+
+          const details = document.createElement('div');
+          details.className = 'token-reference-details';
+
+          const label = document.createElement('div');
+          label.className = 'token-reference-label';
+          label.textContent = def.label || def.token;
+          details.appendChild(label);
+
+          if (def.description) {
+            const desc = document.createElement('p');
+            desc.className = 'token-reference-desc';
+            desc.textContent = def.description;
+            details.appendChild(desc);
+          }
+
+          row.appendChild(chip);
+          row.appendChild(details);
+          grid.appendChild(row);
+        });
+
+        wrapper.appendChild(grid);
+        return wrapper;
+      },
+
+      copyToken: function(token) {
+        if (!token) {
+          return Promise.resolve();
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          return navigator.clipboard.writeText(token);
+        }
+        return new Promise((resolve, reject) => {
+          try {
+            const textarea = document.createElement('textarea');
+            textarea.value = token;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const success = document.execCommand('copy');
+            document.body.removeChild(textarea);
+            if (!success) {
+              reject(new Error('Copy command was rejected.'));
+            } else {
+              resolve();
+            }
+          } catch (err) {
+            reject(err);
+          }
+        });
+      },
+
+      showReference: function(context, options = {}) {
+        const defs = this.getDefinitions(context || 'server-defaults');
+        if (!defs.length) {
+          console.warn('No token definitions found for context:', context);
+          return;
+        }
+
+        const body = this.buildReferenceBody(defs, options.intro);
+        const title = options.title || 'Supported Tokens';
+        const modalFn = SDSM.modal && typeof SDSM.modal.info === 'function' ? SDSM.modal.info : null;
+
+        if (!modalFn) {
+          const fallbackList = defs.map((def) => `${def.token} — ${def.description || def.label || ''}`).join('\n');
+          window.alert(`${title}\n\n${fallbackList}`.trim());
+          return;
+        }
+
+        modalFn({
+          title,
+          body,
+          buttonText: options.buttonText || 'Done',
+          onRender: ({ close }) => {
+            body.querySelectorAll('[data-token-value]').forEach((btn) => {
+              btn.addEventListener('click', () => {
+                const value = btn.getAttribute('data-token-value');
+                if (!value) return;
+                this.copyToken(value).then(() => {
+                  if (window.showToast) {
+                    window.showToast('Copied', `${value} copied to clipboard.`, 'success');
+                  }
+                  close();
+                }).catch((err) => {
+                  console.error('Failed to copy token:', err);
+                  if (window.showToast) {
+                    window.showToast('Copy failed', 'Unable to copy token to clipboard.', 'danger');
+                  }
+                });
+              });
+            });
+          }
+        });
+      }
+    },
+
     // Keyboard Shortcuts
     keyboard: {
       init: function() {
@@ -1034,6 +1470,406 @@
             }
           }
         });
+      }
+    },
+
+    // Collapsible sections with persisted state
+    collapses: {
+      storagePrefix: 'sdsm-collapse-',
+
+      init: function(root) {
+        const scope = root instanceof Element ? root : document;
+        const sections = Array.from(scope.querySelectorAll('[data-collapse-id]'));
+        if (scope instanceof Element && scope.matches('[data-collapse-id]')) {
+          sections.push(scope);
+        }
+        sections.forEach((details) => {
+          if (!(details instanceof Element) || details.tagName !== 'DETAILS') {
+            return;
+          }
+          this.restore(details);
+          if (details.dataset.collapseBound === 'true') {
+            this.update(details);
+            return;
+          }
+          details.dataset.collapseBound = 'true';
+          details.addEventListener('toggle', () => {
+            this.persist(details);
+            this.update(details);
+          });
+          this.update(details);
+        });
+      },
+
+      key: function(details) {
+        const id = details?.dataset?.collapseId;
+        return id ? `${this.storagePrefix}${id}` : null;
+      },
+
+      restore: function(details) {
+        const key = this.key(details);
+        if (!key) return;
+        try {
+          const stored = localStorage.getItem(key);
+          if (stored === 'open') {
+            details.open = true;
+          } else if (stored === 'closed') {
+            details.open = false;
+          }
+        } catch (_) {
+          // ignore storage errors
+        }
+      },
+
+      persist: function(details) {
+        const key = this.key(details);
+        if (!key) return;
+        try {
+          localStorage.setItem(key, details.open ? 'open' : 'closed');
+        } catch (_) {
+          // ignore storage errors
+        }
+      },
+
+      update: function(details) {
+        const summary = details.querySelector('summary');
+        if (!summary) return;
+        summary.setAttribute('aria-expanded', details.open ? 'true' : 'false');
+
+        const icon = summary.querySelector('[data-collapse-icon]');
+        if (icon) {
+          icon.classList.toggle('is-open', details.open);
+        }
+      }
+    },
+
+    // Manager logs card
+    managerLogs: {
+      tailInterval: 4000,
+      maxBuffer: 500000,
+      instances: new WeakMap(),
+
+      init: function(root) {
+        const scope = root instanceof Element ? root : document;
+        const cards = scope.querySelectorAll('[data-manager-logs]');
+        cards.forEach((card) => {
+          if (card && card.isConnected) {
+            this.mount(card);
+          }
+        });
+      },
+
+      mount: function(card) {
+        if (!card || this.instances.has(card)) {
+          return;
+        }
+        const state = {
+          card,
+          tabs: card.querySelector('[data-log-tabs]'),
+          empty: card.querySelector('[data-log-empty]'),
+          view: card.querySelector('[data-log-view]'),
+          status: card.querySelector('[data-log-status]'),
+          refresh: card.querySelector('[data-log-refresh]'),
+          activeLog: null,
+          offset: -1,
+          pollTimer: null,
+          tailController: null,
+          autoScroll: true,
+          buffer: '',
+          loadingList: false,
+          hadError: false,
+          lastSize: 0,
+        };
+        this.instances.set(card, state);
+        this.bind(card, state);
+        this.fetchList(card, state);
+      },
+
+      bind: function(card, state) {
+        if (state.tabs) {
+          state.tabs.addEventListener('click', (event) => {
+            const tab = event.target.closest('[data-log-file]');
+            if (!tab) return;
+            const file = tab.dataset.logFile;
+            if (file) {
+              SDSM.managerLogs.activate(card, state, file);
+            }
+          });
+        }
+        if (state.refresh) {
+          state.refresh.addEventListener('click', () => {
+            SDSM.managerLogs.fetchList(card, state, { force: true });
+          });
+        }
+        if (state.view) {
+          state.view.addEventListener('scroll', () => {
+            if (!state.view) return;
+            const distance = state.view.scrollHeight - state.view.clientHeight - state.view.scrollTop;
+            state.autoScroll = distance < 24;
+          });
+        }
+      },
+
+      destroy: function(card) {
+        const state = this.instances.get(card);
+        if (!state) return;
+        this.clearTimers(state);
+        this.instances.delete(card);
+      },
+
+      clearTimers: function(state) {
+        if (state.pollTimer) {
+          clearTimeout(state.pollTimer);
+          state.pollTimer = null;
+        }
+        if (state.tailController) {
+          state.tailController.abort();
+          state.tailController = null;
+        }
+      },
+
+      fetchList: function(card, state, options = {}) {
+        if (!card.isConnected) {
+          this.destroy(card);
+          return;
+        }
+        if (state.loadingList && !options.force) {
+          return;
+        }
+        state.loadingList = true;
+        if (state.empty) {
+          state.empty.textContent = 'Loading log list…';
+          state.empty.classList.remove('hidden');
+        }
+        fetch('/api/manager/logs', {
+          method: 'GET',
+          headers: { Accept: 'application/json', 'HX-Request': 'true' },
+          credentials: 'same-origin'
+        })
+        .then((resp) => {
+          if (resp.status === 403) {
+            throw new Error('Admin access required to read logs.');
+          }
+          if (!resp.ok) {
+            throw new Error('Unable to load log list.');
+          }
+          return resp.json();
+        })
+        .then((payload) => {
+          if (!card.isConnected) {
+            this.destroy(card);
+            return;
+          }
+          const files = Array.isArray(payload.files) ? payload.files : [];
+          this.renderTabs(card, state, files);
+        })
+        .catch((err) => {
+          this.showListError(state, err);
+        })
+        .finally(() => {
+          state.loadingList = false;
+        });
+      },
+
+      showListError: function(state, error) {
+        console.error('Manager log list failed:', error);
+        if (state.empty) {
+          state.empty.textContent = error && error.message ? error.message : 'Unable to load logs.';
+          state.empty.classList.remove('hidden');
+        }
+        if (state.view && !state.view.textContent.trim()) {
+          state.view.textContent = 'Select a log to stream its output.';
+        }
+      },
+
+      renderTabs: function(card, state, files) {
+        if (!state.tabs) return;
+        state.tabs.innerHTML = '';
+        if (!files.length) {
+          if (state.empty) {
+            state.empty.textContent = 'No log files detected.';
+            state.empty.classList.remove('hidden');
+          }
+          this.clearTimers(state);
+          state.activeLog = null;
+          state.buffer = '';
+          if (state.view) {
+            state.view.textContent = 'No log data available.';
+          }
+          this.updateStatus(state);
+          return;
+        }
+        if (state.empty) {
+          state.empty.classList.add('hidden');
+        }
+        const fragment = document.createDocumentFragment();
+        files.forEach((file) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'tab';
+          btn.textContent = file;
+          btn.dataset.logFile = file;
+          btn.setAttribute('role', 'tab');
+          btn.setAttribute('aria-selected', 'false');
+          fragment.appendChild(btn);
+        });
+        state.tabs.appendChild(fragment);
+        const desired = state.activeLog && files.includes(state.activeLog) ? state.activeLog : files[0];
+        this.activate(card, state, desired, { force: true });
+      },
+
+      activate: function(card, state, logFile, options = {}) {
+        if (!logFile || (!options.force && state.activeLog === logFile)) {
+          return;
+        }
+        state.activeLog = logFile;
+        state.offset = -1;
+        state.buffer = '';
+        state.hadError = false;
+        this.clearTimers(state);
+        this.updateTabs(state);
+        if (state.view) {
+          state.view.textContent = 'Connecting to log…';
+        }
+        this.updateStatus(state, { pending: true });
+        this.pollTail(card, state);
+      },
+
+      updateTabs: function(state) {
+        if (!state.tabs) return;
+        const buttons = state.tabs.querySelectorAll('[data-log-file]');
+        buttons.forEach((btn) => {
+          const isActive = btn.dataset.logFile === state.activeLog;
+          btn.classList.toggle('active', isActive);
+          btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+      },
+
+      pollTail: function(card, state) {
+        if (!state.activeLog) {
+          return;
+        }
+        if (!card.isConnected) {
+          this.destroy(card);
+          return;
+        }
+        if (state.tailController) {
+          state.tailController.abort();
+        }
+        const controller = new AbortController();
+        state.tailController = controller;
+        const params = new URLSearchParams({
+          name: state.activeLog,
+          offset: String(typeof state.offset === 'number' ? state.offset : -1),
+          back: '8192',
+          max: '65536'
+        });
+        fetch(`/api/manager/log/tail?${params.toString()}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json', 'HX-Request': 'true' },
+          credentials: 'same-origin',
+          signal: controller.signal
+        })
+        .then((resp) => {
+          if (!resp.ok) {
+            throw new Error('Unable to tail log.');
+          }
+          return resp.json();
+        })
+        .then((payload) => {
+          this.handleTailSuccess(state, payload);
+          this.scheduleNext(card, state, this.tailInterval);
+        })
+        .catch((err) => {
+          if (err.name === 'AbortError') {
+            return;
+          }
+          this.handleTailError(state, err);
+          this.scheduleNext(card, state, this.tailInterval * 1.5);
+        })
+        .finally(() => {
+          state.tailController = null;
+        });
+      },
+
+      scheduleNext: function(card, state, delay) {
+        if (!card.isConnected || !state.activeLog) {
+          this.destroy(card);
+          return;
+        }
+        const wait = Number.isFinite(delay) ? Math.max(1200, delay) : this.tailInterval;
+        state.pollTimer = window.setTimeout(() => {
+          state.pollTimer = null;
+          this.pollTail(card, state);
+        }, wait);
+      },
+
+      handleTailSuccess: function(state, payload) {
+        if (!payload) return;
+        if (payload.reset) {
+          state.buffer = '';
+        }
+        if (typeof payload.offset === 'number') {
+          state.offset = payload.offset;
+        }
+        if (typeof payload.size === 'number') {
+          state.lastSize = payload.size;
+        }
+        const chunk = typeof payload.data === 'string' ? payload.data : '';
+        this.appendChunk(state, chunk, payload.reset);
+        this.updateStatus(state);
+        state.hadError = false;
+      },
+
+      handleTailError: function(state, error) {
+        console.error('Manager log tail failed:', error);
+        if (!state.hadError && window.showToast) {
+          window.showToast('Logs', error && error.message ? error.message : 'Unable to tail log.', 'danger');
+        }
+        state.hadError = true;
+        if (state.status) {
+          state.status.textContent = error && error.message ? error.message : 'Unable to tail log.';
+        }
+      },
+
+      appendChunk: function(state, chunk, reset) {
+        if (!state.view) return;
+        if (reset) {
+          state.buffer = '';
+        }
+        if (chunk) {
+          const normalized = chunk.replace(/\r\n/g, '\n');
+          state.buffer = (state.buffer || '') + normalized;
+          if (state.buffer.length > this.maxBuffer) {
+            state.buffer = state.buffer.slice(state.buffer.length - this.maxBuffer);
+          }
+        }
+        if (!state.buffer) {
+          state.view.textContent = 'Waiting for log data…';
+          return;
+        }
+        const stick = state.autoScroll || (state.view.scrollHeight - state.view.clientHeight - state.view.scrollTop < 24);
+        state.view.textContent = state.buffer;
+        if (stick) {
+          state.view.scrollTop = state.view.scrollHeight;
+        }
+      },
+
+      updateStatus: function(state, opts = {}) {
+        if (!state.status) return;
+        if (!state.activeLog) {
+          state.status.textContent = '';
+          return;
+        }
+        if (opts.pending) {
+          state.status.textContent = `Connecting to ${state.activeLog}…`;
+          return;
+        }
+        const sizeLabel = typeof state.lastSize === 'number' && state.lastSize >= 0
+          ? (SDSM.ui && typeof SDSM.ui.formatBytes === 'function' ? SDSM.ui.formatBytes(state.lastSize) : `${state.lastSize} bytes`)
+          : 'Size unknown';
+        const timestamp = new Date().toLocaleTimeString();
+        state.status.textContent = `Streaming ${state.activeLog} · ${sizeLabel} · Updated ${timestamp}`;
       }
     },
 
@@ -1134,11 +1970,20 @@
     },
 
     onReady: function() {
+      const body = document.body;
+      if (body && body.dataset) {
+        this.state.role = body.dataset.role || this.state.role;
+        this.state.username = body.dataset.username || this.state.username;
+        this.state.page = body.dataset.page || this.state.page;
+      }
+
       // Initialize keyboard shortcuts
       this.keyboard.init();
 
       // Kick off relative time updates for uptime badges
       this.relativeTime.init();
+
+      this.dashboard.init();
 
       const themeToggleBtn = document.getElementById('theme-toggle');
       if (themeToggleBtn && !themeToggleBtn.dataset.boundThemeToggle) {
@@ -1199,9 +2044,18 @@
 
           this.relativeTime.refresh(e.target);
 
+          if (e.target) {
+            this.collapses.init(e.target);
+            this.managerLogs.init(e.target);
+          }
+
           const swapRoot = e.target instanceof Element ? e.target : null;
           if (swapRoot && (swapRoot.id === 'manager-settings-form' || swapRoot.querySelector('#manager-settings-form'))) {
             this.forms.syncTlsFields();
+          }
+
+          if (swapRoot) {
+            this.dashboard.init(swapRoot);
           }
         });
       }
@@ -1299,6 +2153,18 @@
           return;
         }
 
+        const tokenTrigger = targetEl.closest('[data-token-popup]');
+        if (tokenTrigger) {
+          event.preventDefault();
+          const context = tokenTrigger.getAttribute('data-token-popup') || 'server-defaults';
+          const title = tokenTrigger.getAttribute('data-token-title') || 'Supported Tokens';
+          const intro = tokenTrigger.getAttribute('data-token-intro') || 'Click a token to copy it to your clipboard.';
+          if (SDSM.tokens && typeof SDSM.tokens.showReference === 'function') {
+            SDSM.tokens.showReference(context, { title, intro, buttonText: tokenTrigger.getAttribute('data-token-button') || 'Close' });
+          }
+          return;
+        }
+
         const pickerBtn = targetEl.closest('[data-show-picker]');
         if (pickerBtn) {
           if (pickerBtn.disabled) return;
@@ -1327,6 +2193,9 @@
 
       this.forms.syncTlsFields();
 
+      this.collapses.init();
+      this.managerLogs.init();
+
       document.body.addEventListener('click', (event) => {
         const renameBtn = event.target.closest('[data-action="rename-server"]');
         if (!renameBtn) {
@@ -1353,6 +2222,9 @@
         if (this.relativeTime && this.relativeTime.intervalId) {
           clearInterval(this.relativeTime.intervalId);
           this.relativeTime.intervalId = null;
+        }
+        if (this.dashboard) {
+          this.dashboard.destroy();
         }
       });
     }
