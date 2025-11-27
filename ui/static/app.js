@@ -596,59 +596,36 @@
           if (!row) return;
 
           const progressEl = row.querySelector(`.progress-fill[data-progress="${key}"]`);
-          const statusRow = row.querySelector('.version-status-row');
+          const statusLabel = row.querySelector('[data-progress-label]');
           const isOutdated = (row.dataset.outdated || '').toLowerCase() === 'true';
-
-          const ensurePill = () => {
-            let pill = row.querySelector('.status-pill');
-            if (!pill && statusRow) {
-              pill = document.createElement('span');
-              pill.className = 'status-pill status-running';
-              statusRow.insertBefore(pill, statusRow.firstChild);
-            }
-            return pill;
-          };
-
-          const removePill = () => {
-            const pill = row.querySelector('.status-pill');
-            if (pill && !isOutdated) {
-              pill.remove();
-            }
-          };
 
           if (progressEl && typeof comp.percent === 'number') {
             const pct = Math.max(0, Math.min(100, comp.percent));
             progressEl.style.width = pct + '%';
           }
 
+          if (!statusLabel) {
+            return;
+          }
+
+          const updateLabel = (state, text, title) => {
+            statusLabel.dataset.state = state;
+            statusLabel.textContent = text;
+            if (title) {
+              statusLabel.title = title;
+            } else {
+              statusLabel.removeAttribute('title');
+            }
+          };
+
           if (snapshot.updating && comp.running) {
-            const pill = ensurePill();
-            if (pill) {
-              pill.classList.remove('status-outdated', 'status-error');
-              pill.classList.add('status-running');
-              pill.textContent = comp.stage || 'Updating...';
-              pill.removeAttribute('title');
-            }
+            updateLabel('running', comp.stage || 'Updating...', '');
           } else if (comp.error) {
-            const pill = ensurePill();
-            if (pill) {
-              pill.classList.remove('status-running', 'status-outdated');
-              pill.classList.add('status-error');
-              pill.textContent = 'Error';
-              if (comp.error) {
-                pill.title = comp.error;
-              }
-            }
+            updateLabel('error', 'Error', comp.error);
           } else if (isOutdated) {
-            const pill = ensurePill();
-            if (pill) {
-              pill.classList.remove('status-running', 'status-error');
-              pill.classList.add('status-outdated');
-              pill.textContent = 'Update available';
-              pill.removeAttribute('title');
-            }
+            updateLabel('outdated', 'Update available', '');
           } else {
-            removePill();
+            updateLabel('complete', 'Completed', '');
           }
         });
       },

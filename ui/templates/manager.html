@@ -10,12 +10,17 @@
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         {{ template "manager_configuration_card" . }}
+        {{ template "manager_version_status_card" . }}
+    </div>
+
+    <!-- Discord Card -->
+    <div>
         {{ template "manager_discord_card" . }}
     </div>
 
-    <!-- Full Width Below -->
-    {{ template "manager_version_status_card" . }}
+    <div>
+        {{ template "manager_logs_card" . }}
+    </div>
 
-    {{ template "manager_logs_card" . }}
 </div>
 {{end}}

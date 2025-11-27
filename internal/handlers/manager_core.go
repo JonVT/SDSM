@@ -978,6 +978,7 @@ func (h *ManagerHandlers) ManagerVersionsGET(c *gin.Context) {
 		"bepinex_deployed":   h.manager.BepInExDeployed(),
 		"launchpad_deployed": h.manager.LaunchPadDeployed(),
 		"scon_deployed":      h.manager.SCONDeployed(),
+		"updating":           h.manager.IsUpdating(),
 	})
 }
 

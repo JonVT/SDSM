@@ -1,0 +1,154 @@
+<div class="glass-card">
+                    
+                    
+                    <div id="versions" data-initial-updating="false">
+                        
+                        <h3>Software Versions</h3>
+                        <form action="/update" method="POST" id="updateForm">
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Component</th>
+                                            <th>Deployed</th>
+                                            <th>Latest</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">steamcmd</div>
+                                                <div class="progress-row active" data-progress="steamcmd">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-steamcmd-deployed">1763795194</td>
+                                            <td id="ver-steamcmd-latest">1763795194</td>
+                                            <td>
+                                                <button type="submit" name="update_steamcmd" data-update-target="update_steamcmd" data-component="steamcmd" class="btn btn-secondary update-trigger btn-success" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">rocketstation_DedicatedServer Release</div>
+                                                <div class="progress-row active" data-progress="release">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-release-deployed">20412927</td>
+                                            <td id="ver-release-latest">20412927</td>
+                                            <td>
+                                                <button type="submit" name="update_release" data-update-target="update_release" data-component="release" class="btn btn-secondary update-trigger btn-success" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">rocketstation_DedicatedServer Beta</div>
+                                                <div class="progress-row active" data-progress="beta">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-beta-deployed">20910858</td>
+                                            <td id="ver-beta-latest">20938299</td>
+                                            <td>
+                                                <button type="submit" name="update_beta" data-update-target="update_beta" data-component="beta" class="btn btn-secondary update-trigger btn-danger" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">BEPINEX</div>
+                                                <div class="progress-row active" data-progress="bepinex">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-bepinex-deployed">5.4.23.4</td>
+                                            <td id="ver-bepinex-latest">5.4.23.4</td>
+                                            <td>
+                                                <button type="submit" name="update_bepinex" data-update-target="update_bepinex" data-component="bepinex" class="btn btn-secondary update-trigger btn-success" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">Stationeers LaunchPad</div>
+                                                <div class="progress-row active" data-progress="launchpad">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-launchpad-deployed">0.2.17</td>
+                                            <td id="ver-launchpad-latest">0.2.17</td>
+                                            <td>
+                                                <button type="submit" name="update_launchpad" data-update-target="update_launchpad" data-component="launchpad" class="btn btn-secondary update-trigger btn-success" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="component-title">SCON</div>
+                                                <div class="progress-row active" data-progress="scon">
+                                                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                                                    <div class="progress-text"><span class="status-pill status-complete"><span class="dot" aria-hidden="true"></span>Completed</span></div>
+                                                </div>
+                                            </td>
+                                            <td id="ver-scon-deployed">v1.0.0</td>
+                                            <td id="ver-scon-latest">v1.0.0</td>
+                                            <td>
+                                                <button type="submit" name="update_scon" data-update-target="update_scon" data-component="scon" class="btn btn-secondary update-trigger btn-success" aria-busy="false">
+                                                    <svg class="icon-inline" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                                                        <path d="M21 3v5h-5"></path>
+                                                    </svg>
+                                                    Update
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="3"></td>
+                                            <td>
+                                                <button type="submit" name="update_all" data-update-target="update_all" data-component="all" class="btn btn-primary update-trigger" aria-busy="false">
+                                                    Update All
+                                                </button>
+                                                <div id="updateMessage" class="update-message" role="status" aria-live="polite"></div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </form>
+                    </div>
+                </div>
