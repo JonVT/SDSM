@@ -32,6 +32,7 @@ import (
 
 	"sdsm/internal/models"
 	"sdsm/internal/utils"
+	"sdsm/internal/version"
 	"sdsm/steam"
 )
 
@@ -231,6 +232,8 @@ type Manager struct {
 	notifications    []models.DashboardNotification
 	notificationSeq  atomic.Uint64
 }
+
+var processStartStamp = time.Now().UTC().Format("20060102150405")
 
 type UpdateProgress struct {
 	Key         string    `json:"key"`
@@ -948,7 +951,23 @@ func (m *Manager) IsActive() bool {
 }
 
 func (m *Manager) BuildTime() string {
-	return "dev"
+	if v := strings.TrimSpace(version.Version); v != "" {
+		return v
+	}
+	if c := strings.TrimSpace(version.Commit); c != "" {
+		suffix := c
+		if strings.TrimSpace(version.Dirty) == "dirty" {
+			suffix += "*"
+		}
+		if d := strings.TrimSpace(version.Date); d != "" {
+			return fmt.Sprintf("%s-%s", d, suffix)
+		}
+		return suffix
+	}
+	if d := strings.TrimSpace(version.Date); d != "" {
+		return d
+	}
+	return processStartStamp
 }
 
 func (m *Manager) safeLog(message string) {

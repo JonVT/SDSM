@@ -2192,31 +2192,37 @@
         });
 
         document.addEventListener('htmx:afterSwap', (e) => {
-          if (e.target && e.target.closest('#server-grid')) {
-            this.ui.bindServerCardNavigation(e.target.closest('#server-grid'));
+          const swapRoot = e.target instanceof Element ? e.target : null;
+
+          if (swapRoot && typeof initServerCreationPage === 'function') {
+            initServerCreationPage(swapRoot);
+          }
+
+          if (swapRoot && swapRoot.closest('#server-grid')) {
+            this.ui.bindServerCardNavigation(swapRoot.closest('#server-grid'));
           }
 
           // When #content-area is swapped, update the frame title from the
           // new content's data-page-title attribute if present.
-          if (e.target && e.target.id === 'content-area') {
+          if (swapRoot && swapRoot.id === 'content-area') {
             const titleEl = document.getElementById('page-title');
             if (titleEl) {
-              const wrapper = e.target.querySelector('[data-page-title]');
+              const wrapper = swapRoot.querySelector('[data-page-title]');
               if (wrapper && wrapper.dataset.pageTitle) {
                 titleEl.textContent = wrapper.dataset.pageTitle;
               }
             }
-            SDSM.frame.managerSubmenu.handleContentSwap(e.target);
+            SDSM.frame.managerSubmenu.handleContentSwap(swapRoot);
           }
 
-          this.relativeTime.refresh(e.target);
-
-          if (e.target) {
-            this.collapses.init(e.target);
-            this.managerLogs.init(e.target);
+          if (swapRoot) {
+            this.relativeTime.refresh(swapRoot);
+            this.collapses.init(swapRoot);
+            this.managerLogs.init(swapRoot);
+          } else {
+            this.relativeTime.refresh(e.target);
           }
 
-          const swapRoot = e.target instanceof Element ? e.target : null;
           if (swapRoot && (swapRoot.id === 'manager-settings-form' || swapRoot.querySelector('#manager-settings-form'))) {
             this.forms.syncTlsFields();
           }
@@ -2414,6 +2420,402 @@
  * Page specific scripts
  */
 
+function initServerCreationPage(root) {
+  const scope = root && typeof root.querySelector === 'function' ? root : document;
+  let form = null;
+  if (scope && typeof scope.querySelector === 'function') {
+    form = scope.querySelector('#serverForm');
+    if (!form && scope.id === 'serverForm') {
+      form = scope;
+    }
+  }
+  if (!form) {
+    form = document.getElementById('serverForm');
+  }
+  if (!form || form.dataset.serverFormInitialized === 'true') {
+    return;
+  }
+  form.dataset.serverFormInitialized = 'true';
+
+  const dropzone = form.querySelector('#saveDropzone');
+  const saveFileInput = form.querySelector('#save_file');
+  const saveFileName = form.querySelector('#saveFileName');
+  const saveAnalysis = form.querySelector('#saveAnalysis');
+  const detectedWorld = form.querySelector('#detectedWorld');
+  const detectedName = form.querySelector('#detectedName');
+  const basicNameGroup = form.querySelector('#basicNameGroup');
+  const basicWorldGroup = form.querySelector('#basicWorldGroup');
+  const nameTextInput = form.querySelector('#name_text');
+  const worldSelect = form.querySelector('#world_select');
+  const betaSelect = form.querySelector('#beta');
+  const startLocationSelect = form.querySelector('#start_location');
+  const startConditionSelect = form.querySelector('#start_condition');
+  const progressFill = form.querySelector('#progressFill');
+  const progressText = form.querySelector('#progressText');
+  const progressList = form.querySelector('#progressList');
+  const submitButton = form.querySelector('button[type="submit"]');
+
+  const requiredFields = ['name', 'world', 'start_location', 'start_condition', 'difficulty'];
+  const totalRequired = requiredFields.length;
+
+  const defaults = {
+    world: form.dataset.defaultWorld || (worldSelect ? worldSelect.value : ''),
+    startLocation: form.dataset.defaultStartLocation || '',
+    startCondition: form.dataset.defaultStartCondition || '',
+    beta: form.dataset.defaultBeta === 'true' ? 'true' : 'false',
+  };
+
+  const getBetaValue = () => {
+    if (!betaSelect) return defaults.beta || 'false';
+    return betaSelect.value === 'true' ? 'true' : 'false';
+  };
+
+  const setSubmitState = (submitting) => {
+    if (!submitButton) return;
+    if (submitting) {
+      submitButton.dataset.originalText = submitButton.dataset.originalText || submitButton.textContent;
+      submitButton.textContent = submitButton.dataset.loadingText || 'Creating...';
+    } else if (submitButton.dataset.originalText) {
+      submitButton.textContent = submitButton.dataset.originalText;
+    }
+    submitButton.disabled = submitting;
+  };
+
+  const setSingleOption = (selectEl, text) => {
+    if (!selectEl) return;
+    selectEl.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = text;
+    option.disabled = true;
+    option.selected = true;
+    selectEl.appendChild(option);
+    selectEl.disabled = true;
+  };
+
+  const renderSelectOptions = (selectEl, items, preferredValue, placeholder) => {
+    if (!selectEl) return;
+    selectEl.disabled = false;
+    selectEl.innerHTML = '';
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = placeholder;
+    placeholderOption.disabled = true;
+    if (!preferredValue) {
+      placeholderOption.selected = true;
+    }
+    selectEl.appendChild(placeholderOption);
+
+    let matched = false;
+    items.forEach((item) => {
+      const id = item?.ID || item?.id || item?.value;
+      if (!id) {
+        return;
+      }
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = item?.Name || item?.name || id;
+      option.dataset.description = item?.Description || item?.description || '';
+      if (preferredValue && preferredValue === id) {
+        option.selected = true;
+        matched = true;
+      }
+      selectEl.appendChild(option);
+    });
+
+    if (preferredValue && !matched && selectEl.options.length > 1) {
+      selectEl.options[1].selected = true;
+    }
+  };
+
+  const loadStartOptions = async (worldValue, betaValue, preferred = {}) => {
+    if (!startLocationSelect || !startConditionSelect) {
+      return;
+    }
+    if (!worldValue) {
+      setSingleOption(startLocationSelect, 'Select a world to load locations');
+      setSingleOption(startConditionSelect, 'Select a world to load conditions');
+      return;
+    }
+
+    const query = new URLSearchParams();
+    query.set('world', worldValue);
+    query.set('beta', betaValue === 'true' ? 'true' : 'false');
+
+    setSingleOption(startLocationSelect, 'Loading locations...');
+    setSingleOption(startConditionSelect, 'Loading conditions...');
+
+    try {
+      const [locationsResp, conditionsResp] = await Promise.all([
+        SDSM.api.request(`/api/start-locations?${query.toString()}`, { method: 'GET' }),
+        SDSM.api.request(`/api/start-conditions?${query.toString()}`, { method: 'GET' })
+      ]);
+      renderSelectOptions(startLocationSelect, locationsResp?.locations || [], preferred.startLocation, 'Select a start location');
+      renderSelectOptions(startConditionSelect, conditionsResp?.conditions || [], preferred.startCondition, 'Select a start condition');
+    } catch (err) {
+      console.error('Failed to load world data', err);
+      setSingleOption(startLocationSelect, 'Unable to load start locations');
+      setSingleOption(startConditionSelect, 'Unable to load start conditions');
+    } finally {
+      updateProgress();
+    }
+  };
+
+  const ensureWorldOption = (worldValue, betaValue) => {
+    if (!worldSelect || !worldValue) {
+      return;
+    }
+    const existing = Array.from(worldSelect.options).find((opt) => opt.value === worldValue);
+    if (existing) {
+      existing.selected = true;
+      return;
+    }
+    const option = new Option(worldValue, worldValue, true, true);
+    option.dataset.beta = betaValue;
+    worldSelect.appendChild(option);
+  };
+
+  const ensureWorldMatchesBeta = (betaValue) => {
+    if (!worldSelect) {
+      return '';
+    }
+    const desiredBeta = betaValue === 'true';
+    const currentOption = worldSelect.options[worldSelect.selectedIndex];
+    if (currentOption && (currentOption.dataset.beta === 'true') === desiredBeta) {
+      return currentOption.value;
+    }
+    const fallback = Array.from(worldSelect.options).find((opt) => opt.value && (opt.dataset.beta === 'true') === desiredBeta);
+    if (fallback) {
+      fallback.selected = true;
+      return fallback.value;
+    }
+    return worldSelect.value;
+  };
+
+  const setCheckboxValue = (name, value) => {
+    if (typeof value === 'undefined' || value === null) return;
+    const input = form.querySelector(`input[name="${name}"]`);
+    if (input) {
+      input.checked = Boolean(value);
+    }
+  };
+
+  const setInputValue = (id, value) => {
+    if (typeof value === 'undefined' || value === null) return;
+    const input = form.querySelector(`#${id}`);
+    if (input) {
+      input.value = value;
+    }
+  };
+
+  const applySaveMetadata = (data) => {
+    if (!data) return;
+    const detectedWorldValue = data.world || '';
+    const detectedNameValue = data.world_file_name || data.name || '';
+    if (detectedWorld) {
+      detectedWorld.textContent = detectedWorldValue || 'Unknown';
+    }
+    if (detectedName) {
+      detectedName.textContent = detectedNameValue || '';
+    }
+    if (nameTextInput && detectedNameValue) {
+      nameTextInput.value = detectedNameValue;
+    }
+    if (detectedWorldValue) {
+      ensureWorldOption(detectedWorldValue, getBetaValue());
+      worldSelect.value = detectedWorldValue;
+      loadStartOptions(detectedWorldValue, getBetaValue(), {});
+    }
+
+    setInputValue('port', data.port);
+    setInputValue('max_clients', data.max_clients);
+    setInputValue('password', data.password);
+    setInputValue('auth_secret', data.auth_secret);
+    setInputValue('save_interval', data.save_interval);
+    setInputValue('disconnect_timeout', data.disconnect_timeout);
+    setCheckboxValue('server_visible', data.server_visible);
+    setCheckboxValue('auto_save', data.auto_save);
+    setCheckboxValue('auto_pause', data.auto_pause);
+    setCheckboxValue('auto_start', data.auto_start);
+    setCheckboxValue('auto_update', data.auto_update);
+    setCheckboxValue('player_saves', data.player_saves);
+    setCheckboxValue('delete_skeleton_on_decay', data.delete_skeleton_on_decay);
+
+    if (saveAnalysis) {
+      saveAnalysis.classList.remove('hidden');
+    }
+    if (basicNameGroup) {
+      basicNameGroup.classList.add('hidden');
+    }
+    if (basicWorldGroup) {
+      basicWorldGroup.classList.add('hidden');
+    }
+    updateProgress();
+  };
+
+  const resetDropzone = () => {
+    if (saveFileInput) {
+      saveFileInput.value = '';
+    }
+    if (saveFileName) {
+      saveFileName.textContent = '';
+    }
+    if (dropzone) {
+      dropzone.classList.remove('dz-started', 'dz-dragover');
+    }
+    if (saveAnalysis) {
+      saveAnalysis.classList.add('hidden');
+    }
+    if (basicNameGroup) {
+      basicNameGroup.classList.remove('hidden');
+    }
+    if (basicWorldGroup) {
+      basicWorldGroup.classList.remove('hidden');
+    }
+    if (detectedWorld) {
+      detectedWorld.textContent = '';
+    }
+    if (detectedName) {
+      detectedName.textContent = '';
+    }
+    updateProgress();
+  };
+
+  const handleFileSelect = async (file) => {
+    if (!file) {
+      resetDropzone();
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.save')) {
+      if (window.showToast) {
+        window.showToast('Invalid File', 'Please select a Stationeers .save file.', 'warning');
+      }
+      return;
+    }
+    if (saveFileName) {
+      saveFileName.textContent = file.name;
+    }
+    if (dropzone) {
+      dropzone.classList.add('dz-started');
+    }
+
+    const formData = new FormData();
+    formData.append('save_file', file);
+
+    try {
+      const data = await SDSM.api.request('/api/servers/analyze-save', { method: 'POST', body: formData });
+      applySaveMetadata(data);
+    } catch (err) {
+      console.error('Save analysis failed', err);
+      if (window.showToast) {
+        window.showToast('Error analyzing save', err.message || 'Failed to read save metadata.', 'danger');
+      }
+      resetDropzone();
+    }
+  };
+
+  const updateProgress = () => {
+    if (!progressFill || !progressText || !progressList) {
+      return;
+    }
+    let completedCount = 0;
+    const formData = new FormData(form);
+    requiredFields.forEach((fieldName) => {
+      const value = formData.get(fieldName);
+      const progressItem = progressList.querySelector(`li[data-field="${fieldName}"]`);
+      if (value) {
+        completedCount += 1;
+        if (progressItem) {
+          progressItem.classList.add('completed');
+        }
+      } else if (progressItem) {
+        progressItem.classList.remove('completed');
+      }
+    });
+    const percentage = totalRequired > 0 ? (completedCount / totalRequired) * 100 : 0;
+    progressFill.style.width = `${percentage}%`;
+    progressText.textContent = `${completedCount} of ${totalRequired} required fields complete`;
+  };
+
+  if (dropzone && saveFileInput) {
+    dropzone.addEventListener('click', () => saveFileInput.click());
+    saveFileInput.addEventListener('change', () => handleFileSelect(saveFileInput.files[0]));
+    dropzone.addEventListener('dragover', (event) => {
+      event.preventDefault();
+      dropzone.classList.add('dz-dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dz-dragover'));
+    dropzone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropzone.classList.remove('dz-dragover');
+      const file = event.dataTransfer?.files?.[0];
+      handleFileSelect(file);
+    });
+  }
+
+  if (worldSelect) {
+    worldSelect.addEventListener('change', () => {
+      loadStartOptions(worldSelect.value, getBetaValue(), {});
+      updateProgress();
+    });
+  }
+
+  if (betaSelect) {
+    betaSelect.addEventListener('change', () => {
+      const betaValue = getBetaValue();
+      const matched = ensureWorldMatchesBeta(betaValue);
+      loadStartOptions(matched || worldSelect?.value || '', betaValue, {});
+    });
+  }
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (submitButton && submitButton.disabled) {
+      return;
+    }
+    const usingSaveUpload = Boolean(saveFileInput && saveFileInput.files && saveFileInput.files.length > 0);
+    const endpoint = usingSaveUpload ? '/api/servers/create-from-save' : '/api/servers';
+    const formData = new FormData(form);
+    setSubmitState(true);
+    try {
+      const response = await SDSM.api.request(endpoint, { method: 'POST', body: formData });
+      if (response && typeof response.server_id !== 'undefined') {
+        window.location.href = `/server/${response.server_id}`;
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch (err) {
+      console.error('Server creation failed', err);
+      if (window.showToast) {
+        window.showToast('Error', err.message || 'Failed to create server.', 'danger');
+      }
+    } finally {
+      setSubmitState(false);
+    }
+  });
+
+  form.addEventListener('input', updateProgress);
+  form.addEventListener('change', updateProgress);
+
+  const initialWorld = ensureWorldMatchesBeta(defaults.beta) || defaults.world;
+  if (worldSelect && initialWorld) {
+    ensureWorldOption(initialWorld, defaults.beta);
+    worldSelect.value = initialWorld;
+  }
+  loadStartOptions(worldSelect ? worldSelect.value : defaults.world, defaults.beta, {
+    startLocation: defaults.startLocation,
+    startCondition: defaults.startCondition,
+  });
+  updateProgress();
+
+  form.addEventListener('reset', () => {
+    setTimeout(() => {
+      resetDropzone();
+      loadStartOptions(worldSelect ? worldSelect.value : '', getBetaValue(), {});
+    }, 0);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     // Profile page
     if (document.getElementById('profile-form')) {
@@ -2489,176 +2891,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Server new page
-    if (document.getElementById('serverForm')) {
-        const form = document.getElementById('serverForm');
-        if (!form) return;
-
-        // Dropzone
-        const dropzone = document.getElementById('saveDropzone');
-        const saveFileInput = document.getElementById('save_file');
-        const saveFileName = document.getElementById('saveFileName');
-        const saveAnalysis = document.getElementById('saveAnalysis');
-        const detectedWorld = document.getElementById('detectedWorld');
-        const detectedName = document.getElementById('detectedName');
-        const basicNameGroup = document.getElementById('basicNameGroup');
-        const basicWorldGroup = document.getElementById('basicWorldGroup');
-        const nameInput = document.getElementById('name');
-        const worldInput = document.getElementById('world');
-        const nameTextInput = document.getElementById('name_text');
-        const worldSelect = document.getElementById('world_select');
-
-        // Progress
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-        const progressList = document.getElementById('progressList');
-        const requiredFields = ['name', 'world', 'start_location', 'start_condition', 'difficulty'];
-        const totalRequired = requiredFields.length;
-
-        function handleFileSelect(file) {
-            if (!file) return;
-            
-            saveFileName.textContent = file.name;
-            dropzone.classList.add('dz-started');
-
-            const formData = new FormData();
-            formData.append('save_file', file);
-
-            htmx.ajax('POST', '/api/server/analyze-save', {
-                body: formData,
-                swap: 'none'
-            }).then(e => {
-                if (e.detail.xhr.status === 200) {
-                    const data = JSON.parse(e.detail.xhr.responseText);
-                    detectedWorld.textContent = data.world;
-                    detectedName.textContent = data.name;
-                    
-                    nameInput.value = data.name;
-                    worldInput.value = data.world;
-                    nameTextInput.value = data.name;
-                    
-                    // Find and select the option in the world dropdown
-                    const worldOption = Array.from(worldSelect.options).find(opt => opt.value === data.world);
-                    if (worldOption) {
-                        worldOption.selected = true;
-                    } else {
-                        // If the world is not in the list, add it
-                        const newOption = new Option(data.world, data.world, true, true);
-                        worldSelect.add(newOption);
-                    }
-
-                    saveAnalysis.classList.remove('hidden');
-                    basicNameGroup.classList.add('hidden');
-                    basicWorldGroup.classList.add('hidden');
-                    updateProgress();
-                } else {
-                    const error = JSON.parse(e.detail.xhr.responseText);
-                    showToast('Error analyzing save', error.message, 'danger');
-                    resetDropzone();
-                }
-            }).catch(() => {
-                showToast('Error', 'An unexpected error occurred while analyzing the save file.', 'danger');
-                resetDropzone();
-            });
-        }
-        
-        function resetDropzone() {
-            saveFileInput.value = '';
-            saveFileName.textContent = '';
-            dropzone.classList.remove('dz-started');
-            saveAnalysis.classList.add('hidden');
-            basicNameGroup.classList.remove('hidden');
-            basicWorldGroup.classList.remove('hidden');
-            nameInput.value = '';
-            worldInput.value = '';
-            updateProgress();
-        }
-
-        dropzone.addEventListener('click', () => saveFileInput.click());
-        saveFileInput.addEventListener('change', () => handleFileSelect(saveFileInput.files[0]));
-        dropzone.addEventListener('dragover', (e) => e.preventDefault());
-        dropzone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            handleFileSelect(e.dataTransfer.files[0]);
-        });
-
-        // Populate dropdowns
-        function populateSelect(elementId, url, placeholder) {
-            const select = document.getElementById(elementId);
-            if (!select) return;
-            
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    select.innerHTML = `<option value="">${placeholder}</option>`;
-                    data.forEach(item => {
-                        const option = new Option(item.name, item.value);
-                        select.add(option);
-                    });
-                })
-                .catch(error => console.error(`Error fetching data for ${elementId}:`, error));
-        }
-
-        populateSelect('world_select', '/api/data/worlds', 'Select a world');
-        populateSelect('start_location', '/api/data/startlocations', 'Select a start location');
-        populateSelect('start_condition', '/api/data/startconditions', 'Select a start condition');
-
-        // Form submission
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(form);
-            
-            // If a save was used, ensure the hidden name/world are used
-            if (!basicNameGroup.classList.contains('hidden')) {
-                formData.set('name', nameTextInput.value);
-            }
-            if (!basicWorldGroup.classList.contains('hidden')) {
-                formData.set('world', worldSelect.value);
-            }
-
-            htmx.ajax('POST', '/server/new', {
-                body: formData,
-                target: 'body',
-                pushUrl: true
-            }).catch(err => {
-                console.error("Form submission error", err);
-                showToast('Error', 'Failed to create server. Check the form for errors.', 'danger');
-            });
-        });
-
-        // Progress tracking
-        function updateProgress() {
-            let completedCount = 0;
-            const formData = new FormData(form);
-
-            // Handle save file case
-            if (!basicNameGroup.classList.contains('hidden')) {
-                formData.set('name', nameTextInput.value);
-            }
-            if (!basicWorldGroup.classList.contains('hidden')) {
-                formData.set('world', worldSelect.value);
-            }
-
-            requiredFields.forEach(fieldName => {
-                const value = formData.get(fieldName);
-                const progressItem = progressList.querySelector(`li[data-field="${fieldName}"]`);
-                if (value) {
-                    completedCount++;
-                    progressItem.classList.add('completed');
-                } else {
-                    progressItem.classList.remove('completed');
-                }
-            });
-
-            const percentage = totalRequired > 0 ? (completedCount / totalRequired) * 100 : 0;
-            progressFill.style.width = `${percentage}%`;
-            progressText.textContent = `${completedCount} of ${totalRequired} required fields complete`;
-        }
-
-        form.addEventListener('input', updateProgress);
-        
-        // Initial check
-        updateProgress();
-    }
+    initServerCreationPage(document);
 
     // Commands page
     if (document.getElementById('commands-table')) {

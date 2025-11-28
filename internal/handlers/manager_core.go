@@ -480,7 +480,7 @@ func (h *ManagerHandlers) renderServerPage(c *gin.Context, status int, s *models
 	c.HTML(status, "server_status.html", payload)
 }
 
-func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, username interface{}, overrides gin.H) {
+func (h *ManagerHandlers) buildNewServerFormPayload(username interface{}, overrides gin.H) gin.H {
 	worldLists, worldData := h.buildWorldSelectionData()
 
 	defaultVersionKey := ""
@@ -549,7 +549,6 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 			for key, val := range existingForm {
 				formDefaults[key] = val
 			}
-			delete(overrides, "form")
 		}
 	}
 
@@ -580,10 +579,20 @@ func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, userna
 		"form":                 formDefaults,
 	}
 
-	for k, v := range overrides {
-		payload[k] = v
+	if overrides != nil {
+		for k, v := range overrides {
+			if k == "form" {
+				continue
+			}
+			payload[k] = v
+		}
 	}
 
+	return payload
+}
+
+func (h *ManagerHandlers) renderNewServerForm(c *gin.Context, status int, username interface{}, overrides gin.H) {
+	payload := h.buildNewServerFormPayload(username, overrides)
 	c.HTML(status, "server_new.html", payload)
 }
 

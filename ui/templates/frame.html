@@ -58,7 +58,7 @@
             <div class="nav-section-title row justify-between">
                 <span>Servers</span>
                 {{ if eq .role "admin" }}
-                <a href="/server/new" class="btn btn-ghost btn-icon" hx-get="/api/pages/server/new" hx-push-url="/server/new" title="Create new server">
+                <a href="/server/new" class="btn btn-ghost btn-icon" hx-get="/api/pages/server/new" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/server/new" title="Create new server">
                     {{ template "icon_add" . }}
                 </a>
                 {{ end }}
@@ -130,7 +130,7 @@
             {{template "tokens.html" .}}
         {{else if eq .page "server_status"}}
             {{template "server_status.html" .}}
-        {{else if eq .page "server_new"}}
+        {{else if or (eq .page "server_new") (eq .page "server/new")}}
             {{template "server_new.html" .}}
         {{else if eq .page "commands"}}
             {{template "commands.html" .}}
@@ -153,8 +153,8 @@
         {{else if eq .page "error"}}
             {{template "error.html" .}}
         {{end}}
-        {{template "footer" .}}
     </main>
+    {{template "footer" .}}
     </div>
 
     {{ template "modal_templates" . }}

@@ -80,16 +80,22 @@ func (h *ManagerHandlers) NewServerGET(c *gin.Context) {
 		return
 	}
 
-	// Otherwise, render the full frame
-	c.HTML(http.StatusOK, "frame.html", gin.H{
+	// Otherwise, render the full frame with the form payload so the page mirrors the HTMX version
+	formPayload := h.buildNewServerFormPayload(username, nil)
+	frameData := gin.H{
 		"username":  username,
 		"role":      role,
 		"servers":   h.manager.Servers,
 		"buildTime": h.manager.BuildTime(),
 		"active":    h.manager.IsActive(),
-		"page":      "server/new",
+		"page":      "server_new",
 		"title":     "Create New Server",
-	})
+	}
+	for k, v := range formPayload {
+		frameData[k] = v
+	}
+
+	c.HTML(http.StatusOK, "frame.html", frameData)
 }
 
 // NewServerPOST removed: server creation now performed via /api/servers and /api/servers/create-from-save.
