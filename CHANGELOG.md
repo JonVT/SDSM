@@ -13,6 +13,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 ### Changed
 
 - Port forwarding is now adaptive: SDSM first prefers a mapping created by the game via UPnP (when available), and falls back to creating a NAT-PMP/UPnP mapping itself.
+- Default server port suggestions now walk 27016, 27019, 27022, ... ensuring each new server form picks a port spaced by three unless that slot is already in use.
 
 ### Fixed
 

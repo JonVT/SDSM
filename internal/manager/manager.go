@@ -1930,10 +1930,30 @@ func (m *Manager) ServerCount() int {
 	return len(m.Servers)
 }
 
+const (
+	defaultServerPort     = 27016
+	defaultServerPortStep = 3
+)
+
 func (m *Manager) GetNextAvailablePort(start int) int {
+	step := 1
 	if start <= 0 {
-		start = 27016
+		start = defaultServerPort
 	}
+
+	if start <= defaultServerPort || (start-defaultServerPort)%defaultServerPortStep == 0 {
+		if start < defaultServerPort {
+			start = defaultServerPort
+		} else {
+			// Ensure we stay aligned with the default spacing grid
+			offset := (start - defaultServerPort) % defaultServerPortStep
+			if offset != 0 {
+				start += defaultServerPortStep - offset
+			}
+		}
+		step = defaultServerPortStep
+	}
+
 	port := start
 	for {
 		available := true
@@ -1946,7 +1966,7 @@ func (m *Manager) GetNextAvailablePort(start int) int {
 		if available {
 			return port
 		}
-		port++
+		port += step
 	}
 }
 
