@@ -22,5 +22,26 @@
   "scon_url_windows_override": "",
   "discord_default_webhook": "",
   "discord_bug_report_webhook": "",
+  "server_presets": [
+    {
+      "key": "builder",
+      "label": "Builder",
+      "description": "Example preset configurable from sdsm.config",
+      "world": "Mars",
+      "start_condition": "Standard",
+      "difficulty": "Creative",
+      "difficulty_keywords": ["creative"],
+      "beta": false,
+      "fields": {
+        "max_clients": 6,
+        "save_interval": 120
+      },
+      "checkboxes": {
+        "auto_save": true,
+        "auto_update": true
+      },
+      "order": 1
+    }
+  ],
   "servers": []
 }

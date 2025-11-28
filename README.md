@@ -202,6 +202,7 @@ Selected config fields:
 - `windows_discovery_wmi_enabled`: Windows-only process discovery via WMI. Default `true`.
 - `scon_repo_override`: Alternative `owner/repo` for SCON releases.
 - `scon_url_linux_override`, `scon_url_windows_override`: Explicit SCON asset URLs per OS.
+- `server_presets`: Optional array of Create Server presets that drive the Builder/Beginner/etc. buttons. Edit these to change defaults without rebuilding the UI.
 
 See also: `docs/sdsm.config.example` for a ready-to-copy minimal config.
 
@@ -239,6 +240,46 @@ Save this as `sdsm.config` and point SDSM to it with `--config /path/to/sdsm.con
 ```
 
 Tip: On first run, SDSM will create directories under `paths.root_path` and download/update components as needed. Set a strong `jwt_secret` for production.
+
+### Configurable Create Server presets
+
+Define preset buttons for the Create Server form directly in `sdsm.config` using the `server_presets` array. Each entry accepts:
+
+- `key`: Unique identifier (used in the UI `data-preset` attribute).
+- `label`/`description`: Text displayed beside the buttons.
+- `world`, `start_location`, `start_condition`, `difficulty`, `difficulty_keywords`: Values applied to the form.
+- `beta`: `true` for Beta builds, `false` for Release, or omit to leave the selector unchanged.
+- `fields`: Map of `input#id` → value (e.g., `max_clients`, `save_interval`).
+- `checkboxes`: Map of checkbox `name` → boolean.
+- `order`: Optional integer used to sort buttons.
+
+Example snippet:
+
+```json
+"server_presets": [
+	{
+		"key": "builder",
+		"label": "Builder",
+		"description": "Creative sandbox",
+		"world": "Mars",
+		"start_condition": "Standard",
+		"difficulty": "Creative",
+		"difficulty_keywords": ["creative"],
+		"beta": false,
+		"fields": {
+			"max_clients": 6,
+			"save_interval": 120
+		},
+		"checkboxes": {
+			"auto_save": true,
+			"auto_update": true
+		},
+		"order": 1
+	}
+]
+```
+
+Restart or reload the Manager after editing `sdsm.config`; the Create Server page will automatically pick up the new presets.
 
 ## Operating The Manager
 

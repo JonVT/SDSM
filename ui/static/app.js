@@ -2450,10 +2450,20 @@ function initServerCreationPage(root) {
   const betaSelect = form.querySelector('#beta');
   const startLocationSelect = form.querySelector('#start_location');
   const startConditionSelect = form.querySelector('#start_condition');
+  const difficultySelect = form.querySelector('#difficulty');
   const progressFill = form.querySelector('#progressFill');
   const progressText = form.querySelector('#progressText');
   const progressList = form.querySelector('#progressList');
   const submitButton = form.querySelector('button[type="submit"]');
+  const tabButtons = form.querySelectorAll('.server-form-tab');
+  const tabPanels = form.querySelectorAll('[data-tab-panel]');
+  const presetButtons = form.querySelectorAll('.preset-btn');
+  const portInput = form.querySelector('#port');
+  const portUnlockButton = form.querySelector('[data-action="unlock-port"]');
+  const portUnlockDefaultLabel = portUnlockButton ? (portUnlockButton.textContent || 'Customize') : '';
+  const portUnlockUnlockedLabel = portUnlockButton?.dataset?.unlockedText || 'Unlocked';
+  let suppressWorldChangeHandler = false;
+  let suppressBetaChangeHandler = false;
 
   const requiredFields = ['name', 'world', 'start_location', 'start_condition', 'difficulty'];
   const totalRequired = requiredFields.length;
@@ -2464,6 +2474,231 @@ function initServerCreationPage(root) {
     startCondition: form.dataset.defaultStartCondition || '',
     beta: form.dataset.defaultBeta === 'true' ? 'true' : 'false',
   };
+
+  const toCleanString = (value) => {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    if (value === null || typeof value === 'undefined') {
+      return '';
+    }
+    return `${value}`.trim();
+  };
+
+  const fallbackPresetLabel = (key) => {
+    const cleaned = toCleanString(key);
+    if (!cleaned) return 'Preset';
+    return cleaned
+      .replace(/[-_]+/g, ' ')
+      .replace(/\b\w/g, (match) => match.toUpperCase());
+  };
+
+  const cloneFieldObject = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return Object.keys(value).reduce((acc, fieldKey) => {
+      acc[fieldKey] = value[fieldKey];
+      return acc;
+    }, {});
+  };
+
+  const normalizeCheckboxMap = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {};
+    }
+    return Object.keys(value).reduce((acc, fieldKey) => {
+      const raw = value[fieldKey];
+      if (typeof raw === 'boolean') {
+        acc[fieldKey] = raw;
+      } else if (typeof raw === 'string') {
+        const lower = raw.trim().toLowerCase();
+        if (lower === 'true' || lower === 'false') {
+          acc[fieldKey] = lower === 'true';
+        }
+      } else if (typeof raw === 'number') {
+        acc[fieldKey] = raw !== 0;
+      }
+      return acc;
+    }, {});
+  };
+
+  const normalizePresetEntry = (preset) => {
+    if (!preset || typeof preset !== 'object') {
+      return null;
+    }
+    const rawKey = preset.key ?? preset.Key ?? '';
+    const key = toCleanString(rawKey);
+    if (!key) {
+      return null;
+    }
+    const lookupKey = key.toLowerCase();
+    const label = toCleanString(preset.label ?? preset.Label) || fallbackPresetLabel(key);
+    const description = toCleanString(preset.description ?? preset.Description);
+    const world = toCleanString(preset.world ?? preset.World);
+    const startLocation = toCleanString(preset.start_location ?? preset.startLocation);
+    const startCondition = toCleanString(preset.start_condition ?? preset.startCondition);
+    const difficultyValue = toCleanString(preset.difficulty ?? preset.difficultyValue);
+    const rawKeywords = preset.difficulty_keywords ?? preset.difficultyKeywords ?? [];
+    const difficultyKeywords = Array.isArray(rawKeywords)
+      ? rawKeywords.map((kw) => toCleanString(kw)).filter(Boolean)
+      : [];
+    const betaRaw = preset.beta ?? preset.Beta;
+    let beta = null;
+    if (typeof betaRaw === 'boolean') {
+      beta = betaRaw;
+    } else if (typeof betaRaw === 'string') {
+      const lower = betaRaw.trim().toLowerCase();
+      if (lower === 'true' || lower === 'false') {
+        beta = lower === 'true';
+      }
+    }
+    const fields = cloneFieldObject(preset.fields ?? preset.Fields);
+    const checkboxes = normalizeCheckboxMap(preset.checkboxes ?? preset.Checkboxes);
+    return {
+      key,
+      lookupKey,
+      label,
+      description,
+      world,
+      startLocation,
+      startCondition,
+      difficultyValue,
+      difficultyKeywords,
+      beta,
+      fields,
+      checkboxes,
+    };
+  };
+
+  const parsePresetPayload = () => {
+    const scriptEl = form.querySelector('#server-presets-data') || document.getElementById('server-presets-data');
+    if (!scriptEl) {
+      return null;
+    }
+    const raw = scriptEl.textContent || scriptEl.innerText || '';
+    if (!raw.trim()) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      console.error('Failed to parse preset payload', err);
+      return null;
+    }
+  };
+
+  const fallbackPresetList = () => ([
+    {
+      key: 'builder',
+      label: 'Builder',
+      world: 'Mars',
+      start_condition: 'Standard',
+      difficulty: 'Creative',
+      difficulty_keywords: ['creative'],
+      beta: false,
+      fields: {
+        max_clients: 6,
+        save_interval: 120,
+        welcome_message: 'Creative sandbox for collaborative builds.',
+        welcome_back_message: 'Welcome back, visionary builder!'
+      },
+      checkboxes: {
+        auto_save: true,
+        player_saves: true,
+        auto_pause: true,
+        auto_start: false,
+        auto_update: true,
+        delete_skeleton_on_decay: false
+      }
+    },
+    {
+      key: 'beginner',
+      label: 'Beginner',
+      world: 'Mars',
+      start_condition: 'Standard',
+      difficulty: 'Easy',
+      difficulty_keywords: ['easy', 'casual', 'standard', 'relaxed'],
+      beta: false,
+      fields: {
+        max_clients: 8,
+        save_interval: 180,
+        welcome_message: 'Welcome aboard! Build at your own pace.',
+        welcome_back_message: 'Welcome back, engineer!'
+      },
+      checkboxes: {
+        auto_save: true,
+        player_saves: true,
+        auto_pause: true,
+        auto_start: false,
+        auto_update: true,
+        delete_skeleton_on_decay: false
+      }
+    },
+    {
+      key: 'normal',
+      label: 'Normal',
+      world: 'Moon',
+      start_condition: 'Standard',
+      difficulty: 'Normal',
+      difficulty_keywords: ['normal', 'default', 'standard'],
+      beta: false,
+      fields: {
+        max_clients: 10,
+        save_interval: 300,
+        welcome_message: 'Welcome to our outpost. Have fun!',
+        welcome_back_message: 'Suit up! Time to build.',
+        welcome_delay_seconds: 1
+      },
+      checkboxes: {
+        auto_save: true,
+        player_saves: true,
+        auto_pause: true,
+        auto_start: true,
+        auto_update: true,
+        delete_skeleton_on_decay: false
+      }
+    },
+    {
+      key: 'hardcore',
+      label: 'Hardcore',
+      world: 'Vulcan',
+      start_condition: 'Brutal',
+      difficulty: 'Stationeer',
+      difficulty_keywords: ['stationeer', 'hard', 'hardcore', 'survival', 'brutal'],
+      beta: false,
+      fields: {
+        max_clients: 12,
+        save_interval: 420,
+        welcome_message: 'Hardcore server: no hand-holding.',
+        welcome_back_message: "Back for more punishment? Let's go.",
+        welcome_delay_seconds: 0
+      },
+      checkboxes: {
+        auto_save: true,
+        player_saves: false,
+        auto_pause: false,
+        auto_start: true,
+        auto_update: true,
+        delete_skeleton_on_decay: true
+      }
+    }
+  ]);
+
+  const buildPresetMap = () => {
+    const parsed = parsePresetPayload();
+    const source = Array.isArray(parsed) && parsed.length ? parsed : fallbackPresetList();
+    const map = {};
+    source.forEach((entry) => {
+      const normalized = normalizePresetEntry(entry);
+      if (normalized && normalized.lookupKey) {
+        map[normalized.lookupKey] = normalized;
+      }
+    });
+    return map;
+  };
+
+  const presets = buildPresetMap();
 
   const getBetaValue = () => {
     if (!betaSelect) return defaults.beta || 'false';
@@ -2528,6 +2763,23 @@ function initServerCreationPage(root) {
     }
   };
 
+  const selectFirstAvailableOption = (selectEl) => {
+    if (!selectEl || !selectEl.options?.length) {
+      return '';
+    }
+    const first = Array.from(selectEl.options).find((opt) => opt && opt.value);
+    if (!first) {
+      return '';
+    }
+    const alreadySelected = selectEl.value === first.value;
+    selectEl.value = first.value;
+    if (!alreadySelected) {
+      selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+      selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return first.value;
+  };
+
   const loadStartOptions = async (worldValue, betaValue, preferred = {}) => {
     if (!startLocationSelect || !startConditionSelect) {
       return;
@@ -2542,6 +2794,12 @@ function initServerCreationPage(root) {
     query.set('world', worldValue);
     query.set('beta', betaValue === 'true' ? 'true' : 'false');
 
+    const {
+      startLocation,
+      startCondition,
+      selectFirstStartLocation
+    } = preferred || {};
+
     setSingleOption(startLocationSelect, 'Loading locations...');
     setSingleOption(startConditionSelect, 'Loading conditions...');
 
@@ -2550,8 +2808,12 @@ function initServerCreationPage(root) {
         SDSM.api.request(`/api/start-locations?${query.toString()}`, { method: 'GET' }),
         SDSM.api.request(`/api/start-conditions?${query.toString()}`, { method: 'GET' })
       ]);
-      renderSelectOptions(startLocationSelect, locationsResp?.locations || [], preferred.startLocation, 'Select a start location');
-      renderSelectOptions(startConditionSelect, conditionsResp?.conditions || [], preferred.startCondition, 'Select a start condition');
+      const locationPreference = selectFirstStartLocation ? null : startLocation;
+      renderSelectOptions(startLocationSelect, locationsResp?.locations || [], locationPreference, 'Select a start location');
+      if (selectFirstStartLocation) {
+        selectFirstAvailableOption(startLocationSelect);
+      }
+      renderSelectOptions(startConditionSelect, conditionsResp?.conditions || [], startCondition, 'Select a start condition');
     } catch (err) {
       console.error('Failed to load world data', err);
       setSingleOption(startLocationSelect, 'Unable to load start locations');
@@ -2592,20 +2854,173 @@ function initServerCreationPage(root) {
     return worldSelect.value;
   };
 
-  const setCheckboxValue = (name, value) => {
+  const findWorldOptionByPrefix = (worldName, betaValue) => {
+    if (!worldSelect || !worldName) {
+      return null;
+    }
+    const prefix = worldName.trim().toLowerCase();
+    if (!prefix) {
+      return null;
+    }
+    const desiredBeta = betaValue === 'true';
+    const options = Array.from(worldSelect.options || []);
+    return options.find((opt) => {
+      if (!opt || !opt.value) {
+        return false;
+      }
+      if (opt.dataset && typeof opt.dataset.beta !== 'undefined') {
+        const optionBeta = opt.dataset.beta === 'true';
+        if (optionBeta !== desiredBeta) {
+          return false;
+        }
+      }
+      const label = (opt.textContent || '').trim().toLowerCase();
+      const value = (opt.value || '').trim().toLowerCase();
+      return label.startsWith(prefix) || value.startsWith(prefix);
+    }) || null;
+  };
+
+  const selectWorldOptionForPreset = (worldName, betaValue) => {
+    const match = findWorldOptionByPrefix(worldName, betaValue);
+    if (!match) {
+      return null;
+    }
+    if (worldSelect.value !== match.value) {
+      suppressWorldChangeHandler = true;
+      worldSelect.value = match.value;
+      worldSelect.dispatchEvent(new Event('input', { bubbles: true }));
+      worldSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      suppressWorldChangeHandler = false;
+    }
+    return match.value;
+  };
+
+  const applyBetaValue = (betaValue) => {
+    if (!betaSelect || typeof betaValue === 'undefined' || betaValue === null) {
+      return;
+    }
+    const targetValue = betaValue ? 'true' : 'false';
+    if (betaSelect.value === targetValue) {
+      return;
+    }
+    suppressBetaChangeHandler = true;
+    betaSelect.value = targetValue;
+    betaSelect.dispatchEvent(new Event('input', { bubbles: true }));
+    betaSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    suppressBetaChangeHandler = false;
+  };
+
+  const showFormTab = (target) => {
+    if (!tabButtons.length || !tabPanels.length) {
+      return;
+    }
+    const normalized = target === 'advanced' ? 'advanced' : 'basic';
+    tabButtons.forEach((btn) => {
+      const isActive = btn?.dataset?.tabTarget === normalized;
+      btn.classList.toggle('is-active', Boolean(isActive));
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    tabPanels.forEach((panel) => {
+      if (!panel || !panel.dataset) return;
+      const matches = panel.dataset.tabPanel === normalized;
+      panel.classList.toggle('hidden', !matches);
+      panel.setAttribute('aria-hidden', matches ? 'false' : 'true');
+    });
+  };
+
+  const setCheckboxValue = (name, value, { silent = false } = {}) => {
     if (typeof value === 'undefined' || value === null) return;
     const input = form.querySelector(`input[name="${name}"]`);
     if (input) {
-      input.checked = Boolean(value);
+      const nextState = Boolean(value);
+      if (input.checked !== nextState) {
+        input.checked = nextState;
+        if (!silent) {
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } else {
+        input.checked = nextState;
+      }
     }
   };
 
-  const setInputValue = (id, value) => {
+  const setInputValue = (id, value, { silent = false } = {}) => {
     if (typeof value === 'undefined' || value === null) return;
     const input = form.querySelector(`#${id}`);
     if (input) {
       input.value = value;
+      if (!silent) {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     }
+  };
+
+  const setDifficultyValue = (value) => {
+    if (!difficultySelect || !value || !difficultySelect.options?.length) {
+      return false;
+    }
+    const normalized = value.toString().toLowerCase();
+    const match = Array.from(difficultySelect.options).find((opt) => {
+      const optValue = (opt.value || '').toLowerCase();
+      const optLabel = (opt.textContent || '').toLowerCase();
+      return optValue === normalized || optLabel === normalized;
+    });
+    if (match) {
+      difficultySelect.value = match.value;
+      difficultySelect.dispatchEvent(new Event('input', { bubbles: true }));
+      difficultySelect.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    return false;
+  };
+
+  const setDifficultyByKeywords = (keywords = []) => {
+    if (!difficultySelect || !difficultySelect.options?.length) {
+      return false;
+    }
+    const keyList = Array.isArray(keywords) ? keywords : [];
+    const options = Array.from(difficultySelect.options);
+    const normalizedOptions = options.map((opt) => ({
+      value: opt.value,
+      label: (opt.textContent || '').toLowerCase(),
+    }));
+    let chosen = null;
+    keyList.some((keyword) => {
+      const lowerKeyword = (keyword || '').toLowerCase();
+      if (!lowerKeyword) return false;
+      const match = normalizedOptions.find((opt) => opt.label.includes(lowerKeyword) || (opt.value || '').toLowerCase() === lowerKeyword);
+      if (match) {
+        chosen = match.value;
+        return true;
+      }
+      return false;
+    });
+    if (!chosen && normalizedOptions.length) {
+      chosen = normalizedOptions[0].value;
+    }
+    if (chosen) {
+      difficultySelect.value = chosen;
+      difficultySelect.dispatchEvent(new Event('input', { bubbles: true }));
+      difficultySelect.dispatchEvent(new Event('change', { bubbles: true }));
+      return true;
+    }
+    return false;
+  };
+
+  const unlockPortField = () => {
+    if (!portInput) {
+      return;
+    }
+    portInput.readOnly = false;
+    portInput.classList.add('is-editable');
+    portInput.dataset.portLock = 'false';
+    if (portUnlockButton) {
+      portUnlockButton.disabled = true;
+      portUnlockButton.textContent = portUnlockUnlockedLabel;
+    }
+    portInput.focus();
   };
 
   const applySaveMetadata = (data) => {
@@ -2737,6 +3152,69 @@ function initServerCreationPage(root) {
     progressText.textContent = `${completedCount} of ${totalRequired} required fields complete`;
   };
 
+  const applyPreset = (key) => {
+    if (!key) {
+      return;
+    }
+    const lookup = key.toString().toLowerCase();
+    const preset = presets[lookup] || presets[key];
+    if (!presetButtons.length || !preset) {
+      return;
+    }
+    const difficultySet = preset.difficultyValue ? setDifficultyValue(preset.difficultyValue) : false;
+    if (!difficultySet && preset.difficultyKeywords) {
+      setDifficultyByKeywords(preset.difficultyKeywords);
+    }
+
+    if (typeof preset.beta === 'boolean') {
+      applyBetaValue(preset.beta);
+    }
+
+    const startPreferences = {
+      startLocation: null,
+      startCondition: preset.startCondition || null,
+      selectFirstStartLocation: true,
+    };
+
+    if (worldSelect && preset.world) {
+      const betaValue = typeof preset.beta === 'boolean' ? (preset.beta ? 'true' : 'false') : getBetaValue();
+      const matchedValue = selectWorldOptionForPreset(preset.world, betaValue);
+      const targetWorldValue = matchedValue || preset.world;
+      if (!matchedValue) {
+        ensureWorldOption(targetWorldValue, betaValue);
+        if (worldSelect.value !== targetWorldValue) {
+          suppressWorldChangeHandler = true;
+          worldSelect.value = targetWorldValue;
+          worldSelect.dispatchEvent(new Event('input', { bubbles: true }));
+          worldSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          suppressWorldChangeHandler = false;
+        }
+      }
+      loadStartOptions(targetWorldValue, betaValue, startPreferences);
+    } else if (worldSelect && startPreferences && worldSelect.value) {
+      loadStartOptions(worldSelect.value, getBetaValue(), startPreferences);
+    }
+
+    if (preset.fields) {
+      Object.entries(preset.fields).forEach(([fieldId, value]) => {
+        setInputValue(fieldId, value);
+      });
+    }
+    if (preset.checkboxes) {
+      Object.entries(preset.checkboxes).forEach(([fieldName, value]) => {
+        setCheckboxValue(fieldName, value);
+      });
+    }
+    presetButtons.forEach((btn) => {
+      if (!btn || !btn.dataset) return;
+      const buttonKey = (btn.dataset.preset || '').toLowerCase();
+      const isActive = buttonKey === preset.lookupKey;
+      btn.classList.toggle('is-active', Boolean(isActive));
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+    updateProgress();
+  };
+
   if (dropzone && saveFileInput) {
     dropzone.addEventListener('click', () => saveFileInput.click());
     saveFileInput.addEventListener('change', () => handleFileSelect(saveFileInput.files[0]));
@@ -2753,15 +3231,55 @@ function initServerCreationPage(root) {
     });
   }
 
+  if (tabButtons.length && tabPanels.length) {
+    tabButtons.forEach((btn) => {
+      if (!btn) return;
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        const target = btn.dataset?.tabTarget || 'basic';
+        showFormTab(target);
+      });
+    });
+    showFormTab('basic');
+  }
+
+  if (presetButtons.length) {
+    presetButtons.forEach((btn) => {
+      if (!btn) return;
+      btn.setAttribute('aria-pressed', 'false');
+      btn.addEventListener('click', (event) => {
+        event.preventDefault();
+        const key = btn.dataset?.preset;
+        if (key) {
+          applyPreset(key);
+        }
+      });
+    });
+  }
+
+  if (portUnlockButton && portInput) {
+    portUnlockButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      if (portInput.readOnly) {
+        unlockPortField();
+      }
+    });
+  }
+
   if (worldSelect) {
     worldSelect.addEventListener('change', () => {
-      loadStartOptions(worldSelect.value, getBetaValue(), {});
+      if (!suppressWorldChangeHandler) {
+        loadStartOptions(worldSelect.value, getBetaValue(), {});
+      }
       updateProgress();
     });
   }
 
   if (betaSelect) {
     betaSelect.addEventListener('change', () => {
+      if (suppressBetaChangeHandler) {
+        return;
+      }
       const betaValue = getBetaValue();
       const matched = ensureWorldMatchesBeta(betaValue);
       loadStartOptions(matched || worldSelect?.value || '', betaValue, {});
@@ -2812,6 +3330,25 @@ function initServerCreationPage(root) {
     setTimeout(() => {
       resetDropzone();
       loadStartOptions(worldSelect ? worldSelect.value : '', getBetaValue(), {});
+      if (portInput) {
+        portInput.readOnly = true;
+        portInput.classList.remove('is-editable');
+        portInput.dataset.portLock = 'true';
+      }
+      if (portUnlockButton) {
+        portUnlockButton.disabled = false;
+        portUnlockButton.textContent = portUnlockDefaultLabel || 'Customize';
+      }
+      if (tabButtons.length) {
+        showFormTab('basic');
+      }
+      if (presetButtons.length) {
+        presetButtons.forEach((btn) => {
+          if (!btn) return;
+          btn.classList.remove('is-active');
+          btn.setAttribute('aria-pressed', 'false');
+        });
+      }
     }, 0);
   });
 }

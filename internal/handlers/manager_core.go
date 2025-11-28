@@ -4,6 +4,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -577,6 +578,17 @@ func (h *ManagerHandlers) buildNewServerFormPayload(username interface{}, overri
 		"release_difficulties": h.manager.GetDifficultiesForVersion(false),
 		"beta_difficulties":    h.manager.GetDifficultiesForVersion(true),
 		"form":                 formDefaults,
+	}
+
+	if h.manager != nil {
+		if presets := h.manager.GetServerPresets(); len(presets) > 0 {
+			payload["presetButtons"] = presets
+			if encoded, err := json.Marshal(presets); err == nil {
+				payload["presetJSON"] = template.JS(encoded)
+			} else {
+				log.Printf("failed to marshal server presets: %v", err)
+			}
+		}
 	}
 
 	if overrides != nil {

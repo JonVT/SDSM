@@ -16,235 +16,371 @@
                 data-default-start-location="{{ index .form "start_location" }}"
                 data-default-start-condition="{{ index .form "start_condition" }}"
                 data-default-beta="{{ index .form "beta" }}">
-                
-                <div class="form-section">
-                    <h3 class="form-section-title">Create From Save (Optional)</h3>
-                    <div id="saveDropzone" class="dropzone">
-                        <div class="dz-message">
-                            <svg class="icon-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 17.25V21h18v-3.75M4.5 12a7.5 7.5 0 0115 0v2.25H4.5V12z" />
-                            </svg>
-                            <strong>Drop a Stationeers .save file here</strong>
-                            <span class="text-muted">We'll read the save to set name and world, and import it.</span>
-                            <div id="saveFileName" class="mt-2 text-sm text-primary"></div>
-                        </div>
-                         <label for="save_file" class="btn btn-secondary btn-sm">Choose File</label>
-                        <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
+
+                <div class="server-form-intro">
+                    <div>
+                        <p class="eyebrow">Guided setup</p>
+                        <h3>Pick the essentials, hide the noise.</h3>
+                        <p class="intro-copy">Start with 8 quick fields. Advanced tuning, automation, and timeouts stay tucked away until you need them.</p>
                     </div>
-                    <div id="saveAnalysis" class="hidden mt-4 p-3 rounded-md bg-surface-2">
-                        <h4 class="text-md font-semibold mb-2">Detected From Save</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="form-group">
-                                <label class="form-label">World</label>
-                                <div id="detectedWorld" class="form-control-static"></div>
+                    <div class="intro-hint">
+                        <span class="hint-pill">Tip</span>
+                        <p>Already have a Stationeers save? Drop it in and we’ll fill most of the form for you.</p>
+                    </div>
+                </div>
+
+                <section class="form-section">
+                    <div class="section-card section-card-surface">
+                        <div class="section-card-header">
+                            <div>
+                                <p class="section-eyebrow">Create From Save (Optional)</p>
+                                <h4>Skip the typing.</h4>
+                            </div>
+                            <p class="section-subtext">We’ll extract the server name, world, and tuning info straight from the uploaded save.</p>
+                        </div>
+                        <div id="saveDropzone" class="dropzone">
+                            <div class="dz-message">
+                                <svg class="icon-upload" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 17.25V21h18v-3.75M4.5 12a7.5 7.5 0 0115 0v2.25H4.5V12z" />
+                                </svg>
+                                <strong>Drop a Stationeers .save file here</strong>
+                                <span class="text-muted">We’ll read the save to set name and world, and import it.</span>
+                                <div id="saveFileName" class="mt-2 text-sm text-primary"></div>
+                            </div>
+                            <label for="save_file" class="btn btn-secondary btn-sm">Choose File</label>
+                            <input type="file" id="save_file" name="save_file" accept=".save" class="hidden">
+                        </div>
+                        <div id="saveAnalysis" class="hidden mt-4 detected-save">
+                            <h4 class="detected-title">Detected From Save</h4>
+                            <div class="detected-grid">
+                                <div class="form-group">
+                                    <label class="form-label">World</label>
+                                    <div id="detectedWorld" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">World File Name (Server Name)</label>
+                                    <div id="detectedName" class="form-control-static"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {{ if .presetButtons }}
+                <div class="preset-toolbar">
+                    <div>
+                        <p class="preset-label">Recommended presets</p>
+                        <p class="preset-helper">Auto-fill difficulty and automation defaults in one tap.</p>
+                    </div>
+                    <div class="preset-buttons" role="group" aria-label="Recommended settings">
+                        {{ range .presetButtons }}
+                        <button type="button" class="btn btn-ghost btn-xs preset-btn" data-preset="{{ .Key }}">{{ .Label }}</button>
+                        {{ end }}
+                    </div>
+                </div>
+                {{ end }}
+
+                <div class="server-form-tabs" role="tablist" aria-label="Server form sections">
+                    <button type="button" class="server-form-tab is-active" data-tab-target="basic" aria-controls="server-basic-panel" aria-selected="true">Basic</button>
+                    <button type="button" class="server-form-tab" data-tab-target="advanced" aria-controls="server-advanced-panel" aria-selected="false">Advanced</button>
+                </div>
+
+                <div id="server-basic-panel" class="server-form-panel" data-tab-panel="basic">
+                    <div class="section-card">
+                        <div class="section-card-header">
+                            <div>
+                                <p class="section-eyebrow">Server identity</p>
+                                <h4>Name it and choose the landing spot.</h4>
+                            </div>
+                            <p class="section-subtext">Only the highlighted fields are required to launch.</p>
+                        </div>
+                        <div class="section-card-grid">
+                            <div class="form-group form-span-all" id="basicNameGroup">
+                                <label class="form-label required" for="name_text">
+                                    <span>Server Name</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <input type="text" id="name_text" name="name" class="form-control" required value="{{ index .form "name" }}" placeholder="My Awesome Server">
+                                <p class="form-hint">Shown publicly in the Stationeers server browser.</p>
+                            </div>
+                            <div class="form-group" id="basicWorldGroup">
+                                <label class="form-label required" for="world_select">
+                                    <span>World</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <select id="world_select" name="world" class="form-control" required>
+                                    {{ $currentWorld := index .form "world" }}
+                                    {{ $releaseWorlds := index .worldLists "release" }}
+                                    {{ $betaWorlds := index .worldLists "beta" }}
+                                    {{ $hasRelease := gt (len $releaseWorlds) 0 }}
+                                    {{ $hasBeta := gt (len $betaWorlds) 0 }}
+                                    {{ if not (or $hasRelease $hasBeta) }}
+                                    <option value="">No worlds available</option>
+                                    {{ else }}
+                                        {{ if $hasRelease }}
+                                        <optgroup label="Release Worlds">
+                                            {{ range $releaseWorlds }}
+                                            <option value="{{ . }}" data-beta="false" {{ if eq . $currentWorld }}selected{{ end }}>{{ . }}</option>
+                                            {{ end }}
+                                        </optgroup>
+                                        {{ end }}
+                                        {{ if $hasBeta }}
+                                        <optgroup label="Beta Worlds">
+                                            {{ range $betaWorlds }}
+                                            <option value="{{ . }}" data-beta="true" {{ if eq . $currentWorld }}selected{{ end }}>{{ . }}</option>
+                                            {{ end }}
+                                        </optgroup>
+                                        {{ end }}
+                                    {{ end }}
+                                </select>
                             </div>
                             <div class="form-group">
-                                <label class="form-label">World File Name (Server Name)</label>
-                                <div id="detectedName" class="form-control-static"></div>
+                                <label class="form-label required" for="start_location">
+                                    <span>Start Location</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <select name="start_location" id="start_location" class="form-control" required>
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="start_condition">
+                                    <span>Start Condition</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <select name="start_condition" id="start_condition" class="form-control" required>
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="difficulty">
+                                    <span>Difficulty</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <select id="difficulty" name="difficulty" class="form-control" required>
+                                    {{ $selectedDifficulty := index .form "difficulty" }}
+                                    {{ range .difficulties }}
+                                    <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
+                                    {{ end }}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label required" for="beta">
+                                    <span>Game Version</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <select id="beta" name="beta" class="form-control" required>
+                                    <option value="false" {{ if ne (index .form "beta") "true" }}selected{{ end }}>Release</option>
+                                    <option value="true" {{ if eq (index .form "beta") "true" }}selected{{ end }}>Beta</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="section-card">
+                        <div class="section-card-header">
+                            <div>
+                                <p class="section-eyebrow">Network & access</p>
+                                <h4>Shareable and safe defaults.</h4>
+                            </div>
+                            <p class="section-subtext">Most hosts never change the port—we lock it until you say otherwise.</p>
+                        </div>
+                        <div class="section-card-grid">
+                            <div class="form-group">
+                                <label class="form-label required" for="max_clients">
+                                    <span>Max Players</span>
+                                    <span class="required-marker" aria-hidden="true">*</span>
+                                    <span class="sr-only">Required</span>
+                                </label>
+                                <input type="number" id="max_clients" name="max_clients" class="form-control" required value="{{ or (index .form "max_clients") 10 }}" min="1" max="100">
+                            </div>
+                            <div class="form-group form-span-all">
+                                <div class="label-row">
+                                    <label class="form-label required" for="port">
+                                        <span>Port</span>
+                                        <span class="required-marker" aria-hidden="true">*</span>
+                                        <span class="sr-only">Required</span>
+                                    </label>
+                                    <span class="label-hint">27016 is perfect for 99% of players.</span>
+                                </div>
+                                <div class="port-input-wrapper">
+                                    <input type="number" id="port" name="port" class="form-control port-field" required value="{{ or (index .form "port") 27016 }}" min="1024" max="65535" placeholder="27016 (default)" readonly data-port-lock="true">
+                                    <button type="button" class="btn btn-ghost btn-xs unlock-port" data-action="unlock-port">Customize</button>
+                                </div>
+                                <p class="form-hint">We’ll automatically open and forward the default Stationeers port unless you unlock this field.</p>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="password">Server Password</label>
+                                <input type="text" id="password" name="password" class="form-control" value="{{ index .form "password" }}" placeholder="Leave empty for no password">
+                            </div>
+                            <div class="form-group">
+                                <div class="toggle-label">
+                                    <span>Server Visible in list</span>
+                                </div>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="server_visible" {{ if or (not .form) (index .form "server_visible") }}checked{{ end }}>
+                                    <span class="switch-display">
+                                        <span class="switch-thumb"></span>
+                                    </span>
+                                    <span class="switch-label">List publicly</span>
+                                </label>
+                                <p class="form-hint">Disable if you plan to invite via direct connect only.</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="form-section">
-                    <h3 class="form-section-title">Basic Settings</h3>
-                    <div class="form-grid">
-                        <div class="form-group form-span-all" id="basicNameGroup">
-                            <label class="form-label" for="name_text">Server Name *</label>
-                            <input type="text" id="name_text" name="name" class="form-control" required value="{{ index .form "name" }}" placeholder="My Awesome Server">
-                            <p class="form-hint">The name that will appear in the server list.</p>
+                <div id="server-advanced-panel" class="server-form-panel hidden" data-tab-panel="advanced" aria-hidden="true">
+                    <div class="advanced-empty">Advanced tuning is optional. Expand a panel below when you’re ready.</div>
+
+                    <details class="advanced-accordion">
+                        <summary>
+                            <div>
+                                <p class="summary-eyebrow">Autosaving & performance</p>
+                                <h4>Control intervals, budget, and reliability.</h4>
+                            </div>
+                            <span class="summary-icon" aria-hidden="true">›</span>
+                        </summary>
+                        <div class="advanced-body">
+                            <div class="section-card-grid">
+                                <div class="form-group">
+                                    <div class="label-with-help">
+                                        <label class="form-label required" for="save_interval">
+                                            <span>Save Interval (sec)</span>
+                                            <span class="required-marker" aria-hidden="true">*</span>
+                                            <span class="sr-only">Required</span>
+                                        </label>
+                                        <button type="button" class="info-pill" data-tooltip="How often the world auto-saves. Lower values means safer, higher values reduce disk writes.">i</button>
+                                    </div>
+                                    <input type="number" id="save_interval" name="save_interval" class="form-control" required value="{{ or (index .form "save_interval") 300 }}" min="60" max="3600">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="restart_delay_seconds">Restart Delay (sec)</label>
+                                    <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" value="{{ or (index .form "restart_delay_seconds") 10 }}" min="0" max="3600">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (sec)</label>
+                                    <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" value="{{ or (index .form "shutdown_delay_seconds") 2 }}" min="0" max="3600">
+                                </div>
+                                <div class="form-group">
+                                    <div class="label-with-help">
+                                        <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
+                                        <button type="button" class="info-pill" data-tooltip="How long to wait before dropping stalled connections. Larger servers can increase this for stability.">i</button>
+                                    </div>
+                                    <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000">
+                                </div>
+                                <div class="form-group">
+                                    <div class="label-with-help">
+                                        <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
+                                        <button type="button" class="info-pill" data-tooltip="Time to wait for BepInEx plugins to finish booting before considering startup failed.">i</button>
+                                    </div>
+                                    <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" min="5" max="120">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="auth_secret">Auth Secret</label>
+                                    <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="max_auto_saves">Max Auto Saves</label>
+                                    <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="max_quick_saves">Max Quick Saves</label>
+                                    <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" value="{{ or (index .form "max_quick_saves") 5 }}" min="1" max="1000">
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group" id="basicWorldGroup">
-                            <label class="form-label" for="world_select">World *</label>
-                            <select id="world_select" name="world" class="form-control" required>
-                                {{ $currentWorld := index .form "world" }}
-                                {{ $releaseWorlds := index .worldLists "release" }}
-                                {{ $betaWorlds := index .worldLists "beta" }}
-                                {{ $hasRelease := gt (len $releaseWorlds) 0 }}
-                                {{ $hasBeta := gt (len $betaWorlds) 0 }}
-                                {{ if not (or $hasRelease $hasBeta) }}
-                                <option value="">No worlds available</option>
-                                {{ else }}
-                                    {{ if $hasRelease }}
-                                    <optgroup label="Release Worlds">
-                                        {{ range $releaseWorlds }}
-                                        <option value="{{ . }}" data-beta="false" {{ if eq . $currentWorld }}selected{{ end }}>{{ . }}</option>
-                                        {{ end }}
-                                    </optgroup>
-                                    {{ end }}
-                                    {{ if $hasBeta }}
-                                    <optgroup label="Beta Worlds">
-                                        {{ range $betaWorlds }}
-                                        <option value="{{ . }}" data-beta="true" {{ if eq . $currentWorld }}selected{{ end }}>{{ . }}</option>
-                                        {{ end }}
-                                    </optgroup>
-                                    {{ end }}
-                                {{ end }}
-                            </select>
+                    </details>
+
+                    <details class="advanced-accordion">
+                        <summary>
+                            <div>
+                                <p class="summary-eyebrow">Messaging & onboarding</p>
+                                <h4>Customize the greetings your players see.</h4>
+                            </div>
+                            <span class="summary-icon" aria-hidden="true">›</span>
+                        </summary>
+                        <div class="advanced-body">
+                            <div class="section-card-grid">
+                                <div class="form-group form-span-all">
+                                    <label class="form-label" for="welcome_message">Welcome Message</label>
+                                    <input type="text" id="welcome_message" name="welcome_message" class="form-control" value="{{ index .form "welcome_message" }}" placeholder="e.g. Welcome to [ServerName]!">
+                                </div>
+                                <div class="form-group form-span-all">
+                                    <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
+                                    <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control" value="{{ index .form "welcome_back_message" }}" placeholder="e.g. Welcome back, [LastPlayer]!">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
+                                    <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index .form "welcome_delay_seconds") 1 }}">
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="start_location">Start Location *</label>
-                            <select name="start_location" id="start_location" class="form-control" required>
-                                <option value="">Loading...</option>
-                            </select>
+                    </details>
+
+                    <details class="advanced-accordion">
+                        <summary>
+                            <div>
+                                <p class="summary-eyebrow">Automation & recovery</p>
+                                <h4>Toggle what SDSM handles for you.</h4>
+                            </div>
+                            <span class="summary-icon" aria-hidden="true">›</span>
+                        </summary>
+                        <div class="advanced-body">
+                            <div class="toggle-grid">
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="auto_save" {{ if index .form "auto_save" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Auto Save</span>
+                                </label>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="player_saves" {{ if index .form "player_saves" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Player Saves</span>
+                                </label>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="auto_pause" {{ if index .form "auto_pause" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Auto Pause when empty</span>
+                                </label>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="delete_skeleton_on_decay" {{ if index .form "delete_skeleton_on_decay" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Delete skeleton on decay</span>
+                                </label>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="auto_start" {{ if index .form "auto_start" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Auto start on SDSM launch</span>
+                                </label>
+                                <label class="form-switch large">
+                                    <input type="checkbox" name="auto_update" {{ if index .form "auto_update" }}checked{{ end }}>
+                                    <span class="switch-display"><span class="switch-thumb"></span></span>
+                                    <span class="switch-label">Auto update on start</span>
+                                </label>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="start_condition">Start Condition *</label>
-                            <select name="start_condition" id="start_condition" class="form-control" required>
-                                <option value="">Loading...</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="difficulty">Difficulty *</label>
-                            <select id="difficulty" name="difficulty" class="form-control" required>
-                                {{ $selectedDifficulty := index .form "difficulty" }}
-                                {{ range .difficulties }}
-                                <option value="{{ . }}" {{ if eq . $selectedDifficulty }}selected{{ end }}>{{ . }}</option>
-                                {{ end }}
-                            </select>
-                        </div>
-                    </div>
+                    </details>
                 </div>
 
-                <div class="form-section">
-                    <h3 class="form-section-title">Network Settings</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label" for="port">Port *</label>
-                            <input type="number" id="port" name="port" class="form-control" required value="{{ or (index .form "port") 27016 }}" min="1024" max="65535">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="max_clients">Max Players *</label>
-                            <input type="number" id="max_clients" name="max_clients" class="form-control" required value="{{ or (index .form "max_clients") 10 }}" min="1" max="100">
-                        </div>
-                        <div class="form-group form-span-all">
-                            <label class="form-label" for="password">Server Password</label>
-                            <input type="text" id="password" name="password" class="form-control" value="{{ index .form "password" }}" placeholder="Leave empty for no password">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h3 class="form-section-title">Advanced Settings</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label" for="save_interval">Save Interval (sec) *</label>
-                            <input type="number" id="save_interval" name="save_interval" class="form-control" required value="{{ or (index .form "save_interval") 300 }}" min="60" max="3600">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="restart_delay_seconds">Restart Delay (sec)</label>
-                            <input type="number" id="restart_delay_seconds" name="restart_delay_seconds" class="form-control" value="{{ or (index .form "restart_delay_seconds") 10 }}" min="0" max="3600">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="shutdown_delay_seconds">Shutdown Delay (sec)</label>
-                            <input type="number" id="shutdown_delay_seconds" name="shutdown_delay_seconds" class="form-control" value="{{ or (index .form "shutdown_delay_seconds") 2 }}" min="0" max="3600">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="disconnect_timeout">Disconnect Timeout (ms)</label>
-                            <input type="number" id="disconnect_timeout" name="disconnect_timeout" class="form-control" value="{{ or (index .form "disconnect_timeout") 10000 }}" min="1000" max="600000" step="1000">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="bepinex_init_timeout_seconds">BepInEx Init Timeout (sec)</label>
-                            <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" min="5" max="120">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="auth_secret">Auth Secret</label>
-                            <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-section">
-                    <h3 class="form-section-title">Startup Options</h3>
-                    <div class="form-grid">
-                        <div class="form-group form-span-all">
-                            <label class="form-label" for="welcome_message">Welcome Message</label>
-                            <input type="text" id="welcome_message" name="welcome_message" class="form-control" value="{{ index .form "welcome_message" }}" placeholder="e.g. Welcome to [ServerName]!">
-                        </div>
-                        <div class="form-group form-span-all">
-                            <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
-                            <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control" value="{{ index .form "welcome_back_message" }}" placeholder="e.g. Welcome back, [LastPlayer]!">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
-                            <input type="number" id="welcome_delay_seconds" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{ or (index .form "welcome_delay_seconds") 1 }}">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="max_auto_saves">Max Auto Saves</label>
-                            <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="max_quick_saves">Max Quick Saves</label>
-                            <input type="number" id="max_quick_saves" name="max_quick_saves" class="form-control" value="{{ or (index .form "max_quick_saves") 5 }}" min="1" max="1000">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="beta">Game Version *</label>
-                            <select id="beta" name="beta" class="form-control" required>
-                                <option value="false" {{ if ne (index .form "beta") "true" }}selected{{ end }}>Release</option>
-                                <option value="true" {{ if eq (index .form "beta") "true" }}selected{{ end }}>Beta</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-grid-switches">
-                        <label class="form-switch">
-                            <input type="checkbox" name="server_visible" {{ if or (not .form) (index .form "server_visible") }}checked{{ end }}>
-                            <span>Server Visible</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="auto_save" {{ if index .form "auto_save" }}checked{{ end }}>
-                            <span>Auto Save</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="player_saves" {{ if index .form "player_saves" }}checked{{ end }}>
-                            <span>Player Saves</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="auto_pause" {{ if index .form "auto_pause" }}checked{{ end }}>
-                            <span>Auto Pause</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="delete_skeleton_on_decay" {{ if index .form "delete_skeleton_on_decay" }}checked{{ end }}>
-                            <span>Delete Skeleton On Decay</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="auto_start" {{ if index .form "auto_start" }}checked{{ end }}>
-                            <span>Auto Start on SDSM Launch</span>
-                        </label>
-                        <label class="form-switch">
-                            <input type="checkbox" name="auto_update" {{ if index .form "auto_update" }}checked{{ end }}>
-                            <span>Auto Update on Start</span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="form-actions">
-                    <a href="/dashboard" class="btn btn-secondary" hx-get="/api/pages/dashboard" hx-push-url="/dashboard">Cancel</a>
-                    <button type="submit" class="btn btn-primary">
+                <div class="form-actions stacked">
+                    <button type="submit" class="btn btn-primary btn-lg w-full">
                         {{template "icons/plus.html" .}}
                         <span>Create Server</span>
                     </button>
+                    <a href="/dashboard" class="btn btn-link" hx-get="/api/pages/dashboard" hx-push-url="/dashboard">Cancel</a>
                 </div>
+                {{ if .presetJSON }}
+                <script id="server-presets-data" type="application/json">{{ .presetJSON }}</script>
+                {{ end }}
             </form>
         </div>
     </div>
-
-    <aside class="card card-sticky">
-        <div class="card-header">
-            <h3 class="card-title">Form Progress</h3>
-        </div>
-        <div class="card-content">
-            <div class="progress-bar">
-                <div class="progress-bar-fill" id="progressFill" style="width: 0%;"></div>
-            </div>
-            <div class="progress-text" id="progressText">0 of 5 required fields complete</div>
-            <ul class="progress-list" id="progressList">
-                <li data-field="name">Server Name</li>
-                <li data-field="world">World</li>
-                <li data-field="start_location">Start Location</li>
-                <li data-field="start_condition">Start Condition</li>
-                <li data-field="difficulty">Difficulty</li>
-            </ul>
-        </div>
-    </aside>
 </div>
 {{end}}

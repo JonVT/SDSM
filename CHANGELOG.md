@@ -8,7 +8,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 
-- _None yet_
+- Create Server presets can now be edited in `sdsm.config` via a new `server_presets` array. The UI consumes these dynamically so operators can tweak defaults without rebuilding.
 
 ### Changed
 

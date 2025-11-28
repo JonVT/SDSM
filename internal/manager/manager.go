@@ -54,39 +54,40 @@ const (
 )
 
 type Manager struct {
-	Active            bool             `json:"-"`
-	ConfigFile        string           `json:"-"`
-	Updating          bool             `json:"-"`
-	SetupInProgress   bool             `json:"-"`
-	Log               *utils.Logger    `json:"-"`
-	UpdateLog         *utils.Logger    `json:"-"`
-	SteamID           string           `json:"steam_id"`
-	SavedPath         string           `json:"saved_path"`
-	Paths             *utils.Paths     `json:"paths"`
-	Port              int              `json:"port"`
-	Language          string           `json:"language"`
-	Servers           []*models.Server `json:"servers"`
-	UpdateTime        time.Time        `json:"update_time"`
-	StartupUpdate     bool             `json:"startup_update"`
-	MissingComponents []string         `json:"-"`
-	NeedsUploadPrompt bool             `json:"-"`
-	DeployErrors      []string         `json:"-"`
-	deployMu          sync.Mutex       `json:"-"`
-	steamCmdMu        sync.RWMutex     `json:"-"`
-	steamCmdVersion   string           `json:"-"`
-	steamCmdCheckedAt time.Time        `json:"-"`
-	bepInExMu         sync.RWMutex     `json:"-"`
-	bepInExVersion    string           `json:"-"`
-	bepInExCheckedAt  time.Time        `json:"-"`
-	bepInExLatestMu   sync.RWMutex     `json:"-"`
-	bepInExLatest     string           `json:"-"`
-	bepInExLatestAt   time.Time        `json:"-"`
-	launchPadLatestMu sync.RWMutex     `json:"-"`
-	launchPadLatest   string           `json:"-"`
-	launchPadLatestAt time.Time        `json:"-"`
-	launchPadMu       sync.RWMutex     `json:"-"`
-	launchPadVersion  string           `json:"-"`
-	launchPadChecked  time.Time        `json:"-"`
+	Active            bool                  `json:"-"`
+	ConfigFile        string                `json:"-"`
+	Updating          bool                  `json:"-"`
+	SetupInProgress   bool                  `json:"-"`
+	Log               *utils.Logger         `json:"-"`
+	UpdateLog         *utils.Logger         `json:"-"`
+	SteamID           string                `json:"steam_id"`
+	SavedPath         string                `json:"saved_path"`
+	Paths             *utils.Paths          `json:"paths"`
+	Port              int                   `json:"port"`
+	Language          string                `json:"language"`
+	Servers           []*models.Server      `json:"servers"`
+	ServerPresets     []models.ServerPreset `json:"server_presets"`
+	UpdateTime        time.Time             `json:"update_time"`
+	StartupUpdate     bool                  `json:"startup_update"`
+	MissingComponents []string              `json:"-"`
+	NeedsUploadPrompt bool                  `json:"-"`
+	DeployErrors      []string              `json:"-"`
+	deployMu          sync.Mutex            `json:"-"`
+	steamCmdMu        sync.RWMutex          `json:"-"`
+	steamCmdVersion   string                `json:"-"`
+	steamCmdCheckedAt time.Time             `json:"-"`
+	bepInExMu         sync.RWMutex          `json:"-"`
+	bepInExVersion    string                `json:"-"`
+	bepInExCheckedAt  time.Time             `json:"-"`
+	bepInExLatestMu   sync.RWMutex          `json:"-"`
+	bepInExLatest     string                `json:"-"`
+	bepInExLatestAt   time.Time             `json:"-"`
+	launchPadLatestMu sync.RWMutex          `json:"-"`
+	launchPadLatest   string                `json:"-"`
+	launchPadLatestAt time.Time             `json:"-"`
+	launchPadMu       sync.RWMutex          `json:"-"`
+	launchPadVersion  string                `json:"-"`
+	launchPadChecked  time.Time             `json:"-"`
 	// SCON latest/deployed caches
 	sconLatestMu     sync.RWMutex `json:"-"`
 	sconLatest       string       `json:"-"`
@@ -314,6 +315,7 @@ func NewManagerWithConfig(configPath string) *Manager {
 		StartupUpdate:              true,
 		progressByType:             make(map[DeployType]*UpdateProgress),
 		serverProgress:             make(map[int]*ServerCopyProgress),
+		ServerPresets:              normalizeServerPresetList(defaultServerPresets()),
 		TrayEnabled:                runtime.GOOS == "windows", // default true on Windows, false elsewhere
 		TLSEnabled:                 false,
 		TLSCertPath:                "",
@@ -1074,6 +1076,11 @@ func (m *Manager) bootstrapDefaultConfig(configPath, rootPath string) error {
 
 	m.ConfigFile = configPath
 	m.Paths = utils.NewPaths(rootPath)
+	if len(m.ServerPresets) == 0 {
+		m.ServerPresets = normalizeServerPresetList(defaultServerPresets())
+	} else {
+		m.ServerPresets = normalizeServerPresetList(m.ServerPresets)
+	}
 
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
@@ -1129,6 +1136,10 @@ func (m *Manager) load() (bool, error) {
 	m.Port = temp.Port
 	m.Language = strings.TrimSpace(temp.Language)
 	m.Servers = temp.Servers
+	m.ServerPresets = normalizeServerPresetList(temp.ServerPresets)
+	if len(m.ServerPresets) == 0 {
+		m.ServerPresets = normalizeServerPresetList(defaultServerPresets())
+	}
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
 	m.DetachedServers = temp.DetachedServers
