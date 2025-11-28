@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const hasApiHelper = window.SDSM && SDSM.api && typeof SDSM.api.request === 'function';
     const hasApiDownloadHelper = window.SDSM && SDSM.api && typeof SDSM.api.downloadWorld === 'function';
 
+    let lastKnownRunning = serverContent.dataset.serverRunning === 'true';
+
     async function serverRequest(path, options = {}) {
         const url = `${serverApiBase}${path}`;
         if (hasApiHelper) {
@@ -122,6 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const savesList = document.getElementById('saves-list');
     const savesEmpty = document.getElementById('saves-empty');
     const savesTabs = document.getElementById('saves-tabs');
+    const btnRefreshSaves = document.getElementById('btn-refresh-saves');
     let currentSavesFilter = 'all';
     const SAVE_FILTER_MAP = {
         all: ['auto', 'quick', 'manual', 'player'],
@@ -296,6 +299,10 @@ document.addEventListener('DOMContentLoaded', function () {
         serverContent.dataset.serverStarting = status.starting;
         serverContent.dataset.serverStopping = status.stopping;
 
+        const wasRunning = lastKnownRunning;
+        const isRunning = !!status.running;
+        lastKnownRunning = isRunning;
+
         let statusClass = 'status-stopped';
         let text = 'Stopped';
 
@@ -337,6 +344,58 @@ document.addEventListener('DOMContentLoaded', function () {
         const configSubmitButton = serverConfigForm ? serverConfigForm.querySelector('button[type="submit"]') : null;
         if(configSubmitButton) {
             configSubmitButton.disabled = status.running;
+        }
+
+        if (wasRunning && !isRunning) {
+            fetchSaves(currentSavesFilter);
+            refreshWorldDownloadOptions();
+        }
+    }
+
+    function applyInitialStatusFromDataset() {
+        if (!serverContent) {
+            return;
+        }
+        const datasetStatus = {
+            running: serverContent.dataset.serverRunning === 'true',
+            paused: serverContent.dataset.serverPaused === 'true',
+            starting: serverContent.dataset.serverStarting === 'true',
+            stopping: serverContent.dataset.serverStopping === 'true'
+        };
+        updateServerStatus(datasetStatus);
+    }
+
+    document.addEventListener('sdsm:server-status', (event) => {
+        const detail = event.detail || {};
+        if (!detail || String(detail.serverId) !== String(serverId)) {
+            return;
+        }
+        if (detail.status) {
+            updateServerStatus({
+                running: !!detail.status.running,
+                paused: !!detail.status.paused,
+                starting: !!detail.status.starting,
+                stopping: !!detail.status.stopping
+            });
+        }
+    });
+
+    async function fetchLatestStatus() {
+        try {
+            const data = await serverRequest('/status', { method: 'GET' });
+            const payload = {
+                running: !!data.running,
+                paused: !!data.paused,
+                starting: !!data.starting,
+                stopping: !!data.stopping
+            };
+            serverContent.dataset.serverRunning = payload.running ? 'true' : 'false';
+            serverContent.dataset.serverPaused = payload.paused ? 'true' : 'false';
+            serverContent.dataset.serverStarting = payload.starting ? 'true' : 'false';
+            serverContent.dataset.serverStopping = payload.stopping ? 'true' : 'false';
+            updateServerStatus(payload);
+        } catch (error) {
+            console.warn('Unable to refresh server status', error);
         }
     }
 
@@ -663,6 +722,13 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    if (btnRefreshSaves) {
+        btnRefreshSaves.addEventListener('click', () => {
+            fetchSaves(currentSavesFilter);
+            refreshWorldDownloadOptions();
+        });
+    }
+
     document.body.addEventListener('click', (e) => {
         const kickBtn = e.target.closest('.btn-kick');
         if (kickBtn) {
@@ -874,7 +940,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // Initial load
-    connectWebSocket();
+    applyInitialStatusFromDataset();
+    fetchLatestStatus();
     fetchSaves('all');
     
     if (logViewer) {

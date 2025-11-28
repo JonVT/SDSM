@@ -632,11 +632,10 @@
 
       updateServerStatus: function(serverId, status) {
         const card = document.querySelector(`[data-server-id="${serverId}"]`);
-        if (!card) return;
 
-        const statusBadge = card.querySelector('[data-status]');
-        const stormBadge = card.querySelector('[data-storm]');
-        const uptimeEl = card.querySelector('[data-status-uptime]');
+        const statusBadge = card ? card.querySelector('[data-status]') : null;
+        const stormBadge = card ? card.querySelector('[data-storm]') : null;
+        const uptimeEl = card ? card.querySelector('[data-status-uptime]') : null;
 
         const summary = (() => {
           const startedAt = typeof status.startedAt === 'string' ? status.startedAt : '';
@@ -799,31 +798,59 @@
           }
         }
 
-        this.updateUsageBars(card, {
-          cpuPercent: status.cpuPercent,
-          memoryPercent: status.memoryPercent,
-          memoryBytes: status.memoryRSSBytes
-        });
+        if (card) {
+          this.updateUsageBars(card, {
+            cpuPercent: status.cpuPercent,
+            memoryPercent: status.memoryPercent,
+            memoryBytes: status.memoryRSSBytes
+          });
 
-        if (status.name !== undefined) {
-          const nameEl = card.querySelector('[data-server-name]');
-          if (nameEl) nameEl.textContent = status.name;
+          if (status.name !== undefined) {
+            const nameEl = card.querySelector('[data-server-name]');
+            if (nameEl) nameEl.textContent = status.name;
+          }
+
+          if (status.port !== undefined) {
+            const portEl = card.querySelector('[data-port-value]');
+            if (portEl) portEl.textContent = String(status.port);
+          }
+
+          if (status.playerCount !== undefined) {
+            const pcEl = card.querySelector('[data-player-count]');
+            if (pcEl) pcEl.textContent = `${status.playerCount}/${status.maxPlayers || '?'}`;
+          }
+
+          if (status.world !== undefined) {
+            const wEl = card.querySelector('[data-world-value]');
+            if (wEl) wEl.textContent = status.world;
+          }
         }
 
-        if (status.port !== undefined) {
-          const portEl = card.querySelector('[data-port-value]');
-          if (portEl) portEl.textContent = String(status.port);
+        const navItem = document.querySelector(`.nav-server-item[data-server-id="${serverId}"]`);
+        if (navItem) {
+          let navState = 'stopped';
+          if (status.lastError) {
+            navState = 'error';
+          } else if (status.starting || status.stopping) {
+            navState = 'starting';
+          } else if (status.running && status.paused) {
+            navState = 'paused';
+          } else if (status.running) {
+            navState = 'running';
+          }
+          navItem.dataset.serverState = navState;
+          const badge = navItem.querySelector('[data-server-badge]');
+          if (badge) {
+            badge.hidden = !(status.running && !status.paused);
+          }
         }
 
-        if (status.playerCount !== undefined) {
-          const pcEl = card.querySelector('[data-player-count]');
-          if (pcEl) pcEl.textContent = `${status.playerCount}/${status.maxPlayers || '?'}`;
-        }
-
-        if (status.world !== undefined) {
-          const wEl = card.querySelector('[data-world-value]');
-          if (wEl) wEl.textContent = status.world;
-        }
+        document.dispatchEvent(new CustomEvent('sdsm:server-status', {
+          detail: {
+            serverId: String(serverId),
+            status
+          }
+        }));
       },
 
       updateStats: function(stats) {
@@ -1858,6 +1885,163 @@
         '/help/tokens': 'Chat Tokens',
       },
 
+      managerSubmenu: {
+        container: null,
+        contentArea: null,
+        sections: [],
+        activeId: null,
+        currentPath: '',
+
+        init() {
+          this.container = document.querySelector('[data-manager-submenu]');
+          this.contentArea = document.getElementById('content-area');
+          if (this.container) {
+            this.container.setAttribute('role', 'menu');
+          }
+        },
+
+        isManagerPath(path) {
+          return path === '/manager';
+        },
+
+        refreshForPath(path) {
+          this.currentPath = path || '';
+          if (!this.container) {
+            return;
+          }
+          if (!this.isManagerPath(path)) {
+            this.hide();
+            this.clear();
+            return;
+          }
+          this.contentArea = document.getElementById('content-area');
+          this.show();
+          this.build();
+        },
+
+        handleContentSwap(target) {
+          if (!this.container || !target || target.id !== 'content-area') {
+            return;
+          }
+          this.contentArea = target;
+          if (this.isManagerPath(this.currentPath || window.location.pathname)) {
+            this.show();
+            this.build(target);
+          }
+        },
+
+        clear() {
+          if (!this.container) {
+            return;
+          }
+          this.sections = [];
+          this.activeId = null;
+          this.container.innerHTML = '';
+        },
+
+        show() {
+          if (!this.container) {
+            return;
+          }
+          this.container.hidden = false;
+          this.container.classList.add('active');
+        },
+
+        hide() {
+          if (!this.container) {
+            return;
+          }
+          this.container.classList.remove('active');
+          this.container.hidden = true;
+        },
+
+        build(root) {
+          if (!this.container) {
+            return;
+          }
+          const scope = root || this.contentArea || document.getElementById('content-area');
+          if (!scope) {
+            this.clear();
+            this.hide();
+            return;
+          }
+          this.contentArea = scope;
+          const nodes = Array.from(scope.querySelectorAll('[data-manager-section]'));
+          if (!nodes.length) {
+            this.clear();
+            this.hide();
+            return;
+          }
+          this.sections = nodes.map((node, index) => {
+            if (!node.id) {
+              node.id = `manager-section-${index + 1}`;
+            }
+            const title = (node.dataset.sectionTitle || this.extractHeading(node) || `Section ${index + 1}`).trim();
+            return { id: node.id, title, node };
+          });
+          this.renderButtons();
+          if (this.sections[0]) {
+            this.setActive(this.sections[0].id);
+          }
+        },
+
+        extractHeading(node) {
+          const heading = node.querySelector('[data-section-label], .card-title, h2, h3, h4, summary');
+          return heading ? heading.textContent : '';
+        },
+
+        renderButtons() {
+          if (!this.container) {
+            return;
+          }
+          const fragment = document.createDocumentFragment();
+          this.container.innerHTML = '';
+          this.sections.forEach((section) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'nav-submenu-item';
+            btn.textContent = section.title;
+            btn.dataset.sectionId = section.id;
+            btn.addEventListener('click', () => this.scrollToSection(section.id));
+            section.button = btn;
+            fragment.appendChild(btn);
+          });
+          this.container.appendChild(fragment);
+        },
+
+        prefersContentScroll() {
+          const area = this.contentArea || document.getElementById('content-area');
+          return !!(area && area.scrollHeight - area.clientHeight > 12);
+        },
+
+        scrollToSection(sectionId) {
+          const target = document.getElementById(sectionId);
+          if (!target) {
+            return;
+          }
+          const area = this.contentArea || document.getElementById('content-area');
+          if (area && this.prefersContentScroll()) {
+            const containerRect = area.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const offset = targetRect.top - containerRect.top + area.scrollTop - 12;
+            area.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+          } else {
+            const top = target.getBoundingClientRect().top + window.pageYOffset - 80;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          }
+          this.setActive(sectionId);
+        },
+
+        setActive(sectionId) {
+          this.activeId = sectionId;
+          this.sections.forEach((section) => {
+            if (section.button) {
+              section.button.classList.toggle('is-active', section.id === sectionId);
+            }
+          });
+        }
+      },
+
       updateTitle: (path) => {
         const titleEl = document.getElementById('page-title');
         if (!titleEl) return;
@@ -1878,6 +2062,8 @@
       },
 
       init: () => {
+        SDSM.frame.managerSubmenu.init();
+
         // Update date/time display
         const dtEl = document.getElementById('datetime');
         if (dtEl) {
@@ -1900,6 +2086,7 @@
           const targetPath = path || window.location.pathname;
           SDSM.frame.updateTitle(targetPath);
           SDSM.frame.updateActiveNav(targetPath);
+          SDSM.frame.managerSubmenu.refreshForPath(targetPath);
         };
 
         // Listen for HTMX navigation to update title and active nav item
@@ -1915,6 +2102,7 @@
           document.body.addEventListener('htmx:afterSwap', (evt) => {
             if (evt.target && evt.target.id === 'content-area') {
               syncNavState(window.location.pathname);
+              SDSM.frame.managerSubmenu.handleContentSwap(evt.target);
             }
           });
         }
@@ -1925,6 +2113,7 @@
           const target = evt.target instanceof Element ? evt.target.closest('.nav-item') : null;
           if (target && target.dataset.target) {
             SDSM.frame.updateActiveNav(target.dataset.target);
+            SDSM.frame.managerSubmenu.refreshForPath(target.dataset.target);
           }
         });
 
@@ -2017,6 +2206,7 @@
                 titleEl.textContent = wrapper.dataset.pageTitle;
               }
             }
+            SDSM.frame.managerSubmenu.handleContentSwap(e.target);
           }
 
           this.relativeTime.refresh(e.target);

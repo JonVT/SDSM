@@ -1,6 +1,6 @@
 {{define "manager_discord_card"}}
 {{ $integrationActive := or .notify_enable_deploy .notify_enable_server }}
-<div class="glass-card discord-integration-card">
+<div id="manager-card-discord" class="glass-card discord-integration-card" data-manager-section data-section-title="Discord Integration">
     <details class="discord-collapse integration-collapse" data-collapse-id="discord-integration" open>
         <summary class="discord-collapse-summary">
             <div>
