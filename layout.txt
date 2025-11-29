@@ -1,0 +1,70 @@
+Server
+the server page should have these cards:
+"Server info":
+- Server name
+- Rename button
+- language selection
+- World
+- World Description
+- Location
+- Location description
+- Difficulty
+- Port
+- connected/max players
+
+"Server Control"
+- Power
+- Save
+- Update
+- Started date/time and duration
+- Last saved date/time
+- last log line + navigate to logs card
+- start/stop storm
+- clean up players dead/disconnected/all
+- console to send arbitrary SCON commands to the server
+
+"Players"
+Tabbed list for:
+- Live (including icon indicating if active for player-saves also kick and ban buttons)
+- History (including icon indicating if banned and if active for player-saves also ban and un-ban buttons)
+- Banned (including un-ban button)
+
+"Chat"
+- live stream of chats from current session
+- entry to send a toekn enabled chat to current session (disabled if not running state)
+
+"Saves"
+Tabbed list sorted most recent at the top for:
+- All
+- Auto  (files in autosave dir)
+- Quick (files in quicksave dir)
+- Named (files in manualsave dir)
+- Player (files in playersave dir)
+  Player list sorted by player name with sub-list of saves sorted most recent first
+
+"Configuration"
+- configuration items similiar to create server screen
+
+"Discord"
+- overrides for server defaults configured on manager screen.
+
+"Logs"
+Tabbed list of all logs in the serve log dir.
+
+As usual, all cards should have their own .html source file and everything should use APIs.
+
+
++--------------------++--------------------++--------------------++--------------------+
+| Server Name                                                     [Rename] [Language]  |
+| World - World description                                                            |
+| Starting location - location description                                             |
+| Difficulty - Port - Players/max players                                              |
++--------------------++--------------------++--------------------++--------------------+
++------------------------------------------++------------------------------------------+
+| Server Control                   (status)|| Manager                                  |
+| Power           Save            Update   |+------------------------------------------+
+|                                          || Users                                    |
++------------------------------------------++------------------------------------------+
++------------------------------------------++------------------------------------------+
+| Players                                  ++ Server 2                                 |
++------------------------------------------++------------------------------------------+

@@ -1,0 +1,46 @@
+<div class="card manager-card" data-manager-card>
+    <div class="card-header">
+        <h2 class="card-title">Manager</h2>
+        <span class="status-pill is-warning" data-manager-status-pill>
+            <span class="dot" aria-hidden="true"></span>
+            <span data-manager-status-text>Loading…</span>
+            <span class="status-meta" data-manager-status-meta></span>
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="manager-info-fields text-sm">
+            <div class="manager-info-field">
+                <div class="text-tertiary text-xs uppercase tracking-wide">Web UI Port</div>
+                <div class="text-lg font-semibold" data-manager-port>—</div>
+            </div>
+            <div class="manager-info-field path-field">
+                <div class="text-tertiary text-xs uppercase tracking-wide">Root Path</div>
+                <div class="font-mono break-words" data-manager-root>Loading…</div>
+            </div>
+        </div>
+        <div class="row gap-3 mt-4 flex-wrap">
+            <button type="button"
+                    class="btn btn-danger"
+                    hx-post="/api/manager/update"
+                    hx-vals='{"shutdown":"1"}'
+                    hx-target="this"
+                    hx-swap="none"
+                    hx-confirm="Stop SDSM and shut down all services?"
+                    hx-disabled-elt="this">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.364 5.636A9 9 0 1 1 5.636 18.364 9 9 0 0 1 18.364 5.636z"/><path d="M12 2v10"/></svg>
+                <span>Stop SDSM</span>
+            </button>
+            <button type="button"
+                    class="btn btn-secondary"
+                    hx-post="/api/manager/update"
+                    hx-vals='{"restart":"1"}'
+                    hx-target="this"
+                    hx-swap="none"
+                    hx-confirm="Restart SDSM now?"
+                    hx-disabled-elt="this">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"/><path d="M1 14l5.37 5.37A9 9 0 0 0 20.49 15"/></svg>
+                <span>Restart</span>
+            </button>
+        </div>
+    </div>
+</div>

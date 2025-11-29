@@ -374,6 +374,37 @@ func (h *ManagerHandlers) serverStatusPayload(c *gin.Context, s *models.Server, 
 	// Resolve the server's configured world reference to a canonical technical ID for this channel
 	resolvedWorldID := h.manager.ResolveWorldID(s.WorldID, s.Beta)
 
+	// Build localized metadata for the active start location/condition to show descriptive copy in the UI.
+	var startLocationInfo gin.H
+	if locations := h.manager.GetStartLocationsForWorldVersionWithLanguage(s.WorldID, s.Beta, s.Language); len(locations) > 0 {
+		match := locations[0]
+		for _, loc := range locations {
+			if strings.EqualFold(strings.TrimSpace(loc.ID), strings.TrimSpace(s.StartLocation)) {
+				match = loc
+				break
+			}
+		}
+		startLocationInfo = gin.H{"id": match.ID, "name": match.Name, "description": match.Description}
+	}
+
+	var startConditionInfo gin.H
+	if conditions := h.manager.GetStartConditionsForWorldVersionWithLanguage(s.WorldID, s.Beta, s.Language); len(conditions) > 0 {
+		match := conditions[0]
+		for _, cond := range conditions {
+			if strings.EqualFold(strings.TrimSpace(cond.ID), strings.TrimSpace(s.StartCondition)) {
+				match = cond
+				break
+			}
+		}
+		startConditionInfo = gin.H{"id": match.ID, "name": match.Name, "description": match.Description}
+	}
+
+	languageOptions := h.manager.GetLanguagesForVersion(s.Beta)
+	if len(languageOptions) == 0 {
+		// Fallback to release languages when beta scan produced no results to avoid empty dropdowns.
+		languageOptions = h.manager.GetLanguagesForVersion(false)
+	}
+
 	// Compute detected SCON URL from runtime logs (fallback handled in method)
 	sconPort := s.CurrentSCONPort()
 	sconURL := fmt.Sprintf("http://localhost:%d/", sconPort)
@@ -461,10 +492,14 @@ func (h *ManagerHandlers) serverStatusPayload(c *gin.Context, s *models.Server, 
 		// Per-channel languages for per-server selection
 		"release_languages": h.manager.GetLanguagesForVersion(false),
 		"beta_languages":    h.manager.GetLanguagesForVersion(true),
+		"language_options":  languageOptions,
 		"serverPath":        h.manager.Paths.ServerDir(s.ID),
 		"banned":            s.BannedEntries(),
+		"banned_ids":        s.ReadBlacklistIDs(),
 		"scon_port":         sconPort,
 		"scon_url":          sconURL,
+		"start_location_info":   startLocationInfo,
+		"start_condition_info": startConditionInfo,
 	}
 
 	if errMsg != "" {

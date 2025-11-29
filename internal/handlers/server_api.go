@@ -143,6 +143,7 @@ func (h *ManagerHandlers) broadcastStats() {
 	}
 	telemetry := h.manager.SystemTelemetry()
 	health := 100.0
+	telemetryPayload := buildSystemTelemetryPayload(telemetry)
 	if telemetry != nil {
 		health = telemetry.HealthPercent
 	}
@@ -151,6 +152,9 @@ func (h *ManagerHandlers) broadcastStats() {
 		"activeServers":       h.manager.ServerCountActive(),
 		"totalPlayers":        h.manager.GetTotalPlayers(),
 		"systemHealthPercent": health,
+	}
+	if telemetryPayload != nil {
+		stats["systemTelemetry"] = telemetryPayload
 	}
 	payload := map[string]any{
 		"type":  "stats_update",
@@ -4132,21 +4136,10 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 	systemHealth := "100%"
 	telemetry := h.manager.SystemTelemetry()
 	systemHealthPercent := 100.0
-	var telemetryPayload gin.H
+	telemetryPayload := buildSystemTelemetryPayload(telemetry)
 	if telemetry != nil {
 		systemHealthPercent = telemetry.HealthPercent
 		systemHealth = fmt.Sprintf("%.0f%%", telemetry.HealthPercent)
-		telemetryPayload = gin.H{
-			"cpu_percent":    telemetry.CPUPercent,
-			"memory_percent": telemetry.MemoryPercent,
-			"memory_used":    telemetry.MemoryUsed,
-			"memory_total":   telemetry.MemoryTotal,
-			"disk_percent":   telemetry.DiskPercent,
-			"disk_used":      telemetry.DiskUsed,
-			"disk_total":     telemetry.DiskTotal,
-			"health_percent": telemetry.HealthPercent,
-			"sampled_at":     telemetry.SampledAt,
-		}
 	}
 
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
@@ -4167,6 +4160,36 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 		"systemHealthPercent": systemHealthPercent,
 		"systemTelemetry":     telemetryPayload,
 	})
+}
+
+func buildSystemTelemetryPayload(telemetry *models.SystemTelemetry) gin.H {
+	if telemetry == nil {
+		return nil
+	}
+	payload := gin.H{
+		"cpu_percent":        telemetry.CPUPercent,
+		"memory_percent":     telemetry.MemoryPercent,
+		"memory_used":        telemetry.MemoryUsed,
+		"memory_total":       telemetry.MemoryTotal,
+		"disk_percent":       telemetry.DiskPercent,
+		"disk_used":          telemetry.DiskUsed,
+		"disk_total":         telemetry.DiskTotal,
+		"network_in_bytes":   telemetry.NetworkInboundBytes,
+		"network_out_bytes":  telemetry.NetworkOutboundBytes,
+		"network_in_bps":     telemetry.NetworkInboundBps,
+		"network_out_bps":    telemetry.NetworkOutboundBps,
+		"network_interfaces": telemetry.NetworkInterfaces,
+		"load1":              telemetry.Load1,
+		"load5":              telemetry.Load5,
+		"load15":             telemetry.Load15,
+		"uptime_seconds":     telemetry.UptimeSeconds,
+		"process_count":      telemetry.ProcessCount,
+		"health_percent":     telemetry.HealthPercent,
+	}
+	if !telemetry.SampledAt.IsZero() {
+		payload["sampled_at"] = telemetry.SampledAt.Format(time.RFC3339)
+	}
+	return payload
 }
 
 // APIServerPlayerSaveExclude adds a Steam ID to the server's player-save exclusion list.

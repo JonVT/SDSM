@@ -9,7 +9,10 @@ import (
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/disk"
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/load"
 	"github.com/shirou/gopsutil/v4/mem"
+	"github.com/shirou/gopsutil/v4/net"
 	"github.com/shirou/gopsutil/v4/process"
 
 	"sdsm/internal/models"
@@ -117,6 +120,32 @@ func (m *Manager) collectSystemTelemetry(ctx context.Context) (*models.SystemTel
 		diskTotal = diskStats.Total
 	}
 
+	ioCounters, _ := net.IOCountersWithContext(ctx, true)
+	var netRecv, netSent uint64
+	netInterfaces := len(ioCounters)
+	for _, ctr := range ioCounters {
+		netRecv += ctr.BytesRecv
+		netSent += ctr.BytesSent
+	}
+
+	loadStats, _ := load.AvgWithContext(ctx)
+	var load1, load5, load15 float64
+	if loadStats != nil {
+		load1 = loadStats.Load1
+		load5 = loadStats.Load5
+		load15 = loadStats.Load15
+	}
+
+	hostInfo, _ := host.InfoWithContext(ctx)
+	var uptimeSeconds, processCount uint64
+	if hostInfo != nil {
+		uptimeSeconds = hostInfo.Uptime
+		processCount = hostInfo.Procs
+	}
+
+	sampledAt := time.Now()
+	netInRate, netOutRate := m.computeNetworkRates(netRecv, netSent, sampledAt)
+
 	health := computeHealth(cpuPercent, memPercent, diskPercent)
 	snapshot := &models.SystemTelemetry{
 		CPUPercent:    cpuPercent,
@@ -126,8 +155,18 @@ func (m *Manager) collectSystemTelemetry(ctx context.Context) (*models.SystemTel
 		DiskPercent:   diskPercent,
 		DiskUsed:      diskUsed,
 		DiskTotal:     diskTotal,
+		NetworkInboundBytes:   netRecv,
+		NetworkOutboundBytes:  netSent,
+		NetworkInboundBps:     netInRate,
+		NetworkOutboundBps:    netOutRate,
+		NetworkInterfaces:     netInterfaces,
+		Load1:                 load1,
+		Load5:                 load5,
+		Load15:                load15,
+		UptimeSeconds:         uptimeSeconds,
+		ProcessCount:          processCount,
 		HealthPercent: health,
-		SampledAt:     time.Now(),
+		SampledAt:     sampledAt,
 	}
 
 	return snapshot, deltaTotal, memTotal, diskStats
@@ -244,6 +283,30 @@ func (m *Manager) updateCPUSample(total, idle float64) (float64, float64, bool) 
 	m.lastCPUTotal = total
 	m.lastCPUIdle = idle
 	return deltaTotal, deltaIdle, hasPrev
+}
+
+func (m *Manager) computeNetworkRates(recv, sent uint64, now time.Time) (float64, float64) {
+	if m == nil {
+		return 0, 0
+	}
+	m.telemetryMu.Lock()
+	defer m.telemetryMu.Unlock()
+	var inbound, outbound float64
+	if !m.lastNetSample.IsZero() && now.After(m.lastNetSample) {
+		elapsed := now.Sub(m.lastNetSample).Seconds()
+		if elapsed > 0 {
+			if recv >= m.lastNetRecv {
+				inbound = float64(recv-m.lastNetRecv) / elapsed
+			}
+			if sent >= m.lastNetSent {
+				outbound = float64(sent-m.lastNetSent) / elapsed
+			}
+		}
+	}
+	m.lastNetRecv = recv
+	m.lastNetSent = sent
+	m.lastNetSample = now
+	return inbound, outbound
 }
 
 func computeHealth(cpu, mem, disk float64) float64 {

@@ -3,54 +3,7 @@
 
 {{define "users.html"}}
 <div data-page-title="User Management">
-    <div class="card">
-        <div class="card-header">
-            <div>
-                <h2 class="card-title">User Management</h2>
-                <p class="card-subtitle">
-                    {{len .users}} user{{if ne (len .users) 1}}s{{end}} &bull; {{len .serverOptions}} server{{if ne (len .serverOptions) 1}}s{{end}}
-                </p>
-            </div>
-            <button class="btn btn-primary" onclick="SDSM.users.showAddUserModal()">
-                <i data-feather="plus"></i>
-                <span>Add User</span>
-            </button>
-        </div>
-        <div class="table-container">
-            <table class="table" aria-describedby="users-help-text">
-                <thead>
-                    <tr>
-                        <th scope="col">User</th>
-                        <th scope="col">Role</th>
-                        <th scope="col">Access</th>
-                        <th scope="col" class="text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="user-list">
-                    {{if .users}}
-                        {{range .users}}
-                            {{template "user_row.html" .}}
-                        {{end}}
-                    {{else}}
-                        <tr id="user-empty-row">
-                            <td colspan="4" class="text-center py-8">
-                                <div class="empty-state">
-                                    <div class="empty-icon">
-                                        <i data-feather="users"></i>
-                                    </div>
-                                    <h3 class="empty-state-title">No Users Found</h3>
-                                    <p class="empty-state-description">Use the "Add User" button to create the first account.</p>
-                                </div>
-                            </td>
-                        </tr>
-                    {{end}}
-                </tbody>
-            </table>
-        </div>
-        <div class="card-footer">
-            <p id="users-help-text" class="help-text">Operators restricted to specific servers cannot start, stop, or deploy outside their allowed list.</p>
-        </div>
-    </div>
+    {{ template "users_management_card" . }}
 </div>
 
 <script>

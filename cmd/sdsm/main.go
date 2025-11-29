@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	htmltmpl "html/template"
 	"io/fs"
@@ -380,11 +381,24 @@ func setupRouter() *gin.Engine {
 		},
 		"appVersion": func() string { return version.Version },
 		"buildTime":  func() string { return version.String() },
+		"toJSON": func(value interface{}) htmltmpl.JS {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return htmltmpl.JS("null")
+			}
+			return htmltmpl.JS(string(data))
+		},
 	}
 	r.SetFuncMap(funcMap)
 
 	// Load templates from embedded filesystem using a glob pattern for simplicity.
-	t, err := htmltmpl.New("").Funcs(funcMap).ParseFS(ui.Assets, "templates/*.html", "templates/partials/*.html", "templates/manager/*.html")
+	t, err := htmltmpl.New("").Funcs(funcMap).ParseFS(
+		ui.Assets,
+		"templates/*.html",
+		"templates/partials/*.html",
+		"templates/partials/manager/*.html",
+		"templates/partials/users/*.html",
+	)
 	if err != nil {
 		log.Fatalf("FATAL: failed to parse templates: %v", err)
 	}

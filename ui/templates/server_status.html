@@ -10,8 +10,13 @@
     data-server-paused="{{if .server.Paused}}true{{else}}false{{end}}"
     data-server-starting="{{if .server.Starting}}true{{else}}false{{end}}"
     data-server-stopping="{{if .server.Stopping}}true{{else}}false{{end}}"
+    data-server-storming="{{if .server.Storming}}true{{else}}false{{end}}"
     data-shutdown-delay="{{.server.ShutdownDelaySeconds}}"
-    data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}">
+    data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}"
+    data-player-save-excludes="{{range $index, $id := .server.PlayerSaveExcludes}}{{if $index}},{{end}}{{ $id }}{{end}}"
+    {{if .banned_ids}}data-banned-ids="{{range $index, $id := .banned_ids}}{{if $index}},{{end}}{{ $id }}{{end}}"{{end}}
+    {{if .server.ServerStarted}}data-server-started="{{.server.ServerStarted.Format "2006-01-02T15:04:05Z07:00"}}"{{end}}
+    {{if .server.ServerSaved}}data-server-saved="{{.server.ServerSaved.Format "2006-01-02T15:04:05Z07:00"}}"{{end}}>
 
     {{/* Error Banner */}}
     <div id="server-error-banner" class="alert alert-danger {{if not .server.LastError}}hidden{{end}} col-span-full" role="alert">
@@ -27,65 +32,18 @@
         </div>
     </div>
 
-    {{template "server_status_control.html" .}}
+    {{template "server_status_info.html" .}}
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2 grid gap-6">
-            {{template "server_status_players.html" .}}
-            {{template "server_status_chat.html" .}}
-        </div>
-        <div class="grid gap-6">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Saves</h2>
-                    <div class="card-header-actions">
-                        <button type="button" id="btn-refresh-saves" class="btn btn-sm btn-secondary">Refresh</button>
-                    </div>
-                </div>
-                <div class="tabs" id="saves-tabs" role="tablist">
-                    <button class="tab active" role="tab" aria-selected="true" data-save-filter="all">All</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="auto">Auto</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="quick">Quick</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="manual">Named</button>
-                    <button class="tab" role="tab" aria-selected="false" data-save-filter="player">Player</button>
-                </div>
-                <div id="saves-list" class="card-body" role="region"></div>
-                <div id="saves-empty" class="card-body hidden">
-                    <div class="empty-state">
-                        <i data-feather="save"></i>
-                        <h3 class="empty-state-title">No Saves Found</h3>
-                        <p class="empty-state-description">Select a tab to view available saves.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="server-card-grid server-card-grid-halves">
+        {{template "server_status_control.html" .}}
+        {{template "server_status_players.html" .}}
+        {{template "server_status_chat.html" .}}
+        {{template "server_status_saves.html" .}}
+        {{template "server_status_config.html" .}}
+        {{template "server_status_discord.html" .}}
     </div>
 
-    {{template "server_status_config.html" .}}
-
-    <div class="card col-span-full" id="server-logs-card">
-        <button id="serverLogsToggle" class="card-header" aria-expanded="true" aria-controls="serverLogsContent">
-            <h2 class="card-title">Logs</h2>
-            <div class="card-header-actions">
-                <div class="btn-group">
-                    <button type="button" id="sl-refresh" class="btn btn-sm btn-secondary">Refresh</button>
-                    <button type="button" id="sl-download" class="btn btn-sm btn-secondary">Download</button>
-                    {{if eq .role "admin"}}
-                    <button type="button" id="sl-clear" class="btn btn-sm btn-danger">Clear</button>
-                    {{end}}
-                </div>
-                <i data-feather="chevron-down" class="ml-2"></i>
-            </div>
-        </button>
-        <div id="serverLogsContent" class="card-body">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div id="log-tabs" role="tablist" class="flex flex-col gap-1">
-                    <div class="empty-state hidden" id="log-tabs-empty">No log files found</div>
-                </div>
-                <div id="log-viewer" class="md:col-span-3 log-viewer" role="region"></div>
-            </div>
-        </div>
-    </div>
+    {{template "server_status_logs.html" .}}
 </div>
 
 <script src="/static/js/server_status.js" defer></script>

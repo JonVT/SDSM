@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -19,6 +20,13 @@ func main() {
 		"dict":      func(values ...interface{}) map[string]interface{} { return nil },
 		"initials":  func(s string) string { return "T" },
 		"buildTime": func() string { return "test" },
+		"toJSON": func(value interface{}) template.JS {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return template.JS("null")
+			}
+			return template.JS(string(data))
+		},
 	}
 
 	t := template.New("").Funcs(funcMap)

@@ -541,6 +541,120 @@
         return `${size.toFixed(precision)} ${units[unitIndex]}`;
       },
 
+      formatRate: function(bytesPerSecond) {
+        const value = Number(bytesPerSecond);
+        if (!Number.isFinite(value) || value <= 0) {
+          return '';
+        }
+        const pretty = this.formatBytes(value);
+        return pretty ? `${pretty}/s` : '';
+      },
+
+      formatPercent: function(value, digits = 0, fallback = '—', suffix = '%') {
+        const clamped = this.clampPercent(value);
+        if (clamped === null) {
+          return fallback;
+        }
+        const decimals = Math.max(0, digits | 0);
+        const label = decimals > 0 ? clamped.toFixed(decimals) : Math.round(clamped).toString();
+        return suffix ? `${label}${suffix}` : label;
+      },
+
+      clampPercent: function(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+          return null;
+        }
+        if (num < 0) {
+          return 0;
+        }
+        if (num > 100) {
+          return 100;
+        }
+        return num;
+      },
+
+      formatLoadAverage: function(load1, load5, load15, fallback = '—') {
+        const samples = [load1, load5, load15];
+        let hasValue = false;
+        const parts = samples.map((entry) => {
+          const num = Number(entry);
+          if (Number.isFinite(num)) {
+            hasValue = true;
+            return num.toFixed(2);
+          }
+          return '—';
+        });
+        if (!hasValue) {
+          return fallback;
+        }
+        return parts.join(' / ');
+      },
+
+      formatUptime: function(seconds, fallback = '') {
+        const value = Number(seconds);
+        if (!Number.isFinite(value) || value <= 0) {
+          return fallback;
+        }
+        if (SDSM.relativeTime && typeof SDSM.relativeTime.formatDuration === 'function') {
+          return SDSM.relativeTime.formatDuration(value);
+        }
+        const minutes = Math.floor(value / 60);
+        if (minutes > 0) {
+          return `${minutes}m`;
+        }
+        return `${Math.max(1, Math.floor(value))}s`;
+      },
+
+      formatUsageDetail: function(used, total) {
+        const usedLabel = this.formatBytes(used);
+        const totalLabel = this.formatBytes(total);
+        if (usedLabel && totalLabel) {
+          return `${usedLabel} / ${totalLabel}`;
+        }
+        return usedLabel || totalLabel || '';
+      },
+
+      formatRateWithTotal: function(rate, total) {
+        const rateLabel = this.formatRate(rate);
+        const totalLabel = this.formatBytes(total);
+        if (rateLabel && totalLabel) {
+          return `${rateLabel} · ${totalLabel}`;
+        }
+        return rateLabel || totalLabel || '';
+      },
+
+      healthStateForPercent: function(percent, options = {}) {
+        const telemetryAvailable = !!options.telemetryAvailable;
+        const fallbackLabel = (options.fallbackLabel || '').trim();
+        const clamped = this.clampPercent(percent);
+
+        if (!telemetryAvailable) {
+          return {
+            label: fallbackLabel || 'Offline',
+            className: 'is-offline'
+          };
+        }
+
+        if (clamped === null) {
+          return {
+            label: fallbackLabel || 'Unknown',
+            className: 'is-warning'
+          };
+        }
+
+        if (clamped >= 85) {
+          return { label: 'Healthy', className: 'is-healthy' };
+        }
+        if (clamped >= 65) {
+          return { label: 'Stable', className: 'is-stable' };
+        }
+        if (clamped >= 40) {
+          return { label: 'Watch', className: 'is-warning' };
+        }
+        return { label: 'Critical', className: 'is-critical' };
+      },
+
       updateUsageBars: function(card, usage) {
         if (!card) return;
         const clamp = (value) => Math.max(0, Math.min(100, Number(value) || 0));
@@ -853,7 +967,137 @@
         }));
       },
 
+      renderSystemHealthCard: function(stats = {}) {
+        const card = document.querySelector('[data-system-health-card]');
+        if (!card) {
+          return;
+        }
+
+        const telemetry = stats && typeof stats === 'object'
+          ? (stats.systemTelemetry || stats.system_telemetry || null)
+          : null;
+
+        let percent = Number(stats.systemHealthPercent);
+        if (!Number.isFinite(percent)) {
+          const snakePercent = Number(stats.system_health_percent);
+          if (Number.isFinite(snakePercent)) {
+            percent = snakePercent;
+          }
+        }
+        if (!Number.isFinite(percent) && telemetry && Number.isFinite(Number(telemetry.health_percent))) {
+          percent = Number(telemetry.health_percent);
+        }
+
+        const fallbackLabel = typeof stats.systemHealth === 'string' ? stats.systemHealth.trim() : '';
+        const scoreEl = card.querySelector('[data-system-health-score]');
+        const percentLabel = this.formatPercent(percent, 0, '', '%');
+        if (scoreEl) {
+          scoreEl.textContent = percentLabel || fallbackLabel || '—';
+        }
+
+        const pillEl = card.querySelector('[data-system-health-pill]');
+        if (pillEl) {
+          const pillState = this.healthStateForPercent(percent, {
+            telemetryAvailable: !!telemetry,
+            fallbackLabel
+          });
+          pillEl.textContent = pillState.label;
+          pillEl.classList.remove('is-healthy', 'is-stable', 'is-warning', 'is-critical', 'is-offline');
+          if (pillState.className) {
+            pillEl.classList.add(pillState.className);
+          }
+        }
+
+        const metaEl = card.querySelector('[data-system-health-updated]');
+        if (metaEl) {
+          const sampledLabel = telemetry && telemetry.sampled_at ? new Date(telemetry.sampled_at) : null;
+          if (sampledLabel && !Number.isNaN(sampledLabel.getTime())) {
+            const timeLabel = sampledLabel.toLocaleTimeString([], {
+              hour: 'numeric',
+              minute: '2-digit',
+              second: '2-digit'
+            });
+            metaEl.textContent = `Updated ${timeLabel}`;
+          } else {
+            metaEl.textContent = telemetry ? 'Updated just now' : 'Awaiting telemetry…';
+          }
+        }
+
+        const updateText = (selector, value, fallback) => {
+          const el = card.querySelector(selector);
+          if (!el) return;
+          const hasValue = value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
+          el.textContent = hasValue ? value : (fallback !== undefined ? fallback : '—');
+        };
+
+        const updateBar = (selector, value) => {
+          const el = card.querySelector(selector);
+          if (!el) return;
+          const pct = this.clampPercent(value);
+          if (pct === null) {
+            el.style.width = '0%';
+            el.style.opacity = 0.25;
+            return;
+          }
+          el.style.width = `${pct}%`;
+          el.style.opacity = pct > 0 ? 1 : 0.25;
+        };
+
+        const updateCount = (selector, value) => {
+          const el = card.querySelector(selector);
+          if (!el) return;
+          const num = Number(value);
+          if (Number.isFinite(num)) {
+            el.textContent = num.toLocaleString();
+          } else {
+            el.textContent = '—';
+          }
+        };
+
+        if (!telemetry) {
+          updateText('[data-system-cpu-value]');
+          updateText('[data-system-cpu-detail]');
+          updateText('[data-system-memory-value]');
+          updateText('[data-system-memory-detail]', '');
+          updateText('[data-system-disk-value]');
+          updateText('[data-system-disk-detail]', '');
+          updateText('[data-system-net-in]');
+          updateText('[data-system-net-out]');
+          updateText('[data-system-load]');
+          updateText('[data-system-uptime]');
+          updateBar('[data-system-cpu-bar]');
+          updateBar('[data-system-memory-bar]');
+          updateBar('[data-system-disk-bar]');
+          updateCount('[data-system-net-interfaces]');
+          updateCount('[data-system-procs]');
+          return;
+        }
+
+        updateText('[data-system-cpu-value]', this.formatPercent(telemetry.cpu_percent));
+        updateText('[data-system-cpu-detail]', '—');
+        updateBar('[data-system-cpu-bar]', telemetry.cpu_percent);
+
+        updateText('[data-system-memory-value]', this.formatPercent(telemetry.memory_percent));
+        updateText('[data-system-memory-detail]', this.formatUsageDetail(telemetry.memory_used, telemetry.memory_total));
+        updateBar('[data-system-memory-bar]', telemetry.memory_percent);
+
+        updateText('[data-system-disk-value]', this.formatPercent(telemetry.disk_percent));
+        updateText('[data-system-disk-detail]', this.formatUsageDetail(telemetry.disk_used, telemetry.disk_total));
+        updateBar('[data-system-disk-bar]', telemetry.disk_percent);
+
+        updateText('[data-system-net-in]', this.formatRateWithTotal(telemetry.network_in_bps, telemetry.network_in_bytes));
+        updateText('[data-system-net-out]', this.formatRateWithTotal(telemetry.network_out_bps, telemetry.network_out_bytes));
+        updateText('[data-system-load]', this.formatLoadAverage(telemetry.load1, telemetry.load5, telemetry.load15));
+
+        const uptimeLabel = this.formatUptime(telemetry.uptime_seconds);
+        updateText('[data-system-uptime]', uptimeLabel ? `Up ${uptimeLabel}` : '—');
+
+        updateCount('[data-system-net-interfaces]', telemetry.network_interfaces);
+        updateCount('[data-system-procs]', telemetry.process_count);
+      },
+
       updateStats: function(stats) {
+        stats = stats || {};
         if (stats.totalServers !== undefined) {
           const total = document.getElementById('total-servers');
           if (total) total.textContent = stats.totalServers;
@@ -885,6 +1129,8 @@
         if (refresh) {
           refresh.textContent = new Date().toLocaleTimeString();
         }
+
+        this.renderSystemHealthCard(stats);
       },
 
       bindServerCardNavigation: function(root) {

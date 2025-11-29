@@ -1,0 +1,63 @@
+{{$score := .score}}
+{{if not $score}}{{$score = "Offline"}}{{end}}
+{{$pill := .pill}}
+{{if not $pill}}{{$pill = $score}}{{end}}
+<div class="card system-health-card" data-system-health-card>
+    <div class="card-header system-health-header">
+        <div>
+            <h2 class="card-title">System Health</h2>
+            <div class="system-health-score" data-system-health-score>{{$score}}</div>
+            <div class="system-health-meta" data-system-health-updated>Awaiting telemetry…</div>
+        </div>
+        <span class="pill" data-system-health-pill>{{$pill}}</span>
+    </div>
+    <div class="card-body system-health-body">
+        <div class="system-metric metric-row" aria-live="polite">
+            <div class="metric-label">CPU</div>
+            <div class="metric-detail" data-system-cpu-detail>—</div>
+            <span class="metric-value" data-system-cpu-value>—</span>
+            <div class="metric-bar metric-bar-inline" role="presentation" aria-hidden="true">
+                <span class="metric-bar-fill" data-system-cpu-bar></span>
+            </div>
+        </div>
+        <div class="system-metric metric-row" aria-live="polite">
+            <div class="metric-label">Memory</div>
+            <div class="metric-detail" data-system-memory-detail>—</div>
+            <span class="metric-value" data-system-memory-value>—</span>
+            <div class="metric-bar metric-bar-inline" role="presentation" aria-hidden="true">
+                <span class="metric-bar-fill" data-system-memory-bar></span>
+            </div>
+        </div>
+        <div class="system-metric metric-row" aria-live="polite">
+            <div class="metric-label">Disk</div>
+            <div class="metric-detail" data-system-disk-detail>—</div>
+            <span class="metric-value" data-system-disk-value>—</span>
+            <div class="metric-bar metric-bar-inline" role="presentation" aria-hidden="true">
+                <span class="metric-bar-fill" data-system-disk-bar></span>
+            </div>
+        </div>
+        <div class="system-metric-grid">
+            <div class="metric-tile">
+                <p class="metric-label">Load 1/5/15m</p>
+                <p class="metric-value" data-system-load>—</p>
+            </div>
+            <div class="metric-tile">
+                <p class="metric-label">Uptime</p>
+                <p class="metric-value" data-system-uptime>—</p>
+            </div>
+            <div class="metric-tile">
+                <p class="metric-label">Network In</p>
+                <p class="metric-value" data-system-net-in>—</p>
+            </div>
+            <div class="metric-tile">
+                <p class="metric-label">Network Out</p>
+                <p class="metric-value" data-system-net-out>—</p>
+            </div>
+        </div>
+        <p class="system-health-footnote">
+            Interfaces: <span data-system-net-interfaces>—</span>
+            <span class="dot-separator" aria-hidden="true">•</span>
+            Processes: <span data-system-procs>—</span>
+        </p>
+    </div>
+</div>

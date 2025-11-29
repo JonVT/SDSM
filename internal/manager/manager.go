@@ -226,6 +226,9 @@ type Manager struct {
 	systemTelemetry  *models.SystemTelemetry
 	lastCPUTotal     float64
 	lastCPUIdle      float64
+	lastNetRecv      uint64
+	lastNetSent      uint64
+	lastNetSample    time.Time
 	serverCPUTimes   map[int]float64
 	telemetryStop    chan struct{}
 	telemetryWG      sync.WaitGroup
