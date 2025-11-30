@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"path/filepath"
-	"sdsm/ui"
+	ui "sdsm/app/frontend"
 	"strings"
 )
 

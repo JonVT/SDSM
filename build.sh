@@ -44,13 +44,13 @@ if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; th
   fi
 fi
 
-# ldflags wiring to sdsm/internal/version
+# ldflags wiring to sdsm/app/backend/internal/version
 LDFLAGS=(
   "-s" "-w"
-  "-X" "sdsm/internal/version.Version=${VERSION}"
-  "-X" "sdsm/internal/version.Commit=${COMMIT}"
-  "-X" "sdsm/internal/version.Date=${DATE}"
-  "-X" "sdsm/internal/version.Dirty=${DIRTY}"
+  "-X" "sdsm/app/backend/internal/version.Version=${VERSION}"
+  "-X" "sdsm/app/backend/internal/version.Commit=${COMMIT}"
+  "-X" "sdsm/app/backend/internal/version.Date=${DATE}"
+  "-X" "sdsm/app/backend/internal/version.Dirty=${DIRTY}"
 )
 
 # Display a brief build header
@@ -62,7 +62,7 @@ go mod download
 
 # Build
 GOOS="$GOOS" GOARCH="$GOARCH" \
-  go build -trimpath -ldflags "${LDFLAGS[*]}" -o "$OUT_PATH" ./cmd/sdsm
+  go build -trimpath -ldflags "${LDFLAGS[*]}" -o "$OUT_PATH" ./app/backend/cmd/sdsm
 
 # Done
 printf "\n✅ Built %s\n" "$OUT_PATH"

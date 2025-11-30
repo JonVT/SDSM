@@ -1,0 +1,31 @@
+{{define "cards/server_status_logs.html"}}
+<div class="card col-span-full" id="server-logs-card"
+    data-card-id="server-status-logs"
+    data-card-lazy="true"
+    hx-get="/server/{{.server.ID}}/cards/server-status-logs"
+    hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-logs'] from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <button id="serverLogsToggle" class="card-header" aria-expanded="true" aria-controls="serverLogsContent">
+        <h2 class="card-title">Logs</h2>
+        <div class="card-header-actions">
+            <div class="btn-group">
+                <button type="button" id="sl-refresh" class="btn btn-sm btn-secondary">Refresh</button>
+                <button type="button" id="sl-download" class="btn btn-sm btn-secondary">Download</button>
+                {{if eq .role "admin"}}
+                <button type="button" id="sl-clear" class="btn btn-sm btn-danger">Clear</button>
+                {{end}}
+            </div>
+            <i data-feather="chevron-down" class="ml-2"></i>
+        </div>
+    </button>
+    <div id="serverLogsContent" class="card-body">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div id="log-tabs" role="tablist" class="flex flex-col gap-1">
+                <div class="empty-state hidden" id="log-tabs-empty">No log files found</div>
+            </div>
+            <div id="log-viewer" class="md:col-span-3 log-viewer" role="region"></div>
+        </div>
+    </div>
+</div>
+{{end}}

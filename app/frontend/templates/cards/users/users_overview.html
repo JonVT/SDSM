@@ -1,0 +1,48 @@
+{{define "cards/users_overview.html"}}
+{{$stats := .stats}}
+{{if not $stats}}{{$stats = dict "total" 0 "admins" 0 "operators" 0 "empty" true}}{{end}}
+<div id="users-card-overview"
+     class="card users-overview-card"
+     data-card-id="users-overview"
+     hx-get="/users/cards/users-overview"
+     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'users-overview'] from:body"
+     hx-target="this"
+     hx-swap="outerHTML">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Access Overview</h2>
+            <p class="card-subtitle">Track how many admins and operators have access.</p>
+        </div>
+        <div class="card-meta text-sm text-muted">
+            {{if .updatedAt}}
+                Updated {{.updatedAt.Format "Jan 2, 3:04 PM"}}
+            {{else}}
+                Awaiting data…
+            {{end}}
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="stats-grid stats-grid-compact">
+            <div class="stat-card">
+                <div class="stat-value">{{index $stats "total"}}</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{index $stats "admins"}}</div>
+                <div class="stat-label">Admins</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{index $stats "operators"}}</div>
+                <div class="stat-label">Operators</div>
+            </div>
+        </div>
+        {{if index $stats "empty"}}
+            <div class="empty-state mt-4">
+                <div class="empty-icon"><i data-feather="users"></i></div>
+                <p class="empty-state-title">No users yet</p>
+                <p class="empty-state-description">Create your first admin or operator to get started.</p>
+            </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

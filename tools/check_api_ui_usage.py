@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Check which /api routes registered in cmd/sdsm/main.go have no references in the UI layer.
+Check which /api routes registered in app/backend/cmd/sdsm/main.go have no references in the UI layer.
 Usage:
     python tools/check_api_ui_usage.py
 """
@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Iterable, List
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MAIN_FILE = REPO_ROOT / "cmd" / "sdsm" / "main.go"
-UI_DIRS = [REPO_ROOT / "ui", REPO_ROOT / "webassets"]
+MAIN_FILE = REPO_ROOT / "app" / "backend" / "cmd" / "sdsm" / "main.go"
+UI_DIRS = [REPO_ROOT / "app" / "frontend", REPO_ROOT / "app" / "backend" / "webassets"]
 TEXT_EXTENSIONS = {
     ".html",
     ".htm",

@@ -1,0 +1,151 @@
+{{define "cards/server_status_control.html"}}
+<div class="card" id="server-control-card"
+    data-card-id="server-status-control"
+    hx-get="/server/{{.server.ID}}/cards/server-status-control"
+    hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-control'] from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <div class="card-header flex justify-between items-center gap-4 flex-wrap">
+        <div class="flex items-center gap-3">
+            <h2 class="card-title">Server Control</h2>
+            <div id="server-status-indicator" class="status-indicator status-stopped">
+                <div class="status-light"></div>
+                <span class="status-text">Stopped</span>
+            </div>
+        </div>
+        <div class="card-header-actions flex items-center gap-3">
+            <div id="storm-status-pill" class="status-pill storm-pill {{if .server.Storming}}is-storm{{else}}is-clear{{end}}">
+                {{if .server.Storming}}Storming{{else}}Calm{{end}}
+            </div>
+        </div>
+    </div>
+    <div class="card-body space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 control-metrics">
+            <div class="control-metric">
+                <div class="metric-label text-sm text-muted uppercase tracking-wide">Started</div>
+                <div class="metric-value text-lg font-semibold" id="server-started-at">
+                    {{if .server.ServerStarted}}{{.server.ServerStarted.Format "Jan 2, 2006 3:04 PM"}}{{else}}—{{end}}
+                </div>
+                <div class="metric-subtext text-sm text-muted">Uptime: <span id="server-uptime">{{if .server.ServerStarted}}{{.server.UptimeString}}{{else}}0m{{end}}</span></div>
+            </div>
+            <div class="control-metric">
+                <div class="metric-label text-sm text-muted uppercase tracking-wide">Last Saved</div>
+                <div class="metric-value text-lg font-semibold" id="server-last-saved">
+                    {{if .server.ServerSaved}}{{.server.ServerSaved.Format "Jan 2, 2006 3:04 PM"}}{{else}}—{{end}}
+                </div>
+                <div class="metric-subtext text-sm text-muted">Shutdown Delay: {{if gt .server.ShutdownDelaySeconds 0}}{{.server.ShutdownDelaySeconds}}s{{else}}—{{end}}</div>
+            </div>
+            <div class="control-metric">
+                <div class="metric-label flex items-center justify-between text-sm text-muted uppercase tracking-wide">
+                    Last Log Line
+                    <button type="button" id="btn-open-logs" class="btn btn-ghost btn-sm">View Logs</button>
+                </div>
+                <p class="metric-log text-sm" id="server-last-log">
+                    {{if .server.LastLogLine}}{{.server.LastLogLine}}{{else}}No log data captured yet.{{end}}
+                </p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 control-groups">
+            <div class="control-group">
+                <h4 class="control-group-title">Power</h4>
+                <div class="btn-group">
+                    <button type="button" id="btn-start" class="btn btn-success" {{if or .server.Running .server.Starting}}disabled{{end}}>
+                        <i data-feather="play"></i>
+                    </button>
+                    <button type="button" id="btn-stop" class="btn btn-danger" {{if or (not .server.Running) .server.Stopping}}disabled{{end}}>
+                        <i data-feather="square"></i>
+                    </button>
+                </div>
+                <div class="btn-group">
+                    <button type="button" id="btn-pause" class="btn btn-secondary" {{if or (not .server.Running) .server.Paused}}disabled{{end}}>
+                        <i data-feather="pause"></i>
+                    </button>
+                    <button type="button" id="btn-resume" class="btn btn-secondary" {{if not .server.Paused}}disabled{{end}}>
+                        <i data-feather="play"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Save</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-save" class="btn btn-primary" {{if not .server.Running}}disabled{{end}}>
+                        <i data-feather="save" class="btn-icon-left"></i> Save World
+                    </button>
+                    <button type="button" id="btn-quicksave" class="btn btn-secondary" {{if not .server.Running}}disabled{{end}}>
+                        <i data-feather="zap" class="btn-icon-left"></i> Quick Save
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Update</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-update" class="btn btn-info" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="download-cloud" class="btn-icon-left"></i> Update Server
+                    </button>
+                    <button type="button" id="btn-reinstall" class="btn btn-warning" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="refresh-cw" class="btn-icon-left"></i> Reinstall
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">World</h4>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-upload-world" class="btn btn-secondary" {{if .server.Running}}disabled{{end}}>
+                        <i data-feather="upload-cloud" class="btn-icon-left"></i> Upload World
+                    </button>
+                    <button type="button" id="btn-download-world" class="btn btn-secondary">
+                        <i data-feather="download-cloud" class="btn-icon-left"></i> Download World
+                    </button>
+                </div>
+                <div class="form-group world-download-selector">
+                    <label for="world-download-select" class="form-label">Save File</label>
+                    <select id="world-download-select" class="form-control form-control-sm" aria-label="Select save file">
+                        <option value="">Latest save (automatic)</option>
+                    </select>
+                    <p id="world-download-status" class="form-text text-muted text-xs">Loading save list…</p>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Storm</h4>
+                <p class="text-sm text-muted" id="storm-status-text">{{if .server.Storming}}Storm active{{else}}Calm skies{{end}}</p>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-start-storm" class="btn btn-warning" {{if or (not .server.Running) .server.Storming}}disabled{{end}}>
+                        <i data-feather="cloud-lightning" class="btn-icon-left"></i> Start Storm
+                    </button>
+                    <button type="button" id="btn-stop-storm" class="btn btn-secondary" {{if or (not .server.Running) (not .server.Storming)}}disabled{{end}}>
+                        <i data-feather="sun" class="btn-icon-left"></i> End Storm
+                    </button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h4 class="control-group-title">Cleanup Players</h4>
+                <p class="text-sm text-muted">Send CLEANUPPLAYERS via console.</p>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-secondary" data-cleanup-scope="dead" {{if not .server.Running}}disabled{{end}}>Dead</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-cleanup-scope="disconnected" {{if not .server.Running}}disabled{{end}}>Disconnected</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-cleanup-scope="all" {{if not .server.Running}}disabled{{end}}>All</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="console-panel">
+            <h4 class="control-group-title">Console Command</h4>
+            <form id="server-console-form" class="flex flex-col gap-2">
+                <label for="server-console-command" class="form-label text-sm text-muted">Send an arbitrary SCON command.</label>
+                <div class="flex gap-2">
+                    <input type="text" id="server-console-command" class="form-control flex-1" placeholder="e.g., STATUS" {{if not .server.Running}}disabled{{end}}>
+                    <button type="submit" id="server-console-submit" class="btn btn-primary" {{if not .server.Running}}disabled{{end}}>
+                        <i data-feather="terminal" class="btn-icon-left"></i> Send
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{{end}}

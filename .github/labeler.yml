@@ -1,16 +1,16 @@
 area/ui:
-  - 'ui/**'
+  - 'app/frontend/**'
 area/templates:
-  - 'ui/templates/**'
+  - 'app/frontend/templates/**'
 area/backend:
-  - 'internal/**'
-  - 'cmd/**'
+  - 'app/backend/internal/**'
+  - 'app/backend/cmd/**'
 area/steam:
-  - 'steam/**'
+  - 'app/backend/steam/**'
 area/assets:
-  - 'ui/static/**'
-  - 'webassets/**'
-  - 'ui/assets.go'
+  - 'app/frontend/static/**'
+  - 'app/backend/webassets/**'
+  - 'app/frontend/assets.go'
 type/docs:
   - 'README.md'
   - 'docs/**'

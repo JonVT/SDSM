@@ -1,0 +1,66 @@
+{{define "title"}}User Management{{end}}
+{{define "page"}}users{{end}}
+
+{{define "users.html"}}
+<div data-page-title="User Management">
+    {{- $cardSlots := .cardSlots -}}
+    {{- if not $cardSlots -}}
+        {{- $cardSlots = dict -}}
+    {{- end -}}
+    {{- $primaryCards := index $cardSlots "primary" -}}
+    {{- $cardIDs := .cardIDs -}}
+
+    {{- $userStats := .userStats -}}
+    {{- if not $userStats -}}
+        {{- $userStats = dict "total" 0 "admins" 0 "operators" 0 "empty" true -}}
+    {{- end -}}
+    {{- $overviewCtx := dict "stats" $userStats "updatedAt" .now -}}
+    {{- $managementCtx := dict "users" .users "serverOptions" .serverOptions -}}
+    {{- $assignmentCtx := dict "assignments" .userAssignments "serverOptions" .serverOptions "serverOptionsJSON" .serverOptionsJSON -}}
+
+    {{- if and $primaryCards (has $cardIDs "users-overview") -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "users-overview" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else -}}
+        {{ template "cards/users_overview.html" $overviewCtx }}
+    {{- end -}}
+
+    {{- if and $primaryCards (has $cardIDs "users-management") -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "users-management" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else -}}
+        {{ template "cards/users_management.html" $managementCtx }}
+    {{- end -}}
+
+    {{- if and $primaryCards (has $cardIDs "users-assignment") -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "users-assignment" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else -}}
+        {{ template "cards/users_assignment.html" $assignmentCtx }}
+    {{- end -}}
+
+    {{- if $primaryCards -}}
+        {{- range $primaryCards -}}
+            {{- if and (ne .ID "users-overview") (ne .ID "users-management") (ne .ID "users-assignment") -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- end -}}
+</div>
+
+<script>
+    // Pass server options to JavaScript
+    window.SDSM_SERVER_OPTIONS = JSON.parse('{{.serverOptionsJSON}}');
+</script>
+<script src="/static/js/screens/users.js" defer></script>
+{{end}}
+

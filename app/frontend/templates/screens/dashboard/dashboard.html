@@ -1,0 +1,149 @@
+{{define "title"}}Dashboard{{end}}
+{{define "page"}}dashboard{{end}}
+
+{{define "dashboard.html"}}
+<div data-page-title="Dashboard" data-dashboard-root>
+    {{- $pageData := . -}}
+    {{- $cardSlots := .cardSlots -}}
+    {{- if not $cardSlots -}}
+        {{- $cardSlots = dict -}}
+    {{- end -}}
+    {{- $cardIDs := .cardIDs -}}
+    {{- if not $cardIDs -}}
+        {{- $cardIDs = slice -}}
+    {{- end -}}
+    {{- $hasServerDeckCard := and $cardIDs (has $cardIDs "dashboard-server-deck") -}}
+    {{- $hasServerTilesCard := and $cardIDs (has $cardIDs "dashboard-server-tiles") -}}
+    {{- $hasSystemHealthCard := and $cardIDs (has $cardIDs "dashboard-system-health") -}}
+    {{- $hasStatsCard := and $cardIDs (has $cardIDs "dashboard-stats") -}}
+    {{- $hasUsersCard := and $cardIDs (has $cardIDs "dashboard-users") -}}
+    {{- $hasManagerCard := and $cardIDs (has $cardIDs "dashboard-manager") -}}
+    {{- $primaryCards := false -}}
+    {{- $primaryCards := index $cardSlots "primary" -}}
+    <div class="dashboard-stack">
+    {{ $totalServers := len .servers }}
+    {{ $activeServers := 0 }}
+    {{ $connectedPlayers := 0 }}
+    {{ $startableServers := 0 }}
+    {{ range .servers }}
+        {{ if .IsRunning }}{{ $activeServers = add $activeServers 1 }}{{ end }}
+        {{ if or (not .IsRunning) .Stopping }}{{ $startableServers = add $startableServers 1 }}{{ end }}
+        {{ $connectedPlayers = add $connectedPlayers .ClientCount }}
+    {{ end }}
+
+    {{- $statsCtx := .statsCtx -}}
+    {{- if not $statsCtx -}}
+        {{ $statsCtx = dict "totalServers" $totalServers "activeServers" $activeServers "totalPlayers" $connectedPlayers "startableServers" $startableServers }}
+    {{- end -}}
+    {{ $healthScore := "Offline" }}
+    {{ $healthPill := "Offline" }}
+    {{ if .active }}{{ $healthScore = "100%" }}{{ $healthPill = "Healthy" }}{{ end }}
+    {{- $healthCtx := .healthCtx -}}
+    {{- if not $healthCtx -}}
+        {{ $healthCtx = dict "score" $healthScore "pill" $healthPill }}
+    {{- end -}}
+
+    {{- if and $primaryCards $hasStatsCard -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "dashboard-stats" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else -}}
+        {{ template "cards/dashboard_stats.html" $statsCtx }}
+    {{- end -}}
+
+    <div class="system-overview-grid {{ if eq .role "admin" }}has-sidebar{{ else }}single-column{{ end }}">
+        <div class="system-overview-left">
+            {{- if and $primaryCards $hasSystemHealthCard -}}
+                {{- range $primaryCards -}}
+                    {{- if eq .ID "dashboard-system-health" -}}
+                        {{ renderCard .Template .Data }}
+                    {{- end -}}
+                {{- end -}}
+            {{- else -}}
+                {{ template "cards/dashboard_system_health.html" $healthCtx }}
+            {{- end -}}
+        </div>
+        {{ if eq .role "admin" }}
+        <div class="system-overview-right">
+            {{- if and $primaryCards $hasManagerCard -}}
+                {{- range $primaryCards -}}
+                    {{- if eq .ID "dashboard-manager" -}}
+                        {{ renderCard .Template .Data }}
+                    {{- end -}}
+                {{- end -}}
+            {{- else -}}
+                {{ template "cards/dashboard_manager.html" .managerCard }}
+            {{- end -}}
+            {{- if and $primaryCards $hasUsersCard -}}
+                {{- range $primaryCards -}}
+                    {{- if eq .ID "dashboard-users" -}}
+                        {{ renderCard .Template .Data }}
+                    {{- end -}}
+                {{- end -}}
+            {{- else -}}
+                {{- $usersCardStats := .userStats -}}
+                {{- if not $usersCardStats -}}
+                    {{- $usersCardStats = dict "total" 0 "admins" 0 "operators" 0 "empty" true -}}
+                {{- end -}}
+                {{- $usersCardData := dict "total" (index $usersCardStats "total") "admins" (index $usersCardStats "admins") "operators" (index $usersCardStats "operators") "empty" (index $usersCardStats "empty") -}}
+                {{ template "cards/dashboard_users.html" $usersCardData }}
+            {{- end -}}
+        </div>
+        {{ end }}
+    </div>
+
+    {{ $tilesCtx := dict "role" .role "active" $activeServers "startable" $startableServers "context" (dict "servers" .servers "role" .role) }}
+
+    {{- if and $primaryCards $hasServerTilesCard -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "dashboard-server-tiles" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else if and $primaryCards $hasServerDeckCard -}}
+        {{- range $primaryCards -}}
+            {{- if eq .ID "dashboard-server-deck" -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- else -}}
+        {{ template "cards/dashboard_server_tiles.html" $tilesCtx }}
+    {{- end -}}
+
+    {{- if $primaryCards -}}
+        {{- range $primaryCards -}}
+            {{- if and (ne .ID "dashboard-server-deck") (ne .ID "dashboard-server-tiles") (ne .ID "dashboard-system-health") (ne .ID "dashboard-stats") (ne .ID "dashboard-users") (ne .ID "dashboard-manager") -}}
+                {{ renderCard .Template .Data }}
+            {{- end -}}
+        {{- end -}}
+    {{- end -}}
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.SDSM) {
+                SDSM.health.start();
+                SDSM.ui.bindServerCardNavigation();
+                SDSM.ui.startStatsPoll();
+            }
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                if (typeof htmx !== 'undefined') {
+                    htmx.trigger('#server-grid', 'refresh');
+                    htmx.trigger('.stats-grid', 'refresh');
+                }
+            }, 30000);
+        });
+        document.addEventListener('htmx:afterSwap', e => {
+            if (e.target && e.target.closest('#server-grid')) {
+                if (window.SDSM && SDSM.ui) {
+                    SDSM.ui.bindServerCardNavigation(e.target.closest('#server-grid'));
+                }
+            }
+        });
+    </script>
+</div>
+{{end}}

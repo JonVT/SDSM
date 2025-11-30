@@ -72,13 +72,13 @@ if ($gitAvailable) {
     }
 }
 
-# ldflags wiring to sdsm/internal/version
+# ldflags wiring to sdsm/app/backend/internal/version
 $LDFLAGS = @(
     "-s", "-w",
-    "-X", "sdsm/internal/version.Version=$VERSION",
-    "-X", "sdsm/internal/version.Commit=$COMMIT",
-    "-X", "sdsm/internal/version.Date=$DATE",
-    "-X", "sdsm/internal/version.Dirty=$DIRTY"
+    "-X", "sdsm/app/backend/internal/version.Version=$VERSION",
+    "-X", "sdsm/app/backend/internal/version.Commit=$COMMIT",
+    "-X", "sdsm/app/backend/internal/version.Date=$DATE",
+    "-X", "sdsm/app/backend/internal/version.Dirty=$DIRTY"
 ) -join " "
 
 # Display a brief build header
@@ -92,7 +92,7 @@ go mod download
 # Build
 $env:GOOS = $GOOS
 $env:GOARCH = $GOARCH
-go build -trimpath -ldflags $LDFLAGS -o $OUT_PATH ./cmd/sdsm
+go build -trimpath -ldflags $LDFLAGS -o $OUT_PATH ./app/backend/cmd/sdsm
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build failed"

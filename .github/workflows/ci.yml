@@ -22,7 +22,7 @@ jobs:
       # Style checks (gofmt, vet, tidy) are centralized in the Lint workflow.
 
       - name: Build
-        run: go build ./cmd/sdsm
+        run: go build ./app/backend/cmd/sdsm
 
       - name: Test
         run: go test ./...

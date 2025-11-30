@@ -215,7 +215,7 @@ Build from source
 ```bash
 git clone https://github.com/JonVT/SDSM.git
 cd SDSM
-go build -o dist/sdsm ./cmd/sdsm
+go build -o dist/sdsm ./app/backend/cmd/sdsm
 ./dist/sdsm --config /path/to/sdsm.config
 ```
 
@@ -290,8 +290,8 @@ Cross-cutting concerns are now centralized. Prefer these helpers in handlers:
 
 UI notes
 
-- Utility-first CSS lives in `ui/static/ui-theme.css` (plus `modern.css`).
-- Templates in `ui/templates/` avoid inline styles; HTMX-triggered updates consume toast headers for user feedback.
+- Utility-first CSS lives in `app/frontend/static/css/ui-theme.css` (plus `modern.css`).
+- Templates in `app/frontend/templates/` avoid inline styles; HTMX-triggered updates consume toast headers for user feedback.
 - Modals: include `{{ template "modal_templates" . }}` and `{{ template "modal_scripts" . }}` on pages that need dialogs.
 	- Confirm: `openConfirm({ title:'Delete Server', body:'<p>…</p>', confirmText:'Delete', danger:true })` → Promise<boolean>.
 	- Prompt: `openPrompt({ title:'Save As…', label:'Name', validate:(v)=>v?true:'Required' })` → Promise<string|null>.
@@ -329,7 +329,7 @@ LICENSE               # MIT License
 ## Development
 
 - **Formatting:** `gofmt -w ./internal ./cmd`
-- **Build:** `go build -o dist/sdsm ./cmd/sdsm`
+- **Build:** `go build -o dist/sdsm ./app/backend/cmd/sdsm`
 - **Tests:** `go test ./...`
 - **Logs:** `logs/sdsm.log` and `logs/updates.log` are under the configured root path and are truncated on startup.
 - **Player history:** `ServerN/logs/players.log` is deduplicated and rewritten automatically on stop/restart.
@@ -363,7 +363,7 @@ bash tools/install-git-hooks.sh
 
 The CSS lint checks for obviously unused selectors by scanning HTML templates and JavaScript for class usage (including dynamic `classList.*` and `className` patterns). It’s heuristic by design; review findings before removal.
 
-For UI work, edit the HTML in `ui/templates/` and the styles in `ui/static/`. Utility CSS lives in `ui/static/ui-theme.css`; avoid inline styles in templates. The JavaScript inside server status templates powers live player/chat/log updates. A shared footer and `/terms` page are included; the footer links to Terms and the GitHub repo.
+For UI work, edit the HTML in `app/frontend/templates/` and the styles in `app/frontend/static/`. Utility CSS lives in `app/frontend/static/css/ui-theme.css`; avoid inline styles in templates. The JavaScript inside server status templates powers live player/chat/log updates. A shared footer and `/terms` page are included; the footer links to Terms and the GitHub repo.
 
 ### SCON Integration
 
@@ -374,7 +374,7 @@ For UI work, edit the HTML in `ui/templates/` and the styles in `ui/static/`. Ut
 
 ## Contributing
 
-Issues and pull requests are welcome. Please run `go test ./...` and `go build ./cmd/sdsm` before submitting changes.
+Issues and pull requests are welcome. Please run `go test ./...` and `go build ./app/backend/cmd/sdsm` before submitting changes.
 
 ### PR Conventions
 

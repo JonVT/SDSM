@@ -1,0 +1,67 @@
+{{define "cards/users_assignment.html"}}
+<div id="users-card-assignment"
+     class="card users-assignment-card"
+     data-card-id="users-assignment"
+     hx-get="/users/cards/users-assignment"
+     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'users-assignment'] from:body"
+     hx-target="this"
+     hx-swap="outerHTML">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Role &amp; Access</h2>
+            <p class="card-subtitle">Review assignments and jump straight into edits.</p>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="assignment-grid">
+            {{if .assignments}}
+                {{range .assignments}}
+                    <div class="assignment-tile"
+                        data-username="{{.username}}"
+                        data-role="{{.role}}"
+                        data-assigned-all="{{if .assigned_all}}true{{else}}false{{end}}"
+                        data-assigned="{{.assigned_csv}}">
+                        <div class="tile-header">
+                            <div class="avatar avatar-sm">{{initials .username}}</div>
+                            <div>
+                                <p class="tile-title">{{.username}}</p>
+                                <p class="tile-subtitle">{{.role_label}}</p>
+                            </div>
+                        </div>
+                        {{if .assigned_all}}
+                            <p class="tile-meta">Full access</p>
+                        {{else if .assigned_servers}}
+                            <p class="tile-meta">{{len .assigned_servers}} server{{if ne (len .assigned_servers) 1}}s{{end}}</p>
+                            <ul class="tile-list">
+                                {{range .assigned_servers}}
+                                <li>{{.}}</li>
+                                {{end}}
+                            </ul>
+                        {{else}}
+                            <p class="tile-meta empty">No servers assigned</p>
+                        {{end}}
+                        <div class="tile-actions">
+                                <button type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    onclick="SDSM.users.showAssignmentAccessModal(this)"
+                                    data-username="{{.username}}"
+                                    data-assigned-all="{{if .assigned_all}}true{{else}}false{{end}}"
+                                    data-assigned="{{.assigned_csv}}"
+                                    {{if not .can_edit}}disabled title="Admins have full access"{{end}}>
+                                <i data-feather="unlock"></i>
+                                <span>Manage Access</span>
+                            </button>
+                        </div>
+                    </div>
+                {{end}}
+            {{else}}
+                <div class="empty-state">
+                    <div class="empty-icon"><i data-feather="users"></i></div>
+                    <h3 class="empty-state-title">No Users Yet</h3>
+                    <p class="empty-state-description">Create an operator to manage per-server access.</p>
+                </div>
+            {{end}}
+        </div>
+    </div>
+</div>
+{{end}}

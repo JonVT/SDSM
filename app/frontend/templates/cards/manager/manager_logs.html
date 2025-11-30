@@ -1,0 +1,35 @@
+{{define "cards/manager_logs.html"}}
+<div id="manager-card-logs"
+    class="glass-card manager-logs-card"
+    data-card-id="manager-logs"
+    data-card-lazy="true"
+    data-manager-logs
+    data-manager-section
+    data-section-title="Logs"
+    hx-get="/manager/cards/manager-logs"
+    hx-trigger="sdsm:card-refresh[event.detail.cardId == 'manager-logs'] from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <div class="card-header">
+        <div>
+            <h2 class="card-title">Logs</h2>
+            <p class="card-subtitle">Tail manager log files without leaving this page.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-icon" data-log-refresh>
+            <i data-feather="refresh-cw" aria-hidden="true"></i>
+            <span>Reload</span>
+        </button>
+    </div>
+    <div class="card-body flex flex-col gap-4">
+        <div class="manager-log-tabs">
+            <div class="tabs" role="tablist" aria-label="Manager log files" data-log-tabs>
+                <div class="empty-state" data-log-empty>Loading log list…</div>
+            </div>
+        </div>
+        <div class="log-viewer" data-log-view aria-live="polite" aria-label="Log output">
+            <div class="empty-state">Select a log to stream its output.</div>
+        </div>
+        <div class="manager-log-status" data-log-status></div>
+    </div>
+</div>
+{{end}}

@@ -1,0 +1,41 @@
+{{define "cards/manager_version_status.html"}}
+<div id="manager-card-versions"
+    class="card glass-card versions-card"
+    data-card-id="manager-version-status"
+    data-manager-section
+    data-section-title="Software Versions"
+    hx-get="/manager/cards/manager-version-status"
+    hx-trigger="sdsm:card-refresh[event.detail.cardId == 'manager-version-status'] from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <div class="card-header">
+        <div class="card-header-text">
+            <h2 class="card-title">Software Versions</h2>
+            <p class="card-subtitle">Track release channels and apply updates without leaving the manager.</p>
+        </div>
+        <div class="card-actions">
+            <button class="btn btn-ghost" type="button"
+                    hx-get="/api/manager/versions"
+                    hx-target="#version-status-grid"
+                    hx-swap="innerHTML"
+                    title="Refresh software versions">
+                <i data-feather="refresh-cw"></i>
+                <span>Refresh</span>
+            </button>
+        </div>
+    </div>
+    <div class="card-body versions-card-body">
+        <div id="version-status-grid"
+             class="versions-grid"
+             hx-get="/api/manager/versions"
+             hx-trigger="load"
+             hx-target="#version-status-grid"
+             hx-swap="innerHTML">
+            <div class="versions-loading">
+                <div class="spinner" aria-hidden="true"></div>
+                <span>Loading component versions…</span>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

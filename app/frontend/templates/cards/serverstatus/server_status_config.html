@@ -1,0 +1,298 @@
+{{define "cards/server_status_config.html"}}
+{{$releaseWorlds := index .worlds "release"}}
+{{$betaWorlds := index .worlds "beta"}}
+{{$versionKey := "release"}}
+{{if .server.Beta}}{{$versionKey = "beta"}}{{end}}
+{{$worldDataForVersion := index .worldData $versionKey}}
+{{$selectedWorldID := .resolved_world_id}}
+{{$selectedWorldEntry := index $worldDataForVersion $selectedWorldID}}
+{{$startLocations := index $selectedWorldEntry "locations"}}
+{{$startConditions := index $selectedWorldEntry "conditions"}}
+{{$difficultyOptions := .release_difficulties}}
+{{if .server.Beta}}{{$difficultyOptions = .beta_difficulties}}{{end}}
+<div class="card col-span-full card-config" id="server-config-card"
+    data-card-id="server-status-config"
+    data-current-version="{{$versionKey}}"
+    data-current-world="{{$selectedWorldID}}"
+    hx-get="/server/{{.server.ID}}/cards/server-status-config"
+    hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-config'] from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <form id="server-config-form" class="config-form" autocomplete="off">
+        <div class="card-header card-header-with-actions">
+            <div>
+                <h2 class="card-title">Configuration</h2>
+                <p class="card-subtitle">Adjust world, automation, and networking from one panel.</p>
+            </div>
+            <button type="button" id="serverConfigToggle" class="btn btn-ghost btn-sm" aria-expanded="false" aria-controls="serverConfigContent">
+                <span id="serverConfigToggleLabel">Expand</span>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <div id="serverConfigContent" class="config-content hidden">
+            <section class="config-section">
+                <div class="config-section-header">
+                    <p class="section-eyebrow">Identity &amp; World</p>
+                    <h3>Live world selection and metadata</h3>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group form-span-2">
+                        <label class="form-label" for="config-name">Server Name</label>
+                        <input type="text" id="config-name" name="name" class="form-control" value="{{.server.Name}}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-max-clients">Max Players</label>
+                        <input type="number" id="config-max-clients" name="max_clients" class="form-control" min="1" max="100" value="{{.server.MaxClients}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-port">Game Port</label>
+                        <input type="number" id="config-port" name="port" class="form-control" min="1024" max="65535" value="{{.server.Port}}">
+                        <p class="form-hint">SCON port automatically tracks this value +1.</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-password">Server Password</label>
+                        <input type="text" id="config-password" name="password" class="form-control" value="{{.server.Password}}" placeholder="Leave empty for no password">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-version">Game Version</label>
+                        <select id="config-version" name="beta" class="form-control">
+                            <option value="false" {{if not .server.Beta}}selected{{end}}>Release</option>
+                            <option value="true" {{if .server.Beta}}selected{{end}}>Beta</option>
+                        </select>
+                    </div>
+                    <div class="form-group form-span-2">
+                        <label class="form-label" for="config-world">World</label>
+                        <select id="config-world" name="world" class="form-control" data-current-world="{{$selectedWorldID}}">
+                            <option value="">Select a world</option>
+                            {{if $releaseWorlds}}
+                                {{range $releaseWorlds}}
+                                {{$worldID := index . "id"}}
+                                {{$worldName := index . "name"}}
+                                <option value="{{$worldID}}" data-version="release" {{if eq $selectedWorldID $worldID}}selected{{end}}>[Release] {{$worldName}}</option>
+                                {{end}}
+                            {{end}}
+                            {{if $betaWorlds}}
+                                {{range $betaWorlds}}
+                                {{$worldID := index . "id"}}
+                                {{$worldName := index . "name"}}
+                                <option value="{{$worldID}}" data-version="beta" {{if eq $selectedWorldID $worldID}}selected{{end}}>[Beta] {{$worldName}}</option>
+                                {{end}}
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-start-location">Start Location</label>
+                        <select id="config-start-location" name="start_location" class="form-control" data-current-value="{{.server.StartLocation}}">
+                            {{if $startLocations}}
+                                {{range $startLocations}}
+                                <option value="{{.ID}}" {{if eq $.server.StartLocation .ID}}selected{{end}}>{{if .Name}}{{.Name}}{{else}}{{.ID}}{{end}}</option>
+                                {{end}}
+                            {{else}}
+                                <option value="">Select a world first</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-start-condition">Start Condition</label>
+                        <select id="config-start-condition" name="start_condition" class="form-control" data-current-value="{{.server.StartCondition}}">
+                            {{if $startConditions}}
+                                {{range $startConditions}}
+                                <option value="{{.ID}}" {{if eq $.server.StartCondition .ID}}selected{{end}}>{{if .Name}}{{.Name}}{{else}}{{.ID}}{{end}}</option>
+                                {{end}}
+                            {{else}}
+                                <option value="">Select a world first</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-difficulty">Difficulty</label>
+                        <select id="config-difficulty" name="difficulty" class="form-control" data-current-value="{{.server.Difficulty}}">
+                            {{if $difficultyOptions}}
+                                {{range $difficultyOptions}}
+                                <option value="{{.}}" {{if eq $.server.Difficulty .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            {{else}}
+                                <option value="{{.server.Difficulty}}" selected>{{if .server.Difficulty}}{{.server.Difficulty}}{{else}}Normal{{end}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                </div>
+            </section>
+
+            <section class="config-section">
+                <div class="config-section-header">
+                    <p class="section-eyebrow">Automation</p>
+                    <h3>Scheduling and safety nets</h3>
+                </div>
+                <div class="config-grid auto-grid">
+                    <label class="form-switch">
+                        <input type="checkbox" name="auto_start" {{if .server.AutoStart}}checked{{end}}>
+                        <span>Auto start with SDSM</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="auto_update" {{if .server.AutoUpdate}}checked{{end}}>
+                        <span>Auto update on start</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="auto_save" {{if .server.AutoSave}}checked{{end}}>
+                        <span>Auto save interval</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="auto_pause" {{if .server.AutoPause}}checked{{end}}>
+                        <span>Pause when empty</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="player_saves" {{if .server.PlayerSaves}}checked{{end}}>
+                        <span>Enable player saves</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}>
+                        <span>Delete skeleton on decay</span>
+                    </label>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="config-save-interval">Save Interval (sec)</label>
+                        <input type="number" id="config-save-interval" name="save_interval" class="form-control" min="60" max="3600" value="{{.server.SaveInterval}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-max-auto-saves">Max Auto Saves</label>
+                        <input type="number" id="config-max-auto-saves" name="max_auto_saves" class="form-control" min="1" max="1000" value="{{.server.MaxAutoSaves}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-max-quick-saves">Max Quick Saves</label>
+                        <input type="number" id="config-max-quick-saves" name="max_quick_saves" class="form-control" min="1" max="1000" value="{{.server.MaxQuickSaves}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-restart-delay">Restart Delay (sec)</label>
+                        <input type="number" id="config-restart-delay" name="restart_delay_seconds" class="form-control" min="0" max="3600" value="{{.server.RestartDelaySeconds}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-shutdown-delay">Shutdown Delay (sec)</label>
+                        <input type="number" id="config-shutdown-delay" name="shutdown_delay_seconds" class="form-control" min="0" max="3600" value="{{.server.ShutdownDelaySeconds}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-disconnect-timeout">Disconnect Timeout (ms)</label>
+                        <input type="number" id="config-disconnect-timeout" name="disconnect_timeout" class="form-control" min="1000" max="600000" step="1000" value="{{.server.DisconnectTimeout}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-bepinex-timeout">BepInEx Init Timeout (sec)</label>
+                        <input type="number" id="config-bepinex-timeout" name="bepinex_init_timeout_seconds" class="form-control" min="5" max="120" value="{{.server.BepInExInitTimeoutSeconds}}">
+                    </div>
+                </div>
+            </section>
+
+            <section class="config-section">
+                <div class="config-section-header">
+                    <p class="section-eyebrow">Networking &amp; Access</p>
+                    <h3>Visibility, auth, and routing</h3>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="config-auth-secret">Auth Secret</label>
+                        <input type="text" id="config-auth-secret" name="auth_secret" class="form-control" value="{{.server.AuthSecret}}" placeholder="Optional Steam auth secret">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-welcome-msg">Welcome Message</label>
+                        <input type="text" id="config-welcome-msg" name="welcome_message" class="form-control" value="{{.server.WelcomeMessage}}" placeholder="Supports tokens like [ServerName]">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-welcome-back">Welcome Back Message</label>
+                        <input type="text" id="config-welcome-back" name="welcome_back_message" class="form-control" value="{{.server.WelcomeBackMessage}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-welcome-delay">Welcome Delay (sec)</label>
+                        <input type="number" id="config-welcome-delay" name="welcome_delay_seconds" class="form-control" min="0" max="600" value="{{.server.WelcomeDelaySeconds}}">
+                    </div>
+                </div>
+                <div class="config-grid auto-grid">
+                    <label class="form-switch">
+                        <input type="checkbox" name="server_visible" {{if .server.Visible}}checked{{end}}>
+                        <span>List server publicly</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="auto_port_forward" {{if .server.AutoPortForward}}checked{{end}}>
+                        <span>Manager UPnP/NAT-PMP</span>
+                    </label>
+                    <label class="form-switch">
+                        <input type="checkbox" name="use_game_upnp" {{if .server.UseGameUPnP}}checked{{end}}>
+                        <span>Use game UPnP</span>
+                    </label>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="config-port-probe-delay">UPnP Probe Delay (sec)</label>
+                        <input type="number" id="config-port-probe-delay" name="port_forward_probe_delay_seconds" class="form-control" min="1" max="120" value="{{.server.PortForwardProbeDelaySeconds}}">
+                    </div>
+                </div>
+            </section>
+
+            {{if .card_toggle_options}}
+            <section class="config-section">
+                <div class="config-section-header">
+                    <p class="section-eyebrow">Cards &amp; Layout</p>
+                    <h3>Choose which cards appear on this server</h3>
+                    <p class="section-description">Unchecked cards remain hidden on the Server Status screen for this server only.</p>
+                </div>
+                <input type="hidden" name="card_toggle_present" value="1">
+                <div class="config-grid card-toggle-grid">
+                    {{range .card_toggle_options}}
+                    <label class="form-switch card-toggle-item">
+                        <input type="checkbox" name="card_toggle" value="{{.ID}}" {{if $.server.IsCardEnabled .ID}}checked{{end}}>
+                        <span>
+                            <strong>{{.Label}}</strong>
+                            {{if .Description}}
+                            <small>{{.Description}}</small>
+                            {{end}}
+                        </span>
+                    </label>
+                    {{end}}
+                </div>
+            </section>
+            {{end}}
+
+            <section class="config-section">
+                <div class="config-section-header">
+                    <p class="section-eyebrow">Log Attach &amp; Monitoring</p>
+                    <h3>Fine tune log replay and client polling</h3>
+                </div>
+                <div class="config-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="config-log-window">Attach replay window (KB)</label>
+                        <input type="number" id="config-log-window" name="log_attach_rehydrate_kb" class="form-control" min="16" max="4096" value="{{.server.LogAttachRehydrateKB}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-clients-query-count">Clients query retries</label>
+                        <input type="number" id="config-clients-query-count" name="clients_query_retry_count" class="form-control" min="1" max="10" value="{{.server.ClientsQueryRetryCount}}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="config-clients-query-delay">Clients query delay (sec)</label>
+                        <input type="number" id="config-clients-query-delay" name="clients_query_retry_delay_seconds" class="form-control" min="1" max="10" value="{{.server.ClientsQueryRetryDelaySeconds}}">
+                    </div>
+                </div>
+            </section>
+
+            <div class="card-footer config-footer">
+                <div class="config-footer-note">
+                    <p class="text-sm text-muted">Changes take effect on next restart. Stop the server before saving structural updates.</p>
+                </div>
+                <div class="config-footer-actions">
+                    <button type="button" id="btn-reset-config" class="btn btn-secondary">
+                        <i data-feather="refresh-ccw"></i>
+                        <span>Reset</span>
+                    </button>
+                    <button type="submit" class="btn btn-primary" {{if .server.Running}}disabled title="Stop the server to apply changes"{{end}}>
+                        <i data-feather="save"></i>
+                        <span>Save Configuration</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script type="application/json" id="server-config-worlds-data">{{toJSON .worlds}}</script>
+<script type="application/json" id="server-config-world-meta">{{toJSON .worldData}}</script>
+<script type="application/json" id="server-config-difficulties">{{toJSON (dict "release" .release_difficulties "beta" .beta_difficulties)}}</script>
+{{end}}

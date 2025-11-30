@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 
+- Card refactor Milestone 5: all server status, manager, dashboard, and users screens now render exclusively through the card registry with HTMX single-card refresh endpoints and per-card JS modules.
 - Create Server presets can now be edited in `sdsm.config` via a new `server_presets` array. The UI consumes these dynamically so operators can tweak defaults without rebuilding.
 
 ### Changed

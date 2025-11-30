@@ -1,0 +1,117 @@
+Card Refactor Execution Template
+================================
+
+Metadata
+--------
+- **Owner:** Jon / Platform Team
+- **Status:** In Progress
+- **Last Updated:** 2025-12-02 (dashboard manager/users cards server-driven; SDSM.cards loader + per-card JS modules now powering dashboard refreshes)
+- **Target Release / Sprint:** Q4 2025 Hardening
+
+Overall Goals
+-------------
+- [ ] Modularize dashboard “cards” so each has isolated Go + HTML + JS.
+- [ ] Introduce a registry that dynamically selects cards per screen.
+- [ ] Simplify card enable/disable flow for future customization.
+
+Milestone 1 – Card Contract (backend)
+-------------------------------------
+- [x] Create `app/backend/internal/cards` package with `Card` interface (ID, Screens, FetchData, Template, Assets?).
+- [x] Add registry + `Register(card Card)` helper.
+- [x] Implement shared dataset helpers (server summary, players, config) to avoid duplicate manager calls.
+- [x] Document contract usage in `docs/cards.md`.
+
+Milestone 2 – Card Manifest to UI
+---------------------------------
+- [x] Update handlers (e.g., `server_handlers.go`) to query registry for requested screen.
+- [x] Shape `[]cards.Renderable` payload (template path, data, asset tags).
+- [x] Add endpoint to fetch a single card (for HTMX refreshes).
+- [x] Write unit tests covering registry filtering + handler output.
+
+Milestone 3 – Template / Layout Refactor
+----------------------------------------
+- [x] Update `frame.html` + related layouts to iterate over manifest data. *(Dashboard/Manager/Server Status/Users templates now safely consume `.cardSlots` and `.cardIDs` with manifest fallbacks.)*
+- [x] Relocate each existing card template to `app/frontend/templates/cards/<card>.html`. *(All legacy partials now delegate to `cards/*` templates; dashboard fallbacks reference the new definitions directly.)*
+	- [x] Info
+	- [x] Control
+	- [x] Players
+	- [x] Chat
+	- [x] Saves
+	- [x] Configuration
+	- [x] Discord Overrides
+	- [x] Logs & Activity
+	- [x] Remaining admin/aux panels (manager/users/server fallbacks now call `cards/*` templates directly; legacy wrappers removed)
+- [x] Remove implicit globals; ensure every card template relies solely on its payload. *(Legacy wrapper partials removed; fallbacks call `cards/*` templates directly.)*
+- [x] Verify theming + responsive layout still works after the split. *(Manual smoke check across desktop/tablet breakpoints after card fallback cleanup.)*
+
+Milestone 4 – Frontend Bootstrapping
+------------------------------------
+- [x] Create `app/frontend/static/js/cards/<card>.js` modules or init hooks. *(Dashboard deck/tiles now declare `/static/js/cards/dashboard_server_{deck,tiles}.js` modules with manual refresh + nav binding; all dashboard cards load via `data-card-assets`.)*
+	- [x] Dashboard manager + users cards mounted via `SDSM.cards`
+	- [x] Dashboard system health card listens to `sdsm:stats-update` + manual refresh button
+	- [x] Dashboard stats card syncs with `sdsm:stats-update` + manual refresh button
+- [x] Add lightweight loader in `app.js` to initialize cards when they mount.
+- [x] Handle optional CSS/JS dependencies per card (lazy load or bundler entrypoints).
+- [x] Add smoke tests (Playwright/Cypress/manual checklist) for card initialization. *(See `docs/cards_smoke_tests.md` for the checklist.)*
+- [x] Wire dashboard manager + users cards to the shared `sdsm:card-refresh` dispatcher so HTMX payloads stay authoritative.
+- [x] Ship client-side card loader (`SDSM.cards`) with lazy script loading + per-card modules for dashboard manager/users cards.
+
+Milestone 5 – Migration Strategy
+--------------------------------
+- [x] Pilot migration on a low-risk screen (e.g., Logs) with 1–2 cards. *(Using server status info card as initial prototype.)*
+- [x] Iterate on registry/contract based on pilot feedback. *(Registry now guards FetchData panics and keeps card IDs stable; tests updated.)*
+- [x] Batch-migrate core cards across all screens (server status, manager, dashboard, users). *(All server/manager/dashboard/users cards now source from `app/frontend/templates/cards/*`; fallbacks removed and HTMX single-card endpoints live.)*
+	- **Server Status Screen**
+		- [x] Status / Info prototype
+		- [x] Control actions
+		- [x] Players roster
+		- [x] Chat stream
+		- [x] Saves browser
+		- [x] Configuration form
+		- [x] Discord overrides
+		- [x] Logs + diagnostics
+	- **Manager Overview Screen**
+		- [x] Manager control & lifecycle
+		- [x] Manager configuration
+		- [x] Manager Discord overrides
+		- [x] Manager logs & alerts
+		- [x] Version status grid
+	- **Dashboard / Home Screen**
+		- [x] Server deck (start/stop all)
+		- [x] Server tile cards
+		- [x] System health metrics
+		- [x] Global stats row
+		- [x] Users summary widget
+	- **Users & Access Screen**
+		- [x] Users overview card
+		- [x] User management table card
+		- [x] Role/server assignment widget
+- [x] After each batch: run Go tests + UI smoke tests; update CHANGELOG. *(`go test ./...` + deck/tiles smoke scenario recorded; CHANGELOG notes added.)*
+
+Milestone 6 – Dynamic Loading / Feature Flags
+---------------------------------------------
+- [x] Add per-card capability/permission flags (e.g., requires player-saves).
+- [x] Support server-specific toggles (config-driven card enable/disable).
+- [x] Optional: implement client-side lazy loading (IntersectionObserver) for below-fold cards.
+- [x] Document how to add/remove a card in CONTRIBUTING.md.
+
+Risks & Mitigations
+-------------------
+- **Risk:** Duplicate data fetches while cards are split.
+	- *Mitigation:* shared dataset cache + context-propagated memoization.
+- **Risk:** Large PRs hard to review.
+	- *Mitigation:* migrate screen-by-screen, one PR per milestone/batch.
+- **Risk:** JS initialization order issues.
+	- *Mitigation:* card loader enforces deterministic init + logs errors per card.
+
+Open Questions / Notes
+----------------------
+- [ ] Where should shared dataset caches live (handler-level vs. cards pkg)?
+- [ ] How should we express JS dependencies per card (data attribute vs. manifest)?
+- [ ] Do we need per-role filtering for cards beyond server-level permissions?
+
+Next Checkpoint
+---------------
+- **Date / Sprint:** 2025-12 Sprint 1
+- **Planned Deliverables:** shared dataset helpers, docs draft, HTMX single-card endpoint
+- **Owner:** Jon / Platform Team

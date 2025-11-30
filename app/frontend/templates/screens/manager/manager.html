@@ -1,0 +1,71 @@
+{{define "title"}}Manager Settings{{end}}
+{{define "page"}}manager{{end}}
+
+{{define "manager.html"}}
+<div data-page-title="Manager Settings" class="flex flex-col gap-6">
+    {{- $pageData := . -}}
+    {{- $cardSlots := .cardSlots -}}
+    {{- if not $cardSlots -}}
+        {{- $cardSlots = dict -}}
+    {{- end -}}
+    {{- $cardIDs := .cardIDs -}}
+    {{- if not $cardIDs -}}
+        {{- $cardIDs = slice -}}
+    {{- end -}}
+    {{- $hasManagerControlCard := and $cardIDs (has $cardIDs "manager-control") -}}
+    {{- $hasManagerConfigCard := and $cardIDs (has $cardIDs "manager-configuration") -}}
+    {{- $hasManagerVersionCard := and $cardIDs (has $cardIDs "manager-version-status") -}}
+    {{- $hasManagerDiscordCard := and $cardIDs (has $cardIDs "manager-discord") -}}
+    {{- $hasManagerLogsCard := and $cardIDs (has $cardIDs "manager-logs") -}}
+
+    {{- $primaryCards := index $cardSlots "primary" -}}
+    {{- if $primaryCards -}}
+        {{- range $primaryCards -}}
+            {{- renderCard .Template .Data -}}
+        {{- end -}}
+    {{- end -}}
+
+    {{- if not $hasManagerControlCard -}}
+    <div>
+        {{ template "cards/manager_control.html" $pageData }}
+    </div>
+    {{- end -}}
+
+    {{- $gridCards := index $cardSlots "grid" -}}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start" data-slot="grid">
+        {{- if $gridCards -}}
+            {{- range $gridCards -}}
+                {{- renderCard .Template .Data -}}
+            {{- end -}}
+        {{- end -}}
+        {{- if not $hasManagerConfigCard -}}
+            {{ template "cards/manager_configuration.html" $pageData }}
+        {{- end -}}
+        {{- if not $hasManagerVersionCard -}}
+            {{ template "cards/manager_version_status.html" $pageData }}
+        {{- end -}}
+    </div>
+
+    {{- $footerCards := index $cardSlots "footer" -}}
+    {{- if $footerCards -}}
+    <div class="flex flex-col gap-6" data-slot="footer">
+        {{- range $footerCards -}}
+            {{- renderCard .Template .Data -}}
+        {{- end -}}
+    </div>
+    {{- end -}}
+
+    {{- if not $hasManagerDiscordCard -}}
+    <div>
+        {{ template "cards/manager_discord.html" $pageData }}
+    </div>
+    {{- end -}}
+
+    {{- if not $hasManagerLogsCard -}}
+    <div>
+        {{ template "cards/manager_logs.html" $pageData }}
+    </div>
+    {{- end -}}
+
+</div>
+{{end}}
