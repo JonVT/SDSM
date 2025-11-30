@@ -59,5 +59,24 @@ func (dashboardSystemHealthCard) FetchData(req *cards.Request) (gin.H, error) {
 			data["pill"] = "Offline"
 		}
 	}
+	if _, ok := data["telemetryStatus"]; !ok {
+		data["telemetryStatus"] = "Awaiting data"
+	}
+	if _, ok := data["telemetryStatusClass"]; !ok {
+		data["telemetryStatusClass"] = "is-muted"
+	}
+	if _, ok := data["telemetryStatusDetail"]; !ok {
+		data["telemetryStatusDetail"] = "Telemetry has not reported yet"
+	}
+	if _, ok := data["componentAlerts"]; !ok {
+		data["componentAlerts"] = []string{}
+	}
+	if _, ok := data["componentAlertCount"]; !ok {
+		if alerts, ok := data["componentAlerts"].([]string); ok {
+			data["componentAlertCount"] = len(alerts)
+		} else {
+			data["componentAlertCount"] = 0
+		}
+	}
 	return data, nil
 }

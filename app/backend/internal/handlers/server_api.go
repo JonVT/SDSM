@@ -143,21 +143,7 @@ func (h *ManagerHandlers) broadcastStats() {
 	if h == nil || h.hub == nil {
 		return
 	}
-	telemetry := h.manager.SystemTelemetry()
-	health := 100.0
-	telemetryPayload := buildSystemTelemetryPayload(telemetry)
-	if telemetry != nil {
-		health = telemetry.HealthPercent
-	}
-	stats := map[string]any{
-		"totalServers":        h.manager.ServerCount(),
-		"activeServers":       h.manager.ServerCountActive(),
-		"totalPlayers":        h.manager.GetTotalPlayers(),
-		"systemHealthPercent": health,
-	}
-	if telemetryPayload != nil {
-		stats["systemTelemetry"] = telemetryPayload
-	}
+	stats := h.collectStatsSnapshot()
 	payload := map[string]any{
 		"type":  "stats_update",
 		"stats": stats,
@@ -4474,36 +4460,134 @@ func (h *ManagerHandlers) APIManagerTestPort(c *gin.Context) {
 }
 
 func (h *ManagerHandlers) APIStats(c *gin.Context) {
-	totalServers := h.manager.ServerCount()
-	activeServers := h.manager.ServerCountActive()
-	totalPlayers := h.manager.GetTotalPlayers()
-	systemHealth := "100%"
-	telemetry := h.manager.SystemTelemetry()
-	systemHealthPercent := 100.0
-	telemetryPayload := buildSystemTelemetryPayload(telemetry)
-	if telemetry != nil {
-		systemHealthPercent = telemetry.HealthPercent
-		systemHealth = fmt.Sprintf("%.0f%%", telemetry.HealthPercent)
-	}
+	stats := h.collectStatsSnapshot()
 
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		c.HTML(http.StatusOK, "stats.html", gin.H{
-			"totalServers":  totalServers,
-			"activeServers": activeServers,
-			"totalPlayers":  totalPlayers,
-			"systemHealth":  systemHealth,
+			"totalServers":  toInt(stats["totalServers"]),
+			"activeServers": toInt(stats["activeServers"]),
+			"totalPlayers":  toInt(stats["totalPlayers"]),
+			"systemHealth":  toString(stats["systemHealth"]),
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"totalServers":        totalServers,
-		"activeServers":       activeServers,
-		"totalPlayers":        totalPlayers,
-		"systemHealth":        systemHealth,
-		"systemHealthPercent": systemHealthPercent,
-		"systemTelemetry":     telemetryPayload,
-	})
+	c.JSON(http.StatusOK, stats)
+}
+
+
+func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
+	statsTimestamp := time.Now().UTC()
+	stats := gin.H{
+		"totalServers":        0,
+		"activeServers":       0,
+		"totalPlayers":        0,
+		"startableServers":    0,
+		"pendingUpdates":      0,
+		"componentsHealthy":   0,
+		"componentsTotal":     0,
+		"systemHealth":        "0%",
+		"systemHealthPercent": 0.0,
+		"systemHealthLabel":   "0%",
+		"cpuPercent":          0.0,
+		"cpuPercentLabel":     "0%",
+		"memoryPercent":       0.0,
+		"memoryPercentLabel":  "0%",
+		"memoryUsed":          0.0,
+		"memoryTotal":         0.0,
+		"memoryDetail":        "",
+		"diskPercent":         0.0,
+		"diskPercentLabel":    "0%",
+		"diskUsed":            0.0,
+		"diskTotal":           0.0,
+		"diskDetail":          "",
+		"telemetrySample":     "",
+		"telemetrySampleISO":  "",
+		"lastUpdated":         statsTimestamp.Format(time.RFC3339),
+		"lastUpdatedISO":      statsTimestamp.Format(time.RFC3339),
+	}
+	if h == nil || h.manager == nil {
+		return stats
+	}
+
+	totalServers := h.manager.ServerCount()
+	activeServers := h.manager.ServerCountActive()
+	totalPlayers := h.manager.GetTotalPlayers()
+	startableServers := 0
+	for _, srv := range h.manager.Servers {
+		if srv == nil {
+			continue
+		}
+		if !srv.IsRunning() || srv.Stopping {
+			startableServers++
+		}
+	}
+
+	telemetry := h.manager.SystemTelemetry()
+	systemHealthPercent := 100.0
+	if telemetry != nil {
+		systemHealthPercent = telemetry.HealthPercent
+	}
+	telemetryPayload := buildSystemTelemetryPayload(telemetry)
+	systemHealthLabel := formatPercentLabel(systemHealthPercent)
+	systemHealth := fmt.Sprintf("%.0f%%", systemHealthPercent)
+	telemetrySample := ""
+	cpuPercent := 0.0
+	memoryPercent := 0.0
+	memoryUsed := 0.0
+	memoryTotal := 0.0
+	diskPercent := 0.0
+	diskUsed := 0.0
+	diskTotal := 0.0
+	if telemetryPayload != nil {
+		if sample, ok := telemetryPayload["sampled_at"].(string); ok {
+			telemetrySample = sample
+		}
+		cpuPercent = toFloat(telemetryPayload["cpu_percent"])
+		memoryPercent = toFloat(telemetryPayload["memory_percent"])
+		memoryUsed = toFloat(telemetryPayload["memory_used"])
+		memoryTotal = toFloat(telemetryPayload["memory_total"])
+		diskPercent = toFloat(telemetryPayload["disk_percent"])
+		diskUsed = toFloat(telemetryPayload["disk_used"])
+		diskTotal = toFloat(telemetryPayload["disk_total"])
+	}
+
+	totalComponents, healthyComponents, pendingUpdates := h.managerComponentHealth()
+	memoryDetail := formatUsageDetail(memoryUsed, memoryTotal)
+	diskDetail := formatUsageDetail(diskUsed, diskTotal)
+	cpuPercentLabel := formatPercentLabel(cpuPercent)
+	memoryPercentLabel := formatPercentLabel(memoryPercent)
+	diskPercentLabel := formatPercentLabel(diskPercent)
+
+	stats["totalServers"] = totalServers
+	stats["activeServers"] = activeServers
+	stats["totalPlayers"] = totalPlayers
+	stats["startableServers"] = startableServers
+	stats["pendingUpdates"] = pendingUpdates
+	stats["componentsHealthy"] = healthyComponents
+	stats["componentsTotal"] = totalComponents
+	stats["systemHealth"] = systemHealth
+	stats["systemHealthPercent"] = systemHealthPercent
+	stats["systemHealthLabel"] = systemHealthLabel
+	stats["systemTelemetry"] = telemetryPayload
+	stats["cpuPercent"] = cpuPercent
+	stats["cpuPercentLabel"] = cpuPercentLabel
+	stats["memoryPercent"] = memoryPercent
+	stats["memoryPercentLabel"] = memoryPercentLabel
+	stats["memoryUsed"] = memoryUsed
+	stats["memoryTotal"] = memoryTotal
+	stats["memoryDetail"] = memoryDetail
+	stats["diskPercent"] = diskPercent
+	stats["diskPercentLabel"] = diskPercentLabel
+	stats["diskUsed"] = diskUsed
+	stats["diskTotal"] = diskTotal
+	stats["diskDetail"] = diskDetail
+	stats["telemetrySample"] = telemetrySample
+	stats["telemetrySampleISO"] = telemetrySample
+	stats["lastUpdated"] = statsTimestamp.Format(time.RFC3339)
+	stats["lastUpdatedISO"] = statsTimestamp.Format(time.RFC3339)
+
+	return stats
 }
 
 func buildSystemTelemetryPayload(telemetry *models.SystemTelemetry) gin.H {

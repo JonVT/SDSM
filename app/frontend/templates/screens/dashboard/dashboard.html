@@ -43,16 +43,6 @@
         {{ $healthCtx = dict "score" $healthScore "pill" $healthPill }}
     {{- end -}}
 
-    {{- if and $primaryCards $hasStatsCard -}}
-        {{- range $primaryCards -}}
-            {{- if eq .ID "dashboard-stats" -}}
-                {{ renderCard .Template .Data }}
-            {{- end -}}
-        {{- end -}}
-    {{- else -}}
-        {{ template "cards/dashboard_stats.html" $statsCtx }}
-    {{- end -}}
-
     <div class="system-overview-grid {{ if eq .role "admin" }}has-sidebar{{ else }}single-column{{ end }}">
         <div class="system-overview-left">
             {{- if and $primaryCards $hasSystemHealthCard -}}

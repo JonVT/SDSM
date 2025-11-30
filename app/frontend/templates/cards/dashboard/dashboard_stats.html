@@ -1,37 +1,242 @@
 {{define "cards/dashboard_stats.html"}}
+{{$healthPercent := .systemHealthPercent}}
+{{if lt $healthPercent 0.0}}{{$healthPercent = 0.0}}{{end}}
+{{if gt $healthPercent 100.0}}{{$healthPercent = 100.0}}{{end}}
+{{$cpuLabel := .cpuPercentLabel}}
+{{$memoryLabel := .memoryPercentLabel}}
+{{$diskLabel := .diskPercentLabel}}
+{{$memoryDetail := .memoryDetail}}
+{{$diskDetail := .diskDetail}}
+{{$telemetryStatus := .telemetryStatus}}
+{{if not $telemetryStatus}}{{$telemetryStatus = "Telemetry"}}{{end}}
+{{$telemetryStatusClass := .telemetryStatusClass}}
+{{if not $telemetryStatusClass}}{{$telemetryStatusClass = "is-info"}}{{end}}
+{{$telemetryDetail := .telemetryStatusDetail}}
+{{if not $telemetryDetail}}{{$telemetryDetail = "Awaiting telemetry data"}}{{end}}
 <div id="dashboard-card-stats"
-     class="stats-grid stats-grid-compact"
+     class="card dashboard-stats-card cluster-card"
      data-card-id="dashboard-stats"
      data-dashboard-stats-card
      hx-get="/dashboard/cards/dashboard-stats"
      hx-trigger="sdsm:card-refresh[event.detail.cardId == 'dashboard-stats'] from:body"
      hx-target="this"
-    hx-swap="outerHTML"
-    data-card-assets='["/static/js/cards/dashboard_stats.js"]'>
-    <div class="stats-card-actions row justify-end mb-2">
-        <button type="button"
-                class="btn btn-ghost btn-icon"
-                title="Refresh"
-                aria-label="Refresh dashboard stats"
-                data-card-refresh>
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-        </button>
+     hx-swap="outerHTML"
+     data-card-assets='["/static/js/cards/dashboard_stats.js"]'>
+    <div class="card-header cluster-card-header">
+        <div>
+            <h2 class="card-title">Cluster Overview</h2>
+            <p class="card-subtitle">Live health across every server</p>
+        </div>
+        <div class="cluster-header-actions">
+            <a class="btn btn-ghost"
+               href="/manager"
+               data-card-nav-exempt="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l2-2 4 4 8-8 4 4"/><path d="M21 12V5h-7"/></svg>
+                <span>Manager</span>
+            </a>
+            <button type="button"
+                    class="btn btn-ghost btn-icon"
+                    title="Refresh"
+                    aria-label="Refresh cluster overview"
+                    data-card-refresh>
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+            </button>
+        </div>
     </div>
-    <div class="stat-card">
-        <div class="stat-value" id="total-servers">{{ .totalServers }}</div>
-        <div class="stat-label">Total Servers</div>
+    <div class="card-body cluster-card-body">
+        <div class="cluster-meta">
+            <div class="cluster-meta-status">
+                <span class="status-pill {{$telemetryStatusClass}}" id="cluster-telemetry-pill">{{$telemetryStatus}}</span>
+                <p class="cluster-meta-detail" id="cluster-telemetry-detail">{{$telemetryDetail}}</p>
+            </div>
+            <div class="cluster-meta-stamp">
+                <p class="cluster-meta-age" id="cluster-telemetry-age">
+                    {{if .telemetrySampleAge}}
+                        Sampled {{.telemetrySampleAge}} ago
+                    {{else}}
+                        Awaiting telemetry
+                    {{end}}
+                </p>
+                <p class="cluster-meta-time">
+                    {{if .telemetrySampleTime}}
+                        <time id="cluster-telemetry-time" datetime="{{.telemetrySampleISO}}">{{.telemetrySampleTime.Local.Format "15:04:05"}}</time>
+                    {{else if .telemetrySample}}
+                        <time id="cluster-telemetry-time" datetime="{{.telemetrySampleISO}}">{{.telemetrySample}}</time>
+                    {{else}}
+                        <span id="cluster-telemetry-time">—</span>
+                    {{end}}
+                </p>
+            </div>
+        </div>
+        <div class="cluster-summary-grid">
+            <section class="cluster-summary cluster-summary-accent">
+                <div class="cluster-summary-label">Players Online</div>
+                <div class="cluster-summary-value">
+                    <span id="total-players">{{ .totalPlayers }}</span>
+                </div>
+                <div class="cluster-summary-meta">Across all servers</div>
+            </section>
+            <section class="cluster-summary">
+                <div class="cluster-summary-label">Servers Online</div>
+                <div class="cluster-summary-value">
+                    <span id="active-servers">{{ .activeServers }}</span>
+                </div>
+                <div class="cluster-summary-meta">
+                    <span>of</span>
+                    <span id="total-servers">{{ .totalServers }}</span>
+                    <span>total</span>
+                </div>
+            </section>
+            <section class="cluster-summary">
+                <div class="cluster-summary-label">Telemetry Age</div>
+                <div class="cluster-summary-value" id="cluster-telemetry-age-inline">
+                    {{if .telemetrySampleAge}}
+                        {{.telemetrySampleAge}}
+                    {{else}}
+                        —
+                    {{end}}
+                </div>
+                <div class="cluster-summary-meta">
+                    <span id="cluster-telemetry-stamp-inline">
+                    {{if .telemetrySampleTime}}
+                        {{.telemetrySampleTime.Local.Format "15:04:05"}}
+                    {{else if .telemetrySample}}
+                        {{.telemetrySample}}
+                    {{else}}
+                        Awaiting data
+                    {{end}}
+                    </span>
+                </div>
+            </section>
+            <section class="cluster-summary cluster-summary-health">
+                <div class="cluster-summary-label">Health Score</div>
+                <div class="cluster-summary-value" id="cluster-health-value">
+                    {{if .systemHealthLabel}}
+                        {{.systemHealthLabel}}
+                    {{else}}
+                        {{printf "%.0f%%" $healthPercent}}
+                    {{end}}
+                </div>
+                <div class="cluster-health-bar">
+                    <span class="cluster-health-fill" id="cluster-health-bar" style="width: {{printf "%.0f" $healthPercent}}%;"></span>
+                </div>
+            </section>
+        </div>
+
+        <div class="cluster-ops">
+            <div class="ops-section">
+                <p class="ops-label">Operations</p>
+                <div class="ops-metric-row">
+                    <div class="ops-metric">
+                        <span class="ops-value" id="startable-servers">{{ .startableServers }}</span>
+                        <span class="ops-meta">Startable</span>
+                    </div>
+                    <div class="ops-metric">
+                        <span class="ops-value" id="cluster-pending-updates">{{ .pendingUpdates }}</span>
+                        <span class="ops-meta">Updates</span>
+                    </div>
+                    <div class="ops-meta-detail" id="cluster-pending-meta">
+                        {{ .componentsHealthy }}/{{ .componentsTotal }} healthy
+                    </div>
+                </div>
+            </div>
+            <div class="ops-section">
+                <p class="ops-label">Component Alerts</p>
+                <ul class="ops-alert-list" id="cluster-component-alerts">
+                    {{if .componentAlerts}}
+                        {{range .componentAlerts}}
+                            <li>{{.}}</li>
+                        {{end}}
+                    {{else}}
+                        <li class="ops-alert-empty">All components nominal</li>
+                    {{end}}
+                </ul>
+            </div>
+        </div>
+
+        <div class="cluster-resource-panel">
+            <div class="resource-meter" data-resource="cpu">
+                <div class="resource-meter-header">
+                    <span>CPU Load</span>
+                    <span class="resource-meter-value" id="cluster-cpu-value">{{$cpuLabel}}</span>
+                </div>
+                <div class="resource-meter-bar">
+                    <span class="resource-meter-fill" id="cluster-cpu-bar" style="width: {{printf "%.0f" .cpuPercent}}%;"></span>
+                </div>
+                <div class="resource-meter-meta" id="cluster-load-label">
+                    {{if .loadAverageLabel}}
+                        Load {{.loadAverageLabel}}
+                    {{else}}
+                        —
+                    {{end}}
+                </div>
+            </div>
+            <div class="resource-meter" data-resource="memory">
+                <div class="resource-meter-header">
+                    <span>Memory</span>
+                    <span class="resource-meter-value" id="cluster-memory-value">{{$memoryLabel}}</span>
+                </div>
+                <div class="resource-meter-bar">
+                    <span class="resource-meter-fill" id="cluster-memory-bar" style="width: {{printf "%.0f" .memoryPercent}}%;"></span>
+                </div>
+                <div class="resource-meter-meta" id="cluster-memory-detail">
+                    {{if $memoryDetail}}
+                        {{$memoryDetail}}
+                    {{else}}
+                        —
+                    {{end}}
+                </div>
+            </div>
+            <div class="resource-meter" data-resource="disk">
+                <div class="resource-meter-header">
+                    <span>Disk</span>
+                    <span class="resource-meter-value" id="cluster-disk-value">{{$diskLabel}}</span>
+                </div>
+                <div class="resource-meter-bar">
+                    <span class="resource-meter-fill" id="cluster-disk-bar" style="width: {{printf "%.0f" .diskPercent}}%;"></span>
+                </div>
+                <div class="resource-meter-meta" id="cluster-disk-detail">
+                    {{if $diskDetail}}
+                        {{$diskDetail}}
+                    {{else}}
+                        —
+                    {{end}}
+                </div>
+            </div>
+        </div>
+
+        <div class="cluster-runtime-meta">
+            <div>
+                <span class="runtime-label">Uptime</span>
+                <span class="runtime-value" id="cluster-uptime-label">
+                    {{if .uptimeLabel}}
+                        {{.uptimeLabel}}
+                    {{else}}
+                        —
+                    {{end}}
+                </span>
+            </div>
+            <div>
+                <span class="runtime-label">Load Avg</span>
+                <span class="runtime-value" id="cluster-load-inline">
+                    {{if .loadAverageLabel}}
+                        {{.loadAverageLabel}}
+                    {{else}}
+                        —
+                    {{end}}
+                </span>
+            </div>
+        </div>
     </div>
-    <div class="stat-card">
-        <div class="stat-value" id="active-servers">{{ .activeServers }}</div>
-        <div class="stat-label">Active Servers</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="total-players">{{ .totalPlayers }}</div>
-        <div class="stat-label">Connected Players</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-value" id="startable-servers">{{ .startableServers }}</div>
-        <div class="stat-label">Ready to Start</div>
+    <div class="cluster-card-footer">
+        <div class="cluster-updated">
+            {{if .lastUpdated}}
+                <span>Last updated</span>
+                <time id="cluster-stats-updated" datetime="{{.lastUpdatedISO}}">{{.lastUpdated.Local.Format "15:04:05"}}</time>
+            {{else}}
+                <span>Waiting for data…</span>
+            {{end}}
+        </div>
     </div>
 </div>
 {{end}}

@@ -71,6 +71,15 @@ func defaultManagerCardData(data gin.H) gin.H {
 	if _, ok := data["components_outdated"]; !ok {
 		data["components_outdated"] = 0
 	}
+	if _, ok := data["servers_total"]; !ok {
+		data["servers_total"] = 0
+	}
+	if _, ok := data["servers_active"]; !ok {
+		data["servers_active"] = 0
+	}
+	if _, ok := data["players_connected"]; !ok {
+		data["players_connected"] = 0
+	}
 	if _, ok := data["pill_class"]; !ok {
 		data["pill_class"] = "is-warning"
 	}

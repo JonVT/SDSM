@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -786,18 +787,102 @@ func (h *ManagerHandlers) buildDashboardPayload(c *gin.Context) gin.H {
 	telemetryPayload := buildSystemTelemetryPayload(systemTelemetry)
 
 	managerStatus := h.buildManagerStatusPayload(rootPath)
+	managerStatus["servers_total"] = totalServers
+	managerStatus["servers_active"] = activeServers
+	managerStatus["players_connected"] = connectedPlayers
 	managerCardCtx := h.buildManagerCardContext(managerStatus)
 
+	pendingUpdates := toInt(managerCardCtx["components_outdated"])
+	componentsTotal := toInt(managerCardCtx["components_total"])
+	componentsHealthy := toInt(managerCardCtx["components_uptodate"])
+	telemetrySample := ""
+	var telemetrySampleTime time.Time
+	cpuPercent := 0.0
+	memoryPercent := 0.0
+	memoryUsed := 0.0
+	memoryTotal := 0.0
+	diskPercent := 0.0
+	diskUsed := 0.0
+	diskTotal := 0.0
+	loadLabel := ""
+	uptimeLabel := ""
+	if telemetryPayload != nil {
+		if sample, ok := telemetryPayload["sampled_at"].(string); ok {
+			telemetrySample = sample
+			if parsed, err := time.Parse(time.RFC3339, sample); err == nil {
+				telemetrySampleTime = parsed
+			}
+		}
+		cpuPercent = toFloat(telemetryPayload["cpu_percent"])
+		memoryPercent = toFloat(telemetryPayload["memory_percent"])
+		memoryUsed = toFloat(telemetryPayload["memory_used"])
+		memoryTotal = toFloat(telemetryPayload["memory_total"])
+		diskPercent = toFloat(telemetryPayload["disk_percent"])
+		diskUsed = toFloat(telemetryPayload["disk_used"])
+		diskTotal = toFloat(telemetryPayload["disk_total"])
+		loadLabel = formatLoadAverageLabel(toFloat(telemetryPayload["load1"]), toFloat(telemetryPayload["load5"]), toFloat(telemetryPayload["load15"]))
+		uptimeLabel = formatUptimeLabel(toFloat(telemetryPayload["uptime_seconds"]))
+	}
+	telemetryStatusLabel, telemetryStatusClass, telemetryStatusDetail, telemetryIsStale, telemetryAge := summarizeTelemetryStatus(telemetrySampleTime)
+	componentAlerts := formatComponentAlerts(h.manager)
+	componentAlertsLabel := strings.Join(componentAlerts, ", ")
+
+	updatedAt := time.Now()
 	statsCtx := gin.H{
-		"totalServers":     totalServers,
-		"activeServers":    activeServers,
-		"totalPlayers":     connectedPlayers,
-		"startableServers": startableServers,
+		"totalServers":        totalServers,
+		"activeServers":       activeServers,
+		"totalPlayers":        connectedPlayers,
+		"startableServers":    startableServers,
+		"pendingUpdates":      pendingUpdates,
+		"componentsHealthy":   componentsHealthy,
+		"componentsTotal":     componentsTotal,
+		"systemHealthPercent": systemHealthPercent,
+		"systemHealthLabel":   formatPercentLabel(systemHealthPercent),
+		"cpuPercent":          cpuPercent,
+		"cpuPercentLabel":     formatPercentLabel(cpuPercent),
+		"memoryPercent":       memoryPercent,
+		"memoryPercentLabel":  formatPercentLabel(memoryPercent),
+		"memoryUsed":          memoryUsed,
+		"memoryTotal":         memoryTotal,
+		"memoryDetail":        formatUsageDetail(memoryUsed, memoryTotal),
+		"diskPercent":         diskPercent,
+		"diskPercentLabel":    formatPercentLabel(diskPercent),
+		"diskUsed":            diskUsed,
+		"diskTotal":           diskTotal,
+		"diskDetail":          formatUsageDetail(diskUsed, diskTotal),
+		"telemetrySample":     telemetrySample,
+		"telemetrySampleTime": telemetrySampleTime,
+		"telemetrySampleISO":  telemetrySample,
+		"telemetryStatus":     telemetryStatusLabel,
+		"telemetryStatusClass": telemetryStatusClass,
+		"telemetryStatusDetail": telemetryStatusDetail,
+		"telemetryIsStale":    telemetryIsStale,
+		"telemetrySampleAge":  formatDurationShort(telemetryAge),
+		"componentAlerts":     componentAlerts,
+		"componentAlertsLabel": componentAlertsLabel,
+		"loadAverageLabel":    loadLabel,
+		"uptimeLabel":         uptimeLabel,
+		"lastUpdated":         updatedAt,
+		"lastUpdatedISO":      updatedAt.UTC().Format(time.RFC3339),
 	}
 	healthCtx := gin.H{
-		"score":   healthScore,
-		"pill":    healthPill,
-		"percent": systemHealthPercent,
+		"score":                 healthScore,
+		"pill":                  healthPill,
+		"percent":               systemHealthPercent,
+		"telemetryStatus":       telemetryStatusLabel,
+		"telemetryStatusClass":  telemetryStatusClass,
+		"telemetryStatusDetail": telemetryStatusDetail,
+		"telemetrySampleTime":   telemetrySampleTime,
+		"telemetrySampleISO":    telemetrySample,
+		"componentAlerts":       componentAlerts,
+		"componentAlertCount":   len(componentAlerts),
+		"pendingUpdates":        pendingUpdates,
+		"startableServers":      startableServers,
+		"activeServers":         activeServers,
+		"totalServers":          totalServers,
+		"playersConnected":      connectedPlayers,
+		"uptimeLabel":           uptimeLabel,
+		"loadAverageLabel":      loadLabel,
 	}
 	serverDeck := gin.H{
 		"role":      role,
@@ -851,7 +936,7 @@ func (h *ManagerHandlers) buildDashboardPayload(c *gin.Context) gin.H {
 		"managerStatus":   managerStatus,
 		"managerCard":     managerCardCtx,
 		"healthMeta": gin.H{
-			"updatedAt": time.Now(),
+			"updatedAt": updatedAt,
 		},
 		"userStats":        userStats,
 		"totalServers":     totalServers,
@@ -893,6 +978,9 @@ func (h *ManagerHandlers) buildManagerCardContext(status gin.H) gin.H {
 	total := toInt(status["components_total"])
 	healthy := toInt(status["components_uptodate"])
 	outdated := toInt(status["components_outdated"])
+	serversTotal := toInt(status["servers_total"])
+	serversActive := toInt(status["servers_active"])
+	playersConnected := toInt(status["players_connected"])
 	if total == 0 && healthy == 0 {
 		fallbackTotal, fallbackHealthy, fallbackOutdated := h.managerComponentHealth()
 		if total == 0 {
@@ -915,6 +1003,9 @@ func (h *ManagerHandlers) buildManagerCardContext(status gin.H) gin.H {
 	ctx["components_total"] = total
 	ctx["components_uptodate"] = healthy
 	ctx["components_outdated"] = outdated
+	ctx["servers_total"] = serversTotal
+	ctx["servers_active"] = serversActive
+	ctx["players_connected"] = playersConnected
 	ctx["pill_class"] = pillClass
 	ctx["status_label"] = statusLabel
 	ctx["status_meta"] = statusMeta
@@ -945,6 +1036,125 @@ func formatPortLabel(port int) string {
 		return fmt.Sprintf("%d", port)
 	}
 	return "—"
+}
+
+func summarizeTelemetryStatus(sample time.Time) (label, className, detail string, stale bool, age time.Duration) {
+	const staleAfter = 2 * time.Minute
+	if sample.IsZero() {
+		return "Awaiting data", "is-muted", "Telemetry has not reported yet", true, 0
+	}
+	age = time.Since(sample)
+	if age < 0 {
+		age = 0
+	}
+	agoLabel := formatDurationShort(age)
+	if age > staleAfter {
+		return "Stale", "is-warning", fmt.Sprintf("No telemetry for %s", agoLabel), true, age
+	}
+	return "Live", "is-healthy", fmt.Sprintf("Updated %s ago", agoLabel), false, age
+}
+
+func formatDurationShort(d time.Duration) string {
+	if d <= 0 {
+		return "just now"
+	}
+	seconds := int(d.Round(time.Second) / time.Second)
+	if seconds < 60 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+	minutes := seconds / 60
+	if minutes < 60 {
+		if rem := seconds % 60; rem > 0 {
+			return fmt.Sprintf("%dm %ds", minutes, rem)
+		}
+		return fmt.Sprintf("%dm", minutes)
+	}
+	hours := minutes / 60
+	if hours < 24 {
+		if rem := minutes % 60; rem > 0 {
+			return fmt.Sprintf("%dh %dm", hours, rem)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+	days := hours / 24
+	if days < 7 {
+		if rem := hours % 24; rem > 0 {
+			return fmt.Sprintf("%dd %dh", days, rem)
+		}
+		return fmt.Sprintf("%dd", days)
+	}
+	weeks := days / 7
+	if rem := days % 7; rem > 0 {
+		return fmt.Sprintf("%dw %dd", weeks, rem)
+	}
+	return fmt.Sprintf("%dw", weeks)
+}
+
+func formatComponentAlerts(mgr *manager.Manager) []string {
+	if mgr == nil {
+		return nil
+	}
+	alerts := mgr.ComponentsNeedingUpdate()
+	if len(alerts) == 0 {
+		return nil
+	}
+	labels := make([]string, 0, len(alerts))
+	seen := make(map[manager.DeployType]struct{}, len(alerts))
+	for _, dt := range alerts {
+		if dt == "" {
+			continue
+		}
+		if _, ok := seen[dt]; ok {
+			continue
+		}
+		seen[dt] = struct{}{}
+		if label := friendlyDeployTypeLabel(dt); label != "" {
+			labels = append(labels, label)
+		}
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+	sort.Strings(labels)
+	return labels
+}
+
+func friendlyDeployTypeLabel(dt manager.DeployType) string {
+	switch dt {
+	case manager.DeployTypeRelease:
+		return "Release"
+	case manager.DeployTypeBeta:
+		return "Beta"
+	case manager.DeployTypeBepInEx:
+		return "BepInEx"
+	case manager.DeployTypeLaunchPad:
+		return "LaunchPad"
+	case manager.DeployTypeSCON:
+		return "SCON"
+	case manager.DeployTypeSteamCMD:
+		return "SteamCMD"
+	case manager.DeployTypeServers:
+		return "Server Files"
+	case manager.DeployTypeAll:
+		return "All Components"
+	default:
+		return strings.Title(strings.ToLower(string(dt)))
+	}
+}
+
+func formatLoadAverageLabel(load1, load5, load15 float64) string {
+	if load1 == 0 && load5 == 0 && load15 == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.2f / %.2f / %.2f", load1, load5, load15)
+}
+
+func formatUptimeLabel(seconds float64) string {
+	if seconds <= 0 {
+		return ""
+	}
+	duration := time.Duration(seconds * float64(time.Second))
+	return formatDurationShort(duration)
 }
 
 func formatRootLabel(rootPath string) string {
@@ -1039,6 +1249,65 @@ func toBool(value interface{}) bool {
 		return toInt(value) != 0
 	}
 	return false
+}
+
+func toFloat(value interface{}) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case json.Number:
+		if f, err := v.Float64(); err == nil {
+			return f
+		}
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func formatPercentLabel(value float64) string {
+	if value < 0 {
+		value = 0
+	}
+	if value > 999 {
+		value = 999
+	}
+	return fmt.Sprintf("%.0f%%", math.Round(value))
+}
+
+func humanBytes(value float64) string {
+	if value <= 0 {
+		return "0 B"
+	}
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB", "PiB"}
+	idx := 0
+	for value >= 1024 && idx < len(units)-1 {
+		value /= 1024
+		idx++
+	}
+	if idx == 0 {
+		return fmt.Sprintf("%.0f %s", value, units[idx])
+	}
+	return fmt.Sprintf("%.1f %s", value, units[idx])
+}
+
+func formatUsageDetail(used, total float64) string {
+	if used <= 0 || total <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%s / %s", humanBytes(used), humanBytes(total))
 }
 
 func (h *ManagerHandlers) buildDashboardCardRequest(c *gin.Context) (*cards.Request, gin.H) {

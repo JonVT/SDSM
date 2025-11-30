@@ -30,10 +30,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 
-	"sdsm/app/backend/internal/models"
-	"sdsm/app/backend/internal/utils"
-	"sdsm/app/backend/internal/version"
-	"sdsm/app/backend/steam"
+	"sdsm/internal/models"
+	"sdsm/internal/utils"
+	"sdsm/internal/version"
+	"sdsm/steam"
 )
 
 const (

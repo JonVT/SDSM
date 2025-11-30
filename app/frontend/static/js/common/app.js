@@ -980,6 +980,100 @@
           ? (stats.systemTelemetry || stats.system_telemetry || null)
           : null;
 
+        const telemetrySample = stats.telemetrySampleISO || stats.telemetrySample || (telemetry && telemetry.sampled_at);
+        let telemetrySampleLabel = '';
+        let telemetrySampleDate = null;
+        if (telemetrySample) {
+          const dt = new Date(telemetrySample);
+          if (!Number.isNaN(dt.valueOf())) {
+            telemetrySampleDate = dt;
+            telemetrySampleLabel = dt.toLocaleTimeString();
+          } else if (typeof telemetrySample === 'string') {
+            telemetrySampleLabel = telemetrySample;
+          }
+        }
+
+        const telemetryAge = typeof stats.telemetrySampleAge === 'string'
+          ? stats.telemetrySampleAge.trim()
+          : '';
+
+        const applyTelemetryMeta = () => {
+          const pillEl = card.querySelector('[data-system-telemetry-pill]');
+          if (pillEl) {
+            Array.from(pillEl.classList || []).forEach(cls => {
+              if (cls && cls.startsWith('is-')) {
+                pillEl.classList.remove(cls);
+              }
+            });
+            (stats.telemetryStatusClass || '').split(/\s+/).forEach(cls => {
+              if (cls) {
+                pillEl.classList.add(cls);
+              }
+            });
+            pillEl.textContent = stats.telemetryStatus || 'Telemetry';
+          }
+
+          const detailEl = card.querySelector('[data-system-telemetry-detail]');
+          if (detailEl) {
+            detailEl.textContent = stats.telemetryStatusDetail || 'Awaiting telemetry data';
+          }
+
+          const ageEl = card.querySelector('[data-system-telemetry-age]');
+          if (ageEl) {
+            ageEl.textContent = telemetryAge ? `Sampled ${telemetryAge} ago` : 'Awaiting telemetry';
+          }
+
+          const timeEl = card.querySelector('[data-system-telemetry-time]');
+          const separatorEl = card.querySelector('[data-system-telemetry-separator]');
+          if (timeEl) {
+            if (telemetrySampleLabel) {
+              timeEl.textContent = telemetrySampleLabel;
+              if (telemetrySampleDate) {
+                timeEl.setAttribute('datetime', telemetrySampleDate.toISOString());
+              } else if (stats.telemetrySampleISO) {
+                timeEl.setAttribute('datetime', stats.telemetrySampleISO);
+              } else {
+                timeEl.removeAttribute('datetime');
+              }
+              timeEl.hidden = false;
+              if (separatorEl) {
+                separatorEl.hidden = false;
+              }
+            } else {
+              timeEl.textContent = '—';
+              timeEl.removeAttribute('datetime');
+              timeEl.hidden = true;
+              if (separatorEl) {
+                separatorEl.hidden = true;
+              }
+            }
+          }
+        };
+
+        const componentAlertsEl = card.querySelector('[data-system-component-alerts]');
+        const renderComponentAlerts = (alerts) => {
+          if (!componentAlertsEl) {
+            return;
+          }
+          componentAlertsEl.innerHTML = '';
+          const items = Array.isArray(alerts) ? alerts : [];
+          if (!items.length) {
+            const empty = document.createElement('li');
+            empty.className = 'ops-alert-empty';
+            empty.textContent = 'All components nominal';
+            componentAlertsEl.appendChild(empty);
+            return;
+          }
+          items.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            componentAlertsEl.appendChild(li);
+          });
+        };
+
+        applyTelemetryMeta();
+        renderComponentAlerts(stats.componentAlerts);
+
         let percent = Number(stats.systemHealthPercent);
         if (!Number.isFinite(percent)) {
           const snakePercent = Number(stats.system_health_percent);
@@ -1008,21 +1102,6 @@
           pillEl.classList.remove('is-healthy', 'is-stable', 'is-warning', 'is-critical', 'is-offline');
           if (pillState.className) {
             pillEl.classList.add(pillState.className);
-          }
-        }
-
-        const metaEl = card.querySelector('[data-system-health-updated]');
-        if (metaEl) {
-          const sampledLabel = telemetry && telemetry.sampled_at ? new Date(telemetry.sampled_at) : null;
-          if (sampledLabel && !Number.isNaN(sampledLabel.getTime())) {
-            const timeLabel = sampledLabel.toLocaleTimeString([], {
-              hour: 'numeric',
-              minute: '2-digit',
-              second: '2-digit'
-            });
-            metaEl.textContent = `Updated ${timeLabel}`;
-          } else {
-            metaEl.textContent = telemetry ? 'Updated just now' : 'Awaiting telemetry…';
           }
         }
 
@@ -1102,9 +1181,88 @@
       updateStats: function(stats) {
         stats = stats || {};
         SDSM.state.lastStats = stats;
+
+        const setText = (id, value) => {
+          if (value === undefined || value === null) {
+            return;
+          }
+          const el = typeof id === 'string' ? document.getElementById(id) : id;
+          if (el) {
+            el.textContent = value;
+          }
+        };
+
+        const clampPercent = (value) => {
+          const num = typeof value === 'number' ? value : parseFloat(value);
+          if (!Number.isFinite(num)) {
+            return 0;
+          }
+          return Math.max(0, Math.min(100, num));
+        };
+
+        const setBarPercent = (id, value) => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.style.width = `${clampPercent(value)}%`;
+          }
+        };
+
+        const updateTimeElement = (id, dateValue) => {
+          const el = document.getElementById(id);
+          if (!el || !dateValue) {
+            return;
+          }
+          const dt = new Date(dateValue);
+          if (!Number.isNaN(dt.valueOf())) {
+            el.textContent = dt.toLocaleTimeString();
+            el.setAttribute('datetime', dt.toISOString());
+          } else {
+            el.textContent = dateValue;
+            el.removeAttribute('datetime');
+          }
+        };
+
+        const setStatusPill = (el, text, className) => {
+          if (!el) {
+            return;
+          }
+          if (text !== undefined) {
+            el.textContent = text || 'Telemetry';
+          }
+          Array.from(el.classList || []).forEach(cls => {
+            if (cls && cls.startsWith('is-')) {
+              el.classList.remove(cls);
+            }
+          });
+          (className || '').split(/\s+/).forEach(cls => {
+            if (cls) {
+              el.classList.add(cls);
+            }
+          });
+        };
+
+        const renderAlertList = (container, alerts) => {
+          if (!container) {
+            return;
+          }
+          container.innerHTML = '';
+          const items = Array.isArray(alerts) ? alerts : [];
+          if (!items.length) {
+            const empty = document.createElement('li');
+            empty.className = 'ops-alert-empty';
+            empty.textContent = 'All components nominal';
+            container.appendChild(empty);
+            return;
+          }
+          items.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            container.appendChild(li);
+          });
+        };
+
         if (stats.totalServers !== undefined) {
-          const total = document.getElementById('total-servers');
-          if (total) total.textContent = stats.totalServers;
+          setText('total-servers', stats.totalServers);
 
           const hTotal = document.getElementById('header-total-servers');
           if (hTotal) hTotal.textContent = stats.totalServers;
@@ -1114,25 +1272,136 @@
         }
 
         if (stats.activeServers !== undefined) {
-          const active = document.getElementById('active-servers');
-          if (active) active.textContent = stats.activeServers;
+          setText('active-servers', stats.activeServers);
 
           const hActive = document.getElementById('header-active-servers');
           if (hActive) hActive.textContent = stats.activeServers;
         }
 
         if (stats.totalPlayers !== undefined) {
-          const players = document.getElementById('total-players');
-          if (players) players.textContent = stats.totalPlayers;
+          setText('total-players', stats.totalPlayers);
 
           const hPlayers = document.getElementById('header-total-players');
           if (hPlayers) hPlayers.textContent = stats.totalPlayers;
         }
 
+        if (stats.startableServers !== undefined) {
+          setText('startable-servers', stats.startableServers);
+        }
+
+        if (stats.pendingUpdates !== undefined) {
+          setText('cluster-pending-updates', stats.pendingUpdates);
+        }
+
+        if (stats.componentsHealthy !== undefined && stats.componentsTotal !== undefined) {
+          setText('cluster-pending-meta', `${stats.componentsHealthy}/${stats.componentsTotal} healthy`);
+        }
+
+        if (stats.systemHealthLabel || stats.systemHealthPercent !== undefined) {
+          setText('cluster-health-value', stats.systemHealthLabel || this.formatPercent(stats.systemHealthPercent));
+        }
+        if (stats.systemHealthPercent !== undefined) {
+          setBarPercent('cluster-health-bar', stats.systemHealthPercent);
+        }
+
+        if (stats.cpuPercentLabel || stats.cpuPercent !== undefined) {
+          setText('cluster-cpu-value', stats.cpuPercentLabel || this.formatPercent(stats.cpuPercent));
+        }
+        if (stats.cpuPercent !== undefined) {
+          setBarPercent('cluster-cpu-bar', stats.cpuPercent);
+        }
+
+        if (stats.memoryPercentLabel || stats.memoryPercent !== undefined) {
+          setText('cluster-memory-value', stats.memoryPercentLabel || this.formatPercent(stats.memoryPercent));
+        }
+        if (stats.memoryPercent !== undefined) {
+          setBarPercent('cluster-memory-bar', stats.memoryPercent);
+        }
+        if (stats.memoryDetail || (stats.memoryUsed !== undefined && stats.memoryTotal !== undefined)) {
+          setText('cluster-memory-detail', stats.memoryDetail || this.formatUsageDetail(stats.memoryUsed, stats.memoryTotal));
+        }
+
+        if (stats.diskPercentLabel || stats.diskPercent !== undefined) {
+          setText('cluster-disk-value', stats.diskPercentLabel || this.formatPercent(stats.diskPercent));
+        }
+        if (stats.diskPercent !== undefined) {
+          setBarPercent('cluster-disk-bar', stats.diskPercent);
+        }
+        if (stats.diskDetail || (stats.diskUsed !== undefined && stats.diskTotal !== undefined)) {
+          setText('cluster-disk-detail', stats.diskDetail || this.formatUsageDetail(stats.diskUsed, stats.diskTotal));
+        }
+
+        const loadMetaEl = document.getElementById('cluster-load-label');
+        if (loadMetaEl) {
+          loadMetaEl.textContent = stats.loadAverageLabel ? `Load ${stats.loadAverageLabel}` : '—';
+        }
+        const loadInlineEl = document.getElementById('cluster-load-inline');
+        if (loadInlineEl) {
+          loadInlineEl.textContent = stats.loadAverageLabel || '—';
+        }
+        const uptimeLabelEl = document.getElementById('cluster-uptime-label');
+        if (uptimeLabelEl) {
+          uptimeLabelEl.textContent = stats.uptimeLabel || '—';
+        }
+
+        const telemetryAge = typeof stats.telemetrySampleAge === 'string' ? stats.telemetrySampleAge.trim() : '';
+        const sample = stats.telemetrySampleISO || stats.telemetrySample;
+        let sampleLabel = '';
+        let sampleDate = null;
+        if (sample) {
+          const dt = new Date(sample);
+          if (!Number.isNaN(dt.valueOf())) {
+            sampleDate = dt;
+            sampleLabel = dt.toLocaleTimeString();
+          } else if (typeof sample === 'string') {
+            sampleLabel = sample;
+          }
+        }
+
+        const inlineAge = document.getElementById('cluster-telemetry-age-inline');
+        if (inlineAge) {
+          inlineAge.textContent = telemetryAge || '—';
+        }
+        const inlineStamp = document.getElementById('cluster-telemetry-stamp-inline');
+        if (inlineStamp) {
+          inlineStamp.textContent = sampleLabel || 'Awaiting data';
+        }
+
+        const metaAge = document.getElementById('cluster-telemetry-age');
+        if (metaAge) {
+          metaAge.textContent = telemetryAge ? `Sampled ${telemetryAge} ago` : 'Awaiting telemetry';
+        }
+        const metaTime = document.getElementById('cluster-telemetry-time');
+        if (metaTime) {
+          if (sampleLabel) {
+            metaTime.textContent = sampleLabel;
+            if (sampleDate) {
+              metaTime.setAttribute('datetime', sampleDate.toISOString());
+            } else if (stats.telemetrySampleISO) {
+              metaTime.setAttribute('datetime', stats.telemetrySampleISO);
+            } else {
+              metaTime.removeAttribute('datetime');
+            }
+          } else {
+            metaTime.textContent = '—';
+            metaTime.removeAttribute('datetime');
+          }
+        }
+
+        setStatusPill(document.getElementById('cluster-telemetry-pill'), stats.telemetryStatus, stats.telemetryStatusClass);
+        const telemetryDetail = document.getElementById('cluster-telemetry-detail');
+        if (telemetryDetail) {
+          telemetryDetail.textContent = stats.telemetryStatusDetail || 'Awaiting telemetry data';
+        }
+
+        renderAlertList(document.getElementById('cluster-component-alerts'), stats.componentAlerts);
+
         const refresh = document.getElementById('last-refresh');
         if (refresh) {
           refresh.textContent = new Date().toLocaleTimeString();
         }
+
+        updateTimeElement('cluster-stats-updated', stats.lastUpdatedISO || stats.lastUpdated);
 
         this.renderSystemHealthCard(stats);
       },
@@ -2754,6 +3023,110 @@
         }
       },
 
+      sidebar: {
+        storageKey: 'sdsm:sidebar-collapsed',
+        toggleSelector: '[data-sidebar-toggle]',
+        collapsed: false,
+        toggleBtn: null,
+        swapHandlerBound: false,
+
+        init() {
+          const root = document.body;
+          this.toggleBtn = document.querySelector(this.toggleSelector);
+          this.collapsed = this.readStoredState();
+          this.apply(this.collapsed, { skipPersist: true, skipTooltipRefresh: true });
+
+          if (this.toggleBtn && !this.toggleBtn.dataset.sidebarToggleBound) {
+            this.toggleBtn.dataset.sidebarToggleBound = 'true';
+            this.toggleBtn.addEventListener('click', (event) => {
+              event.preventDefault();
+              this.apply(!this.collapsed);
+            });
+          }
+
+          if (!this.swapHandlerBound) {
+            this.swapHandlerBound = true;
+            document.addEventListener('htmx:afterSwap', (evt) => {
+              const target = evt?.target instanceof Element ? evt.target : null;
+              if (!target) {
+                return;
+              }
+              if (target.closest('.sidebar') || target.closest('.nav-server-list')) {
+                this.updateNavTooltips();
+              }
+            });
+          }
+
+          // Ensure collapsed class is removed on small screens where sidebar stacks on top.
+          const handleResize = () => {
+            if (!root) {
+              return;
+            }
+            if (window.matchMedia('(max-width: 1024px)').matches) {
+              root.classList.remove('sidebar-collapsed');
+            } else if (this.collapsed) {
+              root.classList.add('sidebar-collapsed');
+            }
+          };
+          handleResize();
+          window.addEventListener('resize', handleResize);
+
+          this.updateNavTooltips();
+        },
+
+        readStoredState() {
+          try {
+            return localStorage.getItem(this.storageKey) === '1';
+          } catch (_) {
+            return false;
+          }
+        },
+
+        apply(collapsed, options = {}) {
+          const root = document.body;
+          this.collapsed = !!collapsed;
+          if (root) {
+            root.classList.toggle('sidebar-collapsed', this.collapsed);
+          }
+          if (this.toggleBtn) {
+            this.toggleBtn.setAttribute('aria-pressed', this.collapsed ? 'true' : 'false');
+            this.toggleBtn.setAttribute('aria-label', this.collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+          }
+          if (!options.skipPersist) {
+            try {
+              localStorage.setItem(this.storageKey, this.collapsed ? '1' : '0');
+            } catch (err) {
+              console.warn('Unable to persist sidebar preference', err);
+            }
+          }
+          if (!options.skipTooltipRefresh) {
+            this.updateNavTooltips();
+          }
+        },
+
+        updateNavTooltips() {
+          const root = document.body;
+          const collapsed = Boolean(this.collapsed && root && root.classList.contains('sidebar-collapsed'));
+          const items = document.querySelectorAll('.sidebar .nav-item');
+          items.forEach((item) => {
+            if (!item.dataset.navLabel) {
+              const labelEl = item.querySelector('.nav-item-text') || item.querySelector('span:last-child');
+              const labelText = labelEl ? labelEl.textContent.trim() : item.textContent.trim();
+              if (labelText) {
+                item.dataset.navLabel = labelText;
+              }
+            }
+            if (collapsed) {
+              if (item.dataset.navLabel) {
+                item.setAttribute('title', item.dataset.navLabel);
+              }
+            } else if (item.dataset.navLabel && item.getAttribute('title') === item.dataset.navLabel) {
+              item.removeAttribute('title');
+            }
+          });
+        }
+      },
+
       updateTitle: (path) => {
         const titleEl = document.getElementById('page-title');
         if (!titleEl) return;
@@ -2775,6 +3148,7 @@
 
       init: () => {
         SDSM.frame.managerSubmenu.init();
+        SDSM.frame.sidebar.init();
 
         // Update date/time display
         const dtEl = document.getElementById('datetime');
