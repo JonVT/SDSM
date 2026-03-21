@@ -165,34 +165,9 @@ func (p *Paths) ServerOutputFile(id int) string {
 	return filepath.Join(p.ServerLogsDir(id), fmt.Sprintf("%s_output.log", p.ServerName(id)))
 }
 
-// ServerPIDFile returns the path to a PID file used to record the game process ID
-// when a server is launched in detached mode. The manager uses this to detect
-// running detached servers after it restarts.
-func (p *Paths) ServerPIDFile(id int) string {
-	return filepath.Join(p.ServerDir(id), "server.pid")
-}
-
 // ServerSettingsFile returns the settings file path for a server.
 func (p *Paths) ServerSettingsFile(id int) string {
 	return filepath.Join(p.ServerSettingsDir(id), "settings.xml")
-}
-
-// CheckServer verifies that a server's directory structure exists.
-func (p *Paths) CheckServer(id int) bool {
-	dirs := []string{
-		p.ServerDir(id),
-		p.ServerLogsDir(id),
-		p.ServerSavesDir(id),
-		p.ServerSettingsDir(id),
-		p.ServerGameDir(id),
-		p.ServerModsDir(id),
-	}
-	for _, dir := range dirs {
-		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			return false
-		}
-	}
-	return true
 }
 
 // DeployServer creates a server's directory structure (idempotent).

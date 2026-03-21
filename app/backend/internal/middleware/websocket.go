@@ -105,12 +105,6 @@ func (h *Hub) Broadcast(message []byte) {
 	h.broadcast <- message
 }
 
-func (h *Hub) GetClientCount() int {
-	h.mutex.RLock()
-	defer h.mutex.RUnlock()
-	return len(h.clients)
-}
-
 func (h *Hub) HandleWebSocket() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)

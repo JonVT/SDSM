@@ -119,12 +119,22 @@
                 SDSM.ui.bindServerCardNavigation();
                 SDSM.ui.startStatsPoll();
             }
+
+            const triggerRefresh = (selector) => {
+                if (typeof htmx === 'undefined') {
+                    return;
+                }
+                document.querySelectorAll(selector).forEach((node) => {
+                    if (node) {
+                        htmx.trigger(node, 'refresh');
+                    }
+                });
+            };
+
             // Auto-refresh every 30 seconds
             setInterval(() => {
-                if (typeof htmx !== 'undefined') {
-                    htmx.trigger('#server-grid', 'refresh');
-                    htmx.trigger('.stats-grid', 'refresh');
-                }
+                triggerRefresh('#server-grid');
+                triggerRefresh('.stats-grid');
             }, 30000);
         });
         document.addEventListener('htmx:afterSwap', e => {

@@ -1,118 +1,350 @@
 {{define "cards/server_status_info.html"}}
+{{- $server := .server -}}
+{{- $worldName := "" -}}
+{{- if .worldInfo.Name -}}
+    {{- $worldName = .worldInfo.Name -}}
+{{- else if $server.World -}}
+    {{- $worldName = $server.World -}}
+{{- else -}}
+    {{- $worldName = "Unspecified" -}}
+{{- end -}}
+{{- $worldDescription := "" -}}
+{{- if .worldInfo.Description -}}
+    {{- $worldDescription = .worldInfo.Description -}}
+{{- else if $server.World -}}
+    {{- $worldDescription = $server.World -}}
+{{- end -}}
+{{- $startLocationName := "Not set" -}}
+{{- $startLocationDesc := "" -}}
+{{- if .start_location_info -}}
+    {{- $loc := .start_location_info -}}
+    {{- if (index $loc "name") -}}
+        {{- $startLocationName = index $loc "name" -}}
+    {{- else if (index $loc "id") -}}
+        {{- $startLocationName = index $loc "id" -}}
+    {{- end -}}
+    {{- if (index $loc "description") -}}
+        {{- $startLocationDesc = index $loc "description" -}}
+    {{- end -}}
+{{- else if $server.StartLocation -}}
+    {{- $startLocationName = $server.StartLocation -}}
+{{- end -}}
+{{- $startConditionName := "Not set" -}}
+{{- $startConditionDesc := "" -}}
+{{- if .start_condition_info -}}
+    {{- $cond := .start_condition_info -}}
+    {{- if (index $cond "name") -}}
+        {{- $startConditionName = index $cond "name" -}}
+    {{- else if (index $cond "id") -}}
+        {{- $startConditionName = index $cond "id" -}}
+    {{- end -}}
+    {{- if (index $cond "description") -}}
+        {{- $startConditionDesc = index $cond "description" -}}
+    {{- end -}}
+{{- else if $server.StartCondition -}}
+    {{- $startConditionName = $server.StartCondition -}}
+{{- end -}}
+{{- $statusClass := "is-stopped" -}}
+{{- $statusLabel := "Stopped" -}}
+{{- if $server.LastError -}}
+    {{- $statusClass = "is-error" -}}
+    {{- $statusLabel = "Error" -}}
+{{- else if $server.Stopping -}}
+    {{- $statusClass = "is-stopping" -}}
+    {{- $statusLabel = "Stopping" -}}
+{{- else if $server.Starting -}}
+    {{- $statusClass = "is-starting" -}}
+    {{- $statusLabel = "Starting" -}}
+{{- else if $server.Running -}}
+    {{- if $server.Paused -}}
+        {{- $statusClass = "is-paused" -}}
+        {{- $statusLabel = "Paused" -}}
+    {{- else -}}
+        {{- $statusClass = "is-running" -}}
+        {{- $statusLabel = "Running" -}}
+    {{- end -}}
+{{- end -}}
+{{- $uptimeMode := "" -}}
+{{- $uptimeSource := "" -}}
+{{- $uptimePrefix := "" -}}
+{{- $uptimeText := "" -}}
+{{- if and $server.Running $server.ServerStarted -}}
+    {{- $uptimeMode = "uptime" -}}
+    {{- $uptimeSource = $server.ServerStarted.Format "2006-01-02T15:04:05Z07:00" -}}
+    {{- $uptimePrefix = "Up" -}}
+    {{- $uptimeText = printf "Up %s" ($server.UptimeString) -}}
+{{- else if and (not $server.Running) $server.LastStoppedAt -}}
+    {{- $uptimeMode = "downtime" -}}
+    {{- $uptimeSource = $server.LastStoppedAt.Format "2006-01-02T15:04:05Z07:00" -}}
+    {{- $uptimePrefix = "Down" -}}
+    {{- $uptimeText = printf "Down %s" ($server.DowntimeString) -}}
+{{- end -}}
+{{- $playerCount := len $server.LiveClients -}}
+{{- $playerCap := "Unlimited" -}}
+{{- $playerHint := "No cap configured" -}}
+{{- if gt $server.MaxClients 0 -}}
+    {{- $playerCap = printf "%d" $server.MaxClients -}}
+    {{- $playerHint = "Cap enforced via server.ini" -}}
+{{- end -}}
+{{- $gamePort := "Not set" -}}
+{{- if gt $server.Port 0 -}}
+    {{- $gamePort = printf "%d" $server.Port -}}
+{{- end -}}
+{{- $sconPort := "Not set" -}}
+{{- if gt $server.SCONPort 0 -}}
+    {{- $sconPort = printf "%d" $server.SCONPort -}}
+{{- end -}}
+{{- $externalPort := "" -}}
+{{- if gt $server.PortForwardExternalPort 0 -}}
+    {{- $externalPort = printf "%d" $server.PortForwardExternalPort -}}
+{{- end -}}
+{{- $visibility := "Hidden" -}}
+{{- if $server.Visible -}}
+    {{- $visibility = "Listed" -}}
+{{- end -}}
+{{- $passwordState := "Disabled" -}}
+{{- if $server.Password -}}
+    {{- $passwordState = "Enabled" -}}
+{{- end -}}
+{{- $languageLabel := "Default" -}}
+{{- if $server.Language -}}
+    {{- $languageLabel = $server.Language -}}
+{{- end -}}
 <div class="card card-server-info"
     id="card-server-status-info"
     data-card-id="server-status-info"
-    hx-get="/server/{{.server.ID}}/cards/server-status-info"
+    hx-get="/server/{{$server.ID}}/cards/server-status-info"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-info'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
     <div class="card-header server-info-header">
-        <div class="server-info-heading">
-            <p class="card-eyebrow text-xs uppercase tracking-wide text-muted">Server</p>
-            <h1 class="card-title" id="server-name-display">{{.server.Name}}</h1>
-            <p class="text-sm text-muted">ID #{{.server.ID}}</p>
-        </div>
-        <div class="server-info-actions flex flex-col gap-2 sm:flex-row sm:items-center">
-            <button type="button" id="btn-rename-server" class="btn btn-sm btn-secondary">
-                <i data-feather="edit-2" class="btn-icon-left"></i> Rename
-            </button>
-            {{if .language_options}}
-            <div class="language-select">
-                <label for="server-language-select" class="form-label text-xs text-muted">Language</label>
-                <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
-                    {{range .language_options}}
-                    <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
+        <div class="server-identity">
+            <div class="server-title-row">
+                <div class="server-name-block">
+                    <div class="server-name-line">
+                        <div class="server-name-group">
+                            <div class="server-name-chip">
+                                {{if $server.Beta}}
+                                <span class="server-version-icon icon-beta" title="Beta build" aria-label="Beta build">β</span>
+                                {{else}}
+                                <span class="server-version-icon icon-release" title="Release build" aria-label="Release build">R</span>
+                                {{end}}
+                                <h1 class="card-title" id="server-name-display">{{$server.Name}}</h1>
+                            </div>
+                            <button type="button" id="btn-rename-server" class="btn btn-ghost btn-icon btn-rename-inline" title="Rename server">
+                                <i data-feather="edit-2"></i>
+                                <span class="sr-only">Rename server</span>
+                            </button>
+                        </div>
+                        <div class="server-status-stack">
+                            <span class="status-pill {{$statusClass}}" data-server-state-pill>{{$statusLabel}}</span>
+                            {{if $uptimeSource}}
+                            <span class="uptime-chip"
+                                  data-relative-mode="{{$uptimeMode}}"
+                                  data-relative-source="{{$uptimeSource}}"
+                                  {{if $uptimePrefix}}data-relative-prefix="{{$uptimePrefix}}"{{end}}>
+                                {{$uptimeText}}
+                            </span>
+                            {{end}}
+                            <span class="status-pill storm-pill {{if $server.Storming}}is-storm{{else}}is-clear{{end}}" data-server-storm-pill title="Storm status">
+                                {{if $server.Storming}}Storming{{else}}Calm{{end}}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="server-meta-row">
+                        <div class="id-chip">
+                            <span class="meta-label">Server ID</span>
+                            <div class="id-value">
+                                #{{$server.ID}}
+                                <button type="button" class="manager-copy-btn"
+                                    data-copy-scope="server-info"
+                                    data-copy-value="{{$server.ID}}"
+                                    aria-label="Copy server ID">
+                                    <i data-feather="copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="connection-chip">
+                            <span class="meta-label">Game Port</span>
+                            <div class="connection-value">
+                                <code>{{$gamePort}}</code>
+                                {{if ne $gamePort "Not set"}}
+                                <button type="button" class="manager-copy-btn"
+                                    data-copy-scope="server-info"
+                                    data-copy-value="{{$gamePort}}"
+                                    aria-label="Copy game port">
+                                    <i data-feather="copy"></i>
+                                </button>
+                                {{end}}
+                            </div>
+                            <div class="connection-meta">
+                                <span>{{if $server.PortForwardActive}}Mapping active{{else}}No mapping{{end}}</span>
+                                {{if $externalPort}}
+                                <span>External: {{$externalPort}}</span>
+                                {{end}}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="server-quick-actions">
+                    <div class="quick-action-group">
+                        <button type="button" id="server-quick-start" class="btn btn-sm btn-success quick-action-btn">
+                            <i data-feather="play" class="btn-icon-left"></i>
+                            Start
+                        </button>
+                        <button type="button" id="server-quick-stop" class="btn btn-sm btn-danger quick-action-btn">
+                            <i data-feather="square" class="btn-icon-left"></i>
+                            Stop
+                        </button>
+                        <button type="button" id="server-quick-save" class="btn btn-sm btn-primary quick-action-btn">
+                            <i data-feather="save" class="btn-icon-left"></i>
+                            Save
+                        </button>
+                        <button type="button" id="server-quick-resume" class="btn btn-sm btn-secondary quick-action-btn">
+                            <i data-feather="play-circle" class="btn-icon-left"></i>
+                            Resume
+                        </button>
+                    </div>
+                    {{if .language_options}}
+                    <div class="language-select compact">
+                        <label for="server-language-select" class="form-label">Language</label>
+                        <div class="language-select-control">
+                            <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
+                                {{range .language_options}}
+                                <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
+                                {{end}}
+                            </select>
+                            <span class="language-status" id="server-language-status" role="status" aria-live="polite"></span>
+                        </div>
+                    </div>
                     {{end}}
-                </select>
+                </div>
             </div>
-            {{end}}
         </div>
     </div>
-    <div class="card-body">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <section class="info-panel">
-                <div class="info-label">World</div>
-                <div class="info-value">
-                    {{if .worldInfo.Name}}{{.worldInfo.Name}}{{else}}{{.server.World}}{{end}}
-                    {{if .server.Beta}}
-                    <span class="badge badge-warning ml-2">Beta</span>
-                    {{end}}
-                </div>
-                {{if .worldInfo.Description}}
-                <p class="info-description">{{.worldInfo.Description}}</p>
-                {{else if .server.World}}
-                <p class="info-description text-muted">{{.server.World}}</p>
+    <div class="card-body server-info-body">
+        <div class="server-detail-grid">
+            <section class="detail-card">
+                <header class="detail-card-header">
+                    <i data-feather="globe"></i>
+                    <div>
+                        <p class="detail-label">World</p>
+                        <h3 class="detail-title">{{$worldName}}</h3>
+                    </div>
+                </header>
+                {{if $worldDescription}}
+                <p class="detail-description">{{$worldDescription}}</p>
                 {{end}}
+                <dl class="detail-meta">
+                    <div>
+                        <dt>File</dt>
+                        <dd>{{if $server.World}}{{$server.World}}{{else}}Not set{{end}}</dd>
+                    </div>
+                    <div>
+                        <dt>Branch</dt>
+                        <dd>{{if $server.Beta}}Beta Build{{else}}Release Build{{end}}</dd>
+                    </div>
+                    <div>
+                        <dt>Language</dt>
+                        <dd>{{$languageLabel}}</dd>
+                    </div>
+                </dl>
             </section>
-            <section class="info-panel">
-                <div class="info-label">Starting Location</div>
-                <div class="info-value">
-                    {{with .start_location_info}}
-                        {{$name := index . "name"}}
-                        {{$id := index . "id"}}
-                        {{if $name}}
-                            {{$name}}
-                        {{else if $id}}
-                            {{$id}}
-                        {{else}}
-                            —
-                        {{end}}
-                    {{else}}
-                        {{if .server.StartLocation}}
-                            {{.server.StartLocation}}
-                        {{else}}
-                            —
-                        {{end}}
+            <section class="detail-card">
+                <header class="detail-card-header">
+                    <i data-feather="map-pin"></i>
+                    <div>
+                        <p class="detail-label">Start Setup</p>
+                        <h3 class="detail-title">{{$startLocationName}}</h3>
+                    </div>
+                </header>
+                {{if $startLocationDesc}}<p class="detail-description">{{$startLocationDesc}}</p>{{end}}
+                <dl class="detail-meta">
+                    <div>
+                        <dt>Condition</dt>
+                        <dd>{{$startConditionName}}</dd>
+                    </div>
+                    {{if $startConditionDesc}}
+                    <div>
+                        <dt>Condition Detail</dt>
+                        <dd>{{$startConditionDesc}}</dd>
+                    </div>
                     {{end}}
+                    <div>
+                        <dt>Auto Save</dt>
+                        <dd>{{if $server.AutoSave}}Enabled{{else}}Disabled{{end}}</dd>
+                    </div>
+                </dl>
+            </section>
+            <section class="detail-card">
+                <header class="detail-card-header">
+                    <i data-feather="settings"></i>
+                    <div>
+                        <p class="detail-label">Automation & Access</p>
+                        <h3 class="detail-title">Runbook</h3>
+                    </div>
+                </header>
+                <div class="automation-chip-row">
+                    <span class="automation-chip {{if $server.AutoStart}}is-enabled{{else}}is-disabled{{end}}">Auto Start</span>
+                    <span class="automation-chip {{if $server.AutoUpdate}}is-enabled{{else}}is-disabled{{end}}">Auto Update</span>
+                    <span class="automation-chip {{if $server.AutoPause}}is-enabled{{else}}is-disabled{{end}}">Auto Pause</span>
+                    <span class="automation-chip {{if $server.AutoPortForward}}is-enabled{{else}}is-disabled{{end}}">Port Forward</span>
+                    <span class="automation-chip {{if $server.UseGameUPnP}}is-enabled{{else}}is-disabled{{end}}">Game UPnP</span>
+                    <span class="automation-chip {{if $server.UseSteamP2P}}is-enabled{{else}}is-disabled{{end}}">Steam P2P</span>
                 </div>
-                {{with .start_location_info}}
-                    {{$desc := index . "description"}}
-                    {{if $desc}}<p class="info-description">{{$desc}}</p>{{end}}
-                {{end}}
-                <div class="info-label mt-4">Starting Condition</div>
-                <div class="info-value">
-                    {{with .start_condition_info}}
-                        {{$name := index . "name"}}
-                        {{$id := index . "id"}}
-                        {{if $name}}
-                            {{$name}}
-                        {{else if $id}}
-                            {{$id}}
-                        {{else}}
-                            —
-                        {{end}}
-                    {{else}}
-                        {{if .server.StartCondition}}
-                            {{.server.StartCondition}}
-                        {{else}}
-                            —
-                        {{end}}
-                    {{end}}
-                </div>
-                {{with .start_condition_info}}
-                    {{$desc := index . "description"}}
-                    {{if $desc}}<p class="info-description">{{$desc}}</p>{{end}}
-                {{end}}
+                <dl class="detail-meta compact">
+                    <div>
+                        <dt>Visibility</dt>
+                        <dd>{{$visibility}}</dd>
+                    </div>
+                    <div>
+                        <dt>Password</dt>
+                        <dd>{{$passwordState}}</dd>
+                    </div>
+                    <div>
+                        <dt>Shutdown Delay</dt>
+                        <dd>{{if gt $server.ShutdownDelaySeconds 0}}{{$server.ShutdownDelaySeconds}}s{{else}}None{{end}}</dd>
+                    </div>
+                </dl>
             </section>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+
+        <div class="server-info-stats">
             <div class="info-stat">
                 <div class="info-label">Difficulty</div>
-                <div class="info-value">
-                    {{if .server.Difficulty}}{{.server.Difficulty}}{{else}}Normal{{end}}
-                </div>
-            </div>
-            <div class="info-stat">
-                <div class="info-label">Port</div>
-                <div class="info-value">
-                    {{if gt .server.Port 0}}{{.server.Port}}{{else}}—{{end}}
-                </div>
+                <div class="info-value">{{if $server.Difficulty}}{{$server.Difficulty}}{{else}}Normal{{end}}</div>
+                <p class="info-hint">Configured via world settings.</p>
             </div>
             <div class="info-stat">
                 <div class="info-label">Players</div>
+                <div class="info-value">{{$playerCount}} / {{$playerCap}}</div>
+                <p class="info-hint">{{$playerHint}}</p>
+            </div>
+            <div class="info-stat">
+                <div class="info-label">SCON Port</div>
+                <div class="info-value">{{$sconPort}}</div>
+                <p class="info-hint">Remote console endpoint.</p>
+            </div>
+            <div class="info-stat">
+                <div class="info-label">Storm Status</div>
+                <div class="info-value">{{if $server.Storming}}Active{{else}}Clear{{end}}</div>
+                <p class="info-hint">Manage storms from Control card.</p>
+            </div>
+            <div class="info-stat">
+                <div class="info-label">Port Mapping</div>
+                <div class="info-value">{{if $server.PortForwardActive}}Active{{else}}Idle{{end}}</div>
+                <p class="info-hint">{{if $externalPort}}External {{$externalPort}}{{else}}Awaiting gateway{{end}}</p>
+            </div>
+            <div class="info-stat">
+                <div class="info-label">Last Save</div>
                 <div class="info-value">
-                    {{len .server.LiveClients}} / {{if gt .server.MaxClients 0}}{{.server.MaxClients}}{{else}}?{{end}}
+                    {{if $server.ServerSaved}}
+                        {{$server.ServerSaved.Format "Jan 2, 2006 3:04 PM"}}
+                    {{else}}
+                        Not saved yet
+                    {{end}}
                 </div>
+                <p class="info-hint">Use Quick Save for manual checkpoints.</p>
             </div>
         </div>
     </div>

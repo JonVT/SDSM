@@ -10,7 +10,7 @@
 {{$startConditions := index $selectedWorldEntry "conditions"}}
 {{$difficultyOptions := .release_difficulties}}
 {{if .server.Beta}}{{$difficultyOptions = .beta_difficulties}}{{end}}
-<div class="card col-span-full card-config" id="server-config-card"
+<div class="card card-secondary col-span-full card-config" id="server-config-card"
     data-card-id="server-status-config"
     data-current-version="{{$versionKey}}"
     data-current-world="{{$selectedWorldID}}"
@@ -145,10 +145,6 @@
                     <label class="form-switch">
                         <input type="checkbox" name="player_saves" {{if .server.PlayerSaves}}checked{{end}}>
                         <span>Enable player saves</span>
-                    </label>
-                    <label class="form-switch">
-                        <input type="checkbox" name="delete_skeleton_on_decay" {{if .server.DeleteSkeletonOnDecay}}checked{{end}}>
-                        <span>Delete skeleton on decay</span>
                     </label>
                 </div>
                 <div class="config-grid">

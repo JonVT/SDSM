@@ -5,6 +5,7 @@ package steam
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"compress/gzip"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"sdsm/app/backend/internal/utils"
@@ -229,34 +231,55 @@ func (s *Steam) UpdateGame(beta bool) error {
 	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", execPath, strings.Join(steamCmd, " ")))
 	cmd := exec.Command(execPath, steamCmd...)
 
-	// Stream output to update log if available, otherwise capture
-	var captureOutput bool
-	if file := s.Logger.File(); file != nil {
-		cmd.Stdout = file
-		cmd.Stderr = file
-	} else {
-		captureOutput = true
-	}
-
-	s.reportProgress("Running SteamCMD", 0, 0)
-	var output []byte
-	var err error
-	if captureOutput {
-		output, err = cmd.CombinedOutput()
-	} else {
-		err = cmd.Run()
-	}
+	// Create pipes to capture and parse output while logging
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		s.reportProgress("SteamCMD failed", 0, 0)
-		s.Logger.Write(fmt.Sprintf("SteamCMD error: %v", err))
-		if captureOutput {
-			s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
-		}
 		return err
 	}
-	if captureOutput {
-		s.Logger.Write(fmt.Sprintf("SteamCMD output: %s", string(output)))
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
 	}
+
+	// Combine stdout and stderr for processing
+	combined := io.MultiReader(stdout, stderr)
+
+	s.reportProgress("Running SteamCMD", 0, 0)
+	
+	if err := cmd.Start(); err != nil {
+		s.reportProgress("SteamCMD failed", 0, 0)
+		s.Logger.Write(fmt.Sprintf("SteamCMD error: %v", err))
+		return err
+	}
+
+	// Parse output line by line and extract progress
+	scanner := bufio.NewScanner(combined)
+	for scanner.Scan() {
+		line := scanner.Text()
+		s.Logger.Write(line)
+		
+		// Parse SteamCMD progress: "Update state (0x61) downloading, progress: 37.10 (174293057 / 469786380)"
+		if strings.Contains(line, "Update state") && strings.Contains(line, "downloading") {
+			if parts := strings.Split(line, "("); len(parts) >= 3 {
+				// Extract "174293057 / 469786380"
+				byteParts := strings.Split(strings.TrimSuffix(parts[2], ")"), " / ")
+				if len(byteParts) == 2 {
+					downloaded, _ := strconv.ParseInt(strings.TrimSpace(byteParts[0]), 10, 64)
+					total, _ := strconv.ParseInt(strings.TrimSpace(byteParts[1]), 10, 64)
+					if total > 0 {
+						s.reportProgress("Downloading", downloaded, total)
+					}
+				}
+			}
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		s.reportProgress("SteamCMD failed", 0, 0)
+		s.Logger.Write(fmt.Sprintf("SteamCMD error: %v", err))
+		return err
+	}
+
 	s.Logger.Write("rocketstation_DedicatedServer updated successfully")
 	s.reportProgress("Completed", 0, 0)
 	return nil

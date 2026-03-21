@@ -1146,7 +1146,6 @@ func (m *Manager) load() (bool, error) {
 	m.UpdateTime = temp.UpdateTime
 	m.StartupUpdate = temp.StartupUpdate
 	m.DetachedServers = temp.DetachedServers
-	m.DetachedServers = temp.DetachedServers
 	m.TLSEnabled = temp.TLSEnabled
 	m.TLSCertPath = strings.TrimSpace(temp.TLSCertPath)
 	m.TLSKeyPath = strings.TrimSpace(temp.TLSKeyPath)
@@ -2638,19 +2637,6 @@ func (m *Manager) GetStartConditionsForWorldVersion(worldID string, beta bool) [
 	return []ConditionInfo{}
 }
 
-// Language-aware variants used for per-server localization
-func (m *Manager) GetWorldsByVersionWithLanguage(beta bool, language string) []string {
-	cache := m.worldDefinitionsCacheFor(beta, language)
-	if cache == nil || len(cache.definitions) == 0 {
-		return []string{}
-	}
-	worlds := make([]string, 0, len(cache.definitions))
-	for _, def := range cache.definitions {
-		worlds = append(worlds, def.DisplayName)
-	}
-	return worlds
-}
-
 func (m *Manager) GetWorldInfoWithLanguage(worldID string, beta bool, language string) WorldInfo {
 	canonical := canonicalWorldIdentifier(worldID)
 	cache := m.worldDefinitionsCacheFor(beta, language)
@@ -3549,14 +3535,23 @@ func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
 		installDir = m.Paths.BetaDir()
 	}
 
+	label := "release"
+	if beta {
+		label = "beta"
+	}
+
 	if installDir == "" {
+		m.safeLog(fmt.Sprintf("Install directory for %s is empty", label))
 		return "", os.ErrNotExist
 	}
 
+	m.safeLog(fmt.Sprintf("Checking %s install directory: %s", label, installDir))
 	if _, err := os.Stat(installDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			m.safeLog(fmt.Sprintf("Install directory does not exist: %s", installDir))
 			return "", os.ErrNotExist
 		}
+		m.safeLog(fmt.Sprintf("Error accessing install directory %s: %v", installDir, err))
 		return "", err
 	}
 
@@ -3566,13 +3561,28 @@ func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
 	}
 
 	manifestPath := filepath.Join(installDir, "steamapps", fmt.Sprintf("appmanifest_%s.acf", steamID))
+	m.safeLog(fmt.Sprintf("Looking for manifest at: %s", manifestPath))
+	
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			// Treat missing manifest as missing install when directory is mostly empty
+			m.safeLog(fmt.Sprintf("Manifest not found at: %s", manifestPath))
+			
+			// List what's actually in the install directory to help diagnose
 			entries, dirErr := os.ReadDir(installDir)
-			if dirErr == nil && len(entries) == 0 {
-				return "", os.ErrNotExist
+			if dirErr == nil {
+				if len(entries) == 0 {
+					m.safeLog(fmt.Sprintf("Install directory %s is empty", installDir))
+					return "", os.ErrNotExist
+				}
+				m.safeLog(fmt.Sprintf("Install directory %s contains %d entries", installDir, len(entries)))
+				// Log first few entries for diagnostics
+				for i, entry := range entries {
+					if i >= 5 {
+						break
+					}
+					m.safeLog(fmt.Sprintf("  - %s (isDir: %v)", entry.Name(), entry.IsDir()))
+				}
 			}
 			return "", errRocketStationVersionNotFound
 		}
@@ -3580,11 +3590,15 @@ func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
 	}
 
 	if matches := appManifestBuildIDPattern.FindSubmatch(data); len(matches) == 2 {
-		return string(matches[1]), nil
+		buildID := string(matches[1])
+		m.safeLog(fmt.Sprintf("Found build ID %s in manifest: %s", buildID, manifestPath))
+		return buildID, nil
 	}
 
+	m.safeLog(fmt.Sprintf("Manifest found but build ID not found in: %s", manifestPath))
 	// Fallback to buildid embedded in plain text files
 	if v := m.findRocketStationVersionFallbacks(installDir); v != "" {
+		m.safeLog(fmt.Sprintf("Found build ID %s from fallback file", v))
 		return v, nil
 	}
 

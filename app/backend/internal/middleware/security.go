@@ -144,11 +144,11 @@ func SecurityHeadersWithOptions(allowIFrame bool) gin.HandlerFunc {
 		// (not DENY) so our own iframe works.
 		if allowIFrame {
 			// Allow any parent via CSP and omit X-Frame-Options (ALLOW-FROM is deprecated and unsupported by most browsers)
-			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors *;")
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors *;")
 		} else {
 			// Same-origin embedding only
 			c.Header("X-Frame-Options", "SAMEORIGIN")
-			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors 'self';")
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' unpkg.com; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src 'self' fonts.gstatic.com; img-src 'self' data: www.stationeers.net; frame-ancestors 'self';")
 		}
 
 		// Prevent MIME type sniffing

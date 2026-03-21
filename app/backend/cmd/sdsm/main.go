@@ -628,6 +628,13 @@ func setupRouter() *gin.Engine {
 			}
 			managerHandlers.APIServersStartAll(c)
 		})
+		api.POST("/servers/start-selected", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersStartSelected(c)
+		})
 		// Stop all servers (admin)
 		api.POST("/servers/stop-all", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {
@@ -635,6 +642,13 @@ func setupRouter() *gin.Engine {
 				return
 			}
 			managerHandlers.APIServersStopAll(c)
+		})
+		api.POST("/servers/stop-selected", func(c *gin.Context) {
+			if c.GetString("role") != "admin" {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin required"})
+				return
+			}
+			managerHandlers.APIServersStopSelected(c)
 		})
 		api.GET("/start-locations", managerHandlers.APIGetStartLocations)
 		api.GET("/start-conditions", managerHandlers.APIGetStartConditions)

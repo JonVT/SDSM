@@ -190,62 +190,79 @@ func ScanWorldDefinitions(basePath string, languageFile string) ([]RSWorldDefini
 						StartLocation []struct {
 							Id string `xml:"Id,attr"`
 						} `xml:"StartLocation"`
-					} `xml:"World"`
-				} `xml:"WorldSettings"`
-			}
+					RandomStartLocation []struct {
+						Id string `xml:"Id,attr"`
+					} `xml:"RandomStartLocation"`
+				} `xml:"World"`
+			} `xml:"WorldSettings"`
+		}
 
-			// data folder and returns a map keyed by condition ID.
-			if err := readXML(xmlFile, &data); err != nil || data.WorldSettings.World.Id == "" {
+		// data folder and returns a map keyed by condition ID.
+		if err := readXML(xmlFile, &data); err != nil || data.WorldSettings.World.Id == "" {
+			continue
+		}
+
+		w := data.WorldSettings.World
+		world := RSWorldDefinition{
+			Directory:        entry.Name(),
+			ID:               w.Id,
+			Priority:         w.Priority,
+			Hidden:           w.Hidden,
+			Name:             translations[w.Name.Key],
+			Description:      translations[w.Description.Key],
+			ShortDescription: translations[w.ShortDescription.Key],
+			Rating:           translations[w.Rating.Key],
+			RatingColor:      w.Rating.Color,
+		}
+
+		// StreamingAssets using the provided language file for localization.
+		// Attach world image relative path when known
+		if img := WorldImageFileName(world.ID); img != "" {
+			world.Image = filepath.Join("Images", "SpaceMapImages", "Planets", img)
+		}
+
+		// WorldImageFileName returns the map image file name for a world ID prefix.
+		for _, sc := range w.StartCondition {
+			if def, ok := scDefs[sc.Id]; ok {
+				world.StartConditions = append(world.StartConditions, RSStartCondition{
+					ID:            sc.Id,
+					DisplayName:   translations[def.Name],
+					Description:   translations[def.Description],
+					PreviewButton: def.PreviewButton,
+					IsDefault:     sc.IsDefault,
+				})
+			}
+		}
+		// from the StreamingAssets path based on its world ID.
+
+		for _, sl := range w.StartLocation {
+			id := strings.TrimSpace(sl.Id)
+			if id == "" {
 				continue
 			}
-
-			w := data.WorldSettings.World
-			world := RSWorldDefinition{
-				Directory:        entry.Name(),
-				ID:               w.Id,
-				Priority:         w.Priority,
-				Hidden:           w.Hidden,
-				Name:             translations[w.Name.Key],
-				Description:      translations[w.Description.Key],
-				ShortDescription: translations[w.ShortDescription.Key],
-				Rating:           translations[w.Rating.Key],
-				RatingColor:      w.Rating.Color,
+			name := translations[id+"Name"]
+			if strings.TrimSpace(name) == "" {
+				name = id
 			}
+			desc := translations[id+"Description"]
+			world.StartLocations = append(world.StartLocations, RSStartLocation{ID: id, Name: name, Description: desc})
+		}
 
-			// StreamingAssets using the provided language file for localization.
-			// Attach world image relative path when known
-			if img := WorldImageFileName(world.ID); img != "" {
-				world.Image = filepath.Join("Images", "SpaceMapImages", "Planets", img)
+		// Process RandomStartLocation elements
+		for _, rsl := range w.RandomStartLocation {
+			id := strings.TrimSpace(rsl.Id)
+			if id == "" {
+				continue
 			}
-
-			// WorldImageFileName returns the map image file name for a world ID prefix.
-			for _, sc := range w.StartCondition {
-				if def, ok := scDefs[sc.Id]; ok {
-					world.StartConditions = append(world.StartConditions, RSStartCondition{
-						ID:            sc.Id,
-						DisplayName:   translations[def.Name],
-						Description:   translations[def.Description],
-						PreviewButton: def.PreviewButton,
-						IsDefault:     sc.IsDefault,
-					})
-				}
+			name := translations[id+"Name"]
+			if strings.TrimSpace(name) == "" {
+				name = id
 			}
-			// from the StreamingAssets path based on its world ID.
+			desc := translations[id+"Description"]
+			world.StartLocations = append(world.StartLocations, RSStartLocation{ID: id, Name: name, Description: desc})
+		}
 
-			for _, sl := range w.StartLocation {
-				id := strings.TrimSpace(sl.Id)
-				if id == "" {
-					continue
-				}
-				name := translations[id+"Name"]
-				if strings.TrimSpace(name) == "" {
-					name = id
-				}
-				desc := translations[id+"Description"]
-				world.StartLocations = append(world.StartLocations, RSStartLocation{ID: id, Name: name, Description: desc})
-			}
-
-			worlds = append(worlds, world)
+		worlds = append(worlds, world)
 		}
 	}
 	return worlds, nil
@@ -395,7 +412,8 @@ func ScanStartLocations(basePath string, languageFile string, worldDir string) (
 		var data struct {
 			WorldSettings struct {
 				World struct {
-					StartLocation []startLocation `xml:"StartLocation"`
+					StartLocation       []startLocation `xml:"StartLocation"`
+					RandomStartLocation []startLocation `xml:"RandomStartLocation"`
 				} `xml:"World"`
 			} `xml:"WorldSettings"`
 		}
@@ -404,6 +422,23 @@ func ScanStartLocations(basePath string, languageFile string, worldDir string) (
 		}
 		for _, sl := range data.WorldSettings.World.StartLocation {
 			id := strings.TrimSpace(sl.Id)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			name := translations[id+"Name"]
+			if strings.TrimSpace(name) == "" {
+				name = id
+			}
+			desc := translations[id+"Description"]
+			out = append(out, RSStartLocation{ID: id, Name: name, Description: desc})
+		}
+		// Process RandomStartLocation elements
+		for _, rsl := range data.WorldSettings.World.RandomStartLocation {
+			id := strings.TrimSpace(rsl.Id)
 			if id == "" {
 				continue
 			}

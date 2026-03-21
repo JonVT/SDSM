@@ -2,7 +2,7 @@
 {{define "page"}}users{{end}}
 
 {{define "users.html"}}
-<div data-page-title="User Management">
+<div data-page-title="User Management" data-users-root>
     {{- $cardSlots := .cardSlots -}}
     {{- if not $cardSlots -}}
         {{- $cardSlots = dict -}}

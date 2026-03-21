@@ -1,21 +1,13 @@
 package middleware
 
 import (
-	"net/http"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-playground/validator/v10"
 )
-
-var validate *validator.Validate
-
-func init() {
-	validate = validator.New()
-}
 
 // Input sanitization helpers
 func SanitizeString(input string) string {
@@ -53,32 +45,6 @@ func ValidatePort(portStr string) (int, error) {
 		return 0, gin.Error{Err: err, Type: gin.ErrorTypePublic, Meta: "Port must be between 1 and 65535"}
 	}
 	return port, nil
-}
-
-// Validation middleware
-func ValidateJSON(v interface{}) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if err := c.ShouldBindJSON(v); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Invalid JSON format",
-				"details": err.Error(),
-			})
-			c.Abort()
-			return
-		}
-
-		if err := validate.Struct(v); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "Validation failed",
-				"details": err.Error(),
-			})
-			c.Abort()
-			return
-		}
-
-		c.Set("validated_data", v)
-		c.Next()
-	}
 }
 
 // Form validation helper

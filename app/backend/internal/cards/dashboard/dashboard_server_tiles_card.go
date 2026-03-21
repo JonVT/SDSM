@@ -1,6 +1,8 @@
 package dashboard
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	cards "sdsm/app/backend/internal/cards"
@@ -45,16 +47,44 @@ func (dashboardServerTilesCard) FetchData(req *cards.Request) (gin.H, error) {
 	servers := extractServersFromPayload(req)
 	active := 0
 	startable := 0
+	starting := 0
+	paused := 0
+	stopped := 0
+	errors := 0
+	storming := 0
 	for _, s := range servers {
 		if s == nil {
 			continue
 		}
 		if s.IsRunning() {
 			active++
+			if s.Paused {
+				paused++
+			}
+		} else {
+			stopped++
 		}
 		if !s.IsRunning() || s.Stopping {
 			startable++
 		}
+		if s.Starting {
+			starting++
+		}
+		if strings.TrimSpace(s.LastError) != "" {
+			errors++
+		}
+		if s.Storming {
+			storming++
+		}
+	}
+	filters := gin.H{
+		"all":      len(servers),
+		"running":  active,
+		"starting": starting,
+		"paused":   paused,
+		"stopped":  stopped,
+		"errors":   errors,
+		"storming": storming,
 	}
 	context := gin.H{
 		"servers": servers,
@@ -66,6 +96,7 @@ func (dashboardServerTilesCard) FetchData(req *cards.Request) (gin.H, error) {
 	data["context"] = context
 	data["active"] = active
 	data["startable"] = startable
+	data["filters"] = filters
 
 	return data, nil
 }

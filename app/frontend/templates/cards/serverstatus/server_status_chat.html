@@ -1,6 +1,6 @@
 {{define "cards/server_status_chat.html"}}
 {{$chatMessages := .server.Chat}}
-<div class="card card-chat" id="chat-card"
+<div class="card card-secondary card-chat" id="chat-card"
     data-card-id="server-status-chat"
     hx-get="/server/{{.server.ID}}/cards/server-status-chat"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-chat'] from:body"

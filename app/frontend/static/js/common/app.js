@@ -1013,18 +1013,32 @@
             pillEl.textContent = stats.telemetryStatus || 'Telemetry';
           }
 
-          const detailEl = card.querySelector('[data-system-telemetry-detail]');
-          if (detailEl) {
-            detailEl.textContent = stats.telemetryStatusDetail || 'Awaiting telemetry data';
+          const detailContainer = card.querySelector('[data-system-telemetry-detail]') || card;
+          const relativeEl = detailContainer.querySelector('[data-system-telemetry-relative]');
+          const timeEl = detailContainer.querySelector('[data-system-telemetry-time]');
+          const separatorEl = detailContainer.querySelector('[data-system-telemetry-separator]');
+
+          if (relativeEl) {
+            if (telemetrySampleDate) {
+              relativeEl.dataset.relativeMode = 'telemetry';
+              relativeEl.dataset.relativeSource = telemetrySampleDate.toISOString();
+              relativeEl.dataset.relativePrefix = 'Updated';
+              relativeEl.dataset.relativeSuffix = 'ago';
+              if (SDSM.relativeTime && typeof SDSM.relativeTime.render === 'function') {
+                SDSM.relativeTime.render(relativeEl);
+              } else {
+                const fallbackAge = telemetryAge || '0s';
+                relativeEl.textContent = `Updated ${fallbackAge} ago`;
+              }
+            } else {
+              delete relativeEl.dataset.relativeMode;
+              delete relativeEl.dataset.relativeSource;
+              delete relativeEl.dataset.relativePrefix;
+              delete relativeEl.dataset.relativeSuffix;
+              relativeEl.textContent = (stats.telemetryStatusDetail || 'Awaiting telemetry data');
+            }
           }
 
-          const ageEl = card.querySelector('[data-system-telemetry-age]');
-          if (ageEl) {
-            ageEl.textContent = telemetryAge ? `Sampled ${telemetryAge} ago` : 'Awaiting telemetry';
-          }
-
-          const timeEl = card.querySelector('[data-system-telemetry-time]');
-          const separatorEl = card.querySelector('[data-system-telemetry-separator]');
           if (timeEl) {
             if (telemetrySampleLabel) {
               timeEl.textContent = telemetrySampleLabel;
@@ -1036,17 +1050,15 @@
                 timeEl.removeAttribute('datetime');
               }
               timeEl.hidden = false;
-              if (separatorEl) {
-                separatorEl.hidden = false;
-              }
             } else {
               timeEl.textContent = '—';
               timeEl.removeAttribute('datetime');
               timeEl.hidden = true;
-              if (separatorEl) {
-                separatorEl.hidden = true;
-              }
             }
+          }
+
+          if (separatorEl) {
+            separatorEl.hidden = !telemetrySampleLabel;
           }
         };
 
@@ -1414,6 +1426,10 @@
 
           card.addEventListener('click', e => {
             if (e.target.closest('[data-stop-navigation="true"]')) return;
+            const tilesCard = card.closest('.server-tiles-card');
+            if (tilesCard && tilesCard.classList.contains('is-selecting')) {
+              return;
+            }
             const url = card.getAttribute('data-target-url');
             if (url) window.location.href = url;
           });
@@ -3057,15 +3073,30 @@
             });
           }
 
-          // Ensure collapsed class is removed on small screens where sidebar stacks on top.
+          // Mobile menu toggle
+          const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+          const sidebarOverlay = document.getElementById('sidebar-overlay');
+          if (mobileMenuBtn && !mobileMenuBtn.dataset.bound) {
+            mobileMenuBtn.dataset.bound = 'true';
+            mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu());
+          }
+          if (sidebarOverlay && !sidebarOverlay.dataset.bound) {
+            sidebarOverlay.dataset.bound = 'true';
+            sidebarOverlay.addEventListener('click', () => this.closeMobileMenu());
+          }
+
+          // On desktop, restore collapsed state; on mobile, ensure sidebar-open is cleared
           const handleResize = () => {
             if (!root) {
               return;
             }
             if (window.matchMedia('(max-width: 1024px)').matches) {
               root.classList.remove('sidebar-collapsed');
-            } else if (this.collapsed) {
-              root.classList.add('sidebar-collapsed');
+            } else {
+              this.closeMobileMenu();
+              if (this.collapsed) {
+                root.classList.add('sidebar-collapsed');
+              }
             }
           };
           handleResize();
@@ -3124,6 +3155,27 @@
               item.removeAttribute('title');
             }
           });
+        },
+
+        toggleMobileMenu() {
+          const root = document.body;
+          if (!root) return;
+          const isOpen = root.classList.contains('sidebar-open');
+          if (isOpen) {
+            this.closeMobileMenu();
+          } else {
+            root.classList.add('sidebar-open');
+            const btn = document.getElementById('mobile-menu-btn');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+          }
+        },
+
+        closeMobileMenu() {
+          const root = document.body;
+          if (!root) return;
+          root.classList.remove('sidebar-open');
+          const btn = document.getElementById('mobile-menu-btn');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
         }
       },
 
@@ -3132,9 +3184,19 @@
         if (!titleEl) return;
 
         if (/^\/server\/(\d+)$/.test(path)) {
-            titleEl.textContent = 'Server ' + path.replace(/^\/server\//, '');
+          let label = '';
+          document.querySelectorAll('.nav-item[data-target]').forEach((item) => {
+            if (!label && item.dataset.target === path) {
+              const textEl = item.querySelector('.nav-item-text');
+              label = (textEl ? textEl.textContent : item.textContent || '').trim();
+            }
+          });
+          if (!label) {
+            label = 'Server ' + path.replace(/^\/server\//, '');
+          }
+          titleEl.textContent = label;
         } else {
-            titleEl.textContent = SDSM.frame.pageTitles[path] || path;
+          titleEl.textContent = SDSM.frame.pageTitles[path] || path;
         }
       },
 
@@ -3200,6 +3262,10 @@
           if (target && target.dataset.target) {
             SDSM.frame.updateActiveNav(target.dataset.target);
             SDSM.frame.managerSubmenu.refreshForPath(target.dataset.target);
+            // Close the mobile drawer after navigation
+            if (window.matchMedia('(max-width: 1024px)').matches) {
+              SDSM.frame.sidebar.closeMobileMenu();
+            }
           }
         });
 
@@ -3315,9 +3381,6 @@
             this.relativeTime.refresh(swapRoot);
             this.collapses.init(swapRoot);
             this.managerLogs.init(swapRoot);
-            if (this.cards) {
-              this.cards.init(swapRoot);
-            }
             if (this.cards) {
               this.cards.init(swapRoot);
             }
@@ -3710,8 +3773,7 @@ function initServerCreationPage(root) {
         player_saves: true,
         auto_pause: true,
         auto_start: false,
-        auto_update: true,
-        delete_skeleton_on_decay: false
+  		auto_update: true
       }
     },
     {
@@ -3733,8 +3795,7 @@ function initServerCreationPage(root) {
         player_saves: true,
         auto_pause: true,
         auto_start: false,
-        auto_update: true,
-        delete_skeleton_on_decay: false
+  		auto_update: true
       }
     },
     {
@@ -3757,8 +3818,7 @@ function initServerCreationPage(root) {
         player_saves: true,
         auto_pause: true,
         auto_start: true,
-        auto_update: true,
-        delete_skeleton_on_decay: false
+  		auto_update: true
       }
     },
     {
@@ -3781,8 +3841,7 @@ function initServerCreationPage(root) {
         player_saves: false,
         auto_pause: false,
         auto_start: true,
-        auto_update: true,
-        delete_skeleton_on_decay: true
+  		auto_update: true
       }
     }
   ]);
@@ -4156,8 +4215,6 @@ function initServerCreationPage(root) {
     setCheckboxValue('auto_start', data.auto_start);
     setCheckboxValue('auto_update', data.auto_update);
     setCheckboxValue('player_saves', data.player_saves);
-    setCheckboxValue('delete_skeleton_on_decay', data.delete_skeleton_on_decay);
-
     if (saveAnalysis) {
       saveAnalysis.classList.remove('hidden');
     }

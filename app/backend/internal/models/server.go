@@ -126,7 +126,6 @@ type ServerConfig struct {
 	// Additional server settings
 	MaxAutoSaves          int
 	MaxQuickSaves         int
-	DeleteSkeletonOnDecay bool
 	UseSteamP2P           bool
 	DisconnectTimeout     int
 	// PlayerSaves enables automatic save creation when players connect.
@@ -180,7 +179,6 @@ type Server struct {
 	// Additional server settings persisted in sdsm.config
 	MaxAutoSaves          int  `json:"max_auto_saves"`
 	MaxQuickSaves         int  `json:"max_quick_saves"`
-	DeleteSkeletonOnDecay bool `json:"delete_skeleton_on_decay"`
 	UseSteamP2P           bool `json:"use_steam_p2p"`
 	DisconnectTimeout     int  `json:"disconnect_timeout"`
 	// AutoPortForward requests automatic router port forwarding via UPnP/NAT-PMP (best-effort).
@@ -1489,7 +1487,6 @@ func NewServerFromConfig(serverID int, paths *utils.Paths, cfg *ServerConfig) *S
 	} else {
 		s.MaxQuickSaves = 5
 	}
-	s.DeleteSkeletonOnDecay = cfg.DeleteSkeletonOnDecay
 	s.UseSteamP2P = cfg.UseSteamP2P
 	if cfg.DisconnectTimeout > 0 {
 		s.DisconnectTimeout = cfg.DisconnectTimeout
@@ -1617,11 +1614,9 @@ func NewServer(serverID int, paths *utils.Paths, data string) *Server {
 		s.AutoPause = true
 		s.MaxAutoSaves = 5
 		s.MaxQuickSaves = 5
-		s.DeleteSkeletonOnDecay = false
 		s.UseSteamP2P = false
 		s.DisconnectTimeout = 10000
 		s.PlayerSaves = false
-		s.SCONPort = s.Port + 1
 		s.SCONPort = s.Port + 1
 		s.WelcomeMessage = ""
 	}
@@ -1660,37 +1655,6 @@ func (s *Server) IsCardEnabled(cardID string) bool {
 		return enabled
 	}
 	return true
-}
-
-// SetCardToggle overrides the visibility of a card for this server. Providing true records an
-// explicit enable override while false disables the card. Use ClearCardToggle to remove overrides.
-func (s *Server) SetCardToggle(cardID string, enabled bool) {
-	if s == nil {
-		return
-	}
-	id := normalizeCardToggleKey(cardID)
-	if id == "" {
-		return
-	}
-	if s.CardToggles == nil {
-		s.CardToggles = make(map[string]bool, 1)
-	}
-	s.CardToggles[id] = enabled
-}
-
-// ClearCardToggle removes any override for the specified card, allowing default behavior.
-func (s *Server) ClearCardToggle(cardID string) {
-	if s == nil || len(s.CardToggles) == 0 {
-		return
-	}
-	id := normalizeCardToggleKey(cardID)
-	if id == "" {
-		return
-	}
-	delete(s.CardToggles, id)
-	if len(s.CardToggles) == 0 {
-		s.CardToggles = nil
-	}
 }
 
 func (s *Server) ClientCount() int {
@@ -1736,9 +1700,8 @@ func (s *Server) IsRunning() bool {
 		s.pid = 0
 	}
 
-	if s.Running || s.Starting || s.Paused {
+	if s.Running || s.Paused {
 		s.Running = false
-		s.Starting = false
 		s.Paused = false
 	}
 
@@ -2548,6 +2511,10 @@ func (s *Server) Start() {
 	s.LastError = ""
 	s.LastErrorAt = nil
 
+	// Signal the starting state immediately so the UI can reflect it
+	// while deploy/process-launch work proceeds.
+	s.Starting = true
+
 	// Stubbed save purge hook: if core parameters changed previously, we would purge saves here.
 	// For now, just log intent and proceed without deleting anything.
 	if s.PendingSavePurge && s.Logger != nil {
@@ -2569,8 +2536,12 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write("AutoUpdate triggered deploy before start")
 		}
-		if err := s.Deploy(); err != nil && s.Logger != nil {
-			s.Logger.Write(fmt.Sprintf("Deploy before start failed: %v", err))
+		if err := s.Deploy(); err != nil {
+			if s.Logger != nil {
+				s.Logger.Write(fmt.Sprintf("Deploy before start failed: %v", err))
+			}
+			s.Starting = false
+			return
 		}
 	}
 
@@ -2613,7 +2584,7 @@ func (s *Server) Start() {
 		"-SETTINGS",
 		"ServerVisible", strconv.FormatBool(s.Visible),
 		"GamePort", strconv.Itoa(s.Port),
-		"ServerName", launchName,
+		"ServerName", s.Name,
 		"ServerPassword", serverPassword,
 		"ServerAuthSecret", serverAuthSecret,
 		"ServerMaxPlayers", strconv.Itoa(s.MaxClients),
@@ -2626,7 +2597,6 @@ func (s *Server) Start() {
 		// Extended settings
 		"MaxAutoSaves", strconv.Itoa(max(1, s.MaxAutoSaves)),
 		"MaxQuickSaves", strconv.Itoa(max(1, s.MaxQuickSaves)),
-		"DeleteSkeletonOnDecay", strconv.FormatBool(s.DeleteSkeletonOnDecay),
 		// Force Steam P2P off due to stability issues
 		"UseSteamP2P", "false",
 		"DisconnectTimeout", strconv.Itoa(func(v int) int {
@@ -2670,6 +2640,7 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Unsupported platform: %s. Server start aborted.", runtime.GOOS))
 		}
+		s.Starting = false
 		return
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
@@ -2690,6 +2661,7 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to start server process: %v", err))
 		}
+		s.Starting = false
 		return
 	}
 	if s.Logger != nil {

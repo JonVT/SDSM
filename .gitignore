@@ -1,6 +1,10 @@
 .vscode/
 .config/
 dist/
+bin/
+config/
+logs/
+Server*/
 builder.config.json
 -b
 temp.txt

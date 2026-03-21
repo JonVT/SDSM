@@ -2,7 +2,7 @@
 {{define "page"}}manager{{end}}
 
 {{define "manager.html"}}
-<div data-page-title="Manager Settings" class="flex flex-col gap-6">
+<div data-page-title="Manager Settings" data-manager-root class="manager-content flex flex-col gap-6">
     {{- $pageData := . -}}
     {{- $cardSlots := .cardSlots -}}
     {{- if not $cardSlots -}}

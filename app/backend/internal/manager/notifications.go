@@ -343,24 +343,6 @@ func formatEventLabel(event string) string {
 	return strings.Join(parts, " ")
 }
 
-// RecentNotifications returns up to limit most recent dashboard notifications.
-func (m *Manager) RecentNotifications(limit int) []models.DashboardNotification {
-	if m == nil {
-		return nil
-	}
-	m.notificationsMu.RLock()
-	defer m.notificationsMu.RUnlock()
-	if len(m.notifications) == 0 {
-		return nil
-	}
-	if limit <= 0 || limit > len(m.notifications) {
-		limit = len(m.notifications)
-	}
-	out := make([]models.DashboardNotification, limit)
-	copy(out, m.notifications[:limit])
-	return out
-}
-
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {

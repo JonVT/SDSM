@@ -1,4 +1,24 @@
 {{define "cards/server_status_control.html"}}
+{{- $ctlStatusClass := "status-stopped" -}}
+{{- $ctlStatusLabel := "Stopped" -}}
+{{- if .server.LastError -}}
+    {{- $ctlStatusClass = "status-error" -}}
+    {{- $ctlStatusLabel = "Error" -}}
+{{- else if .server.Stopping -}}
+    {{- $ctlStatusClass = "status-stopping" -}}
+    {{- $ctlStatusLabel = "Stopping" -}}
+{{- else if .server.Starting -}}
+    {{- $ctlStatusClass = "status-starting" -}}
+    {{- $ctlStatusLabel = "Starting" -}}
+{{- else if .server.Running -}}
+    {{- if .server.Paused -}}
+        {{- $ctlStatusClass = "status-paused" -}}
+        {{- $ctlStatusLabel = "Paused" -}}
+    {{- else -}}
+        {{- $ctlStatusClass = "status-running" -}}
+        {{- $ctlStatusLabel = "Running" -}}
+    {{- end -}}
+{{- end -}}
 <div class="card" id="server-control-card"
     data-card-id="server-status-control"
     hx-get="/server/{{.server.ID}}/cards/server-status-control"
@@ -8,9 +28,9 @@
     <div class="card-header flex justify-between items-center gap-4 flex-wrap">
         <div class="flex items-center gap-3">
             <h2 class="card-title">Server Control</h2>
-            <div id="server-status-indicator" class="status-indicator status-stopped">
+            <div id="server-status-indicator" class="status-indicator {{$ctlStatusClass}}">
                 <div class="status-light"></div>
-                <span class="status-text">Stopped</span>
+                <span class="status-text">{{$ctlStatusLabel}}</span>
             </div>
         </div>
         <div class="card-header-actions flex items-center gap-3">

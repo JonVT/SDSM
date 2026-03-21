@@ -439,58 +439,6 @@ func (h *ManagerHandlers) serverUpdateNeeded(s *models.Server) bool {
 	return false
 }
 
-// APIServerTestPort performs a best-effort validation of port forwarding state.
-// Returns external IP/port and whether a mapping appears active.
-func (h *ManagerHandlers) APIServerTestPort(c *gin.Context) {
-	serverID, err := strconv.Atoi(c.Param("server_id"))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
-		return
-	}
-	role := c.GetString("role")
-	if role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
-		return
-	}
-	s := h.manager.ServerByID(serverID)
-	if s == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
-		return
-	}
-	if !s.AutoPortForward {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "port forwarding is disabled"})
-		return
-	}
-	// Best-effort: we consider the port 'active' if a mapping is present and an external IP is available.
-	var externalIP string
-	if ip, err := utils.GetExternalIP(c.Request.Context()); err == nil && ip != nil {
-		externalIP = ip.String()
-	}
-	active := s.PortForwardActive && externalIP != ""
-	resp := gin.H{
-		"external_ip":   externalIP,
-		"external_port": s.PortForwardExternalPort,
-		"active":        active,
-	}
-	if !active {
-		if strings.TrimSpace(s.PortForwardLastError) != "" {
-			resp["error"] = s.PortForwardLastError
-		} else if externalIP == "" {
-			resp["error"] = "external IP not reported by gateway"
-		} else if !s.PortForwardActive {
-			resp["error"] = "no active port mapping"
-		} else {
-			resp["error"] = "unverified"
-		}
-	}
-	if active {
-		ToastSuccess(c, "Test Port", "Port mapping appears active.")
-	} else {
-		ToastWarn(c, "Test Port", "Could not verify port reachability; check router and firewall.")
-	}
-	c.JSON(http.StatusOK, resp)
-}
-
 func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	serverID, err := strconv.Atoi(c.Param("server_id"))
 	if err != nil {
@@ -533,9 +481,17 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 		}
 	}
 
-	s.Start()
+	// Mark as starting immediately so the UI reflects it before the goroutine runs.
+	s.Starting = true
+
+	// Run startup asynchronously so the UI reflects "Starting" immediately.
+	// Start() also sets s.Starting = true early (idempotent).
+	go func() {
+		s.Start()
+		h.BroadcastStatusAndStats(s)
+	}()
 	h.manager.NotifyServerEvent(s, "started", "Server start initiated.")
-	// Broadcast status + stats for realtime dashboards
+	// Broadcast the starting state immediately for realtime dashboards
 	h.BroadcastStatusAndStats(s)
 	// If requested via HTMX for HTML swap, return a single server card fragment
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
@@ -1094,7 +1050,7 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 	}
 	if body == nil {
 		body = map[string]string{}
-		_ = c.Request.ParseForm()
+		_ = c.Request.ParseMultipartForm(32 << 20)
 		for k, v := range c.Request.PostForm {
 			if len(v) > 0 {
 				body[k] = strings.TrimSpace(v[0])
@@ -1210,7 +1166,6 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 			s.MaxQuickSaves = n
 		}
 	}
-	s.DeleteSkeletonOnDecay = body["delete_skeleton_on_decay"] == "on" || body["delete_skeleton_on_decay"] == "true" || body["delete_skeleton_on_decay"] == "1"
 	// Steam P2P disabled globally; ignore any provided flag
 	s.UseSteamP2P = false
 	// Prefer game's built-in UPnP when enabled; SDSM will adaptively fallback if mapping not present
@@ -1618,7 +1573,6 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		PlayerSaves           bool   `json:"player_saves"`
 		MaxAutoSaves          int    `json:"max_auto_saves"`
 		MaxQuickSaves         int    `json:"max_quick_saves"`
-		DeleteSkeletonOnDecay bool   `json:"delete_skeleton_on_decay"`
 		// UseSteamP2P removed; always false
 		DisconnectTimeout         int             `json:"disconnect_timeout"`
 		Visible                   bool            `json:"server_visible"`
@@ -1682,7 +1636,6 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("max_quick_saves"))); err == nil {
 			req.MaxQuickSaves = v
 		}
-		req.DeleteSkeletonOnDecay = parseBool(c.PostForm("delete_skeleton_on_decay"))
 		// Steam P2P disabled globally; ignore any form input
 		if v, err := strconv.Atoi(strings.TrimSpace(c.PostForm("disconnect_timeout"))); err == nil {
 			req.DisconnectTimeout = v
@@ -1751,7 +1704,6 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		PlayerSaves:           req.PlayerSaves,
 		MaxAutoSaves:          ifZero(req.MaxAutoSaves, 5),
 		MaxQuickSaves:         ifZero(req.MaxQuickSaves, 5),
-		DeleteSkeletonOnDecay: req.DeleteSkeletonOnDecay,
 		// Force Steam P2P off
 		UseSteamP2P:          false,
 		DisconnectTimeout:    ifZero(req.DisconnectTimeout, 10000),
@@ -1831,7 +1783,6 @@ type settingsXML struct {
 	AutoSave              *bool    `xml:"AutoSave"`
 	SaveInterval          *int     `xml:"SaveInterval"`
 	AutoPauseServer       *bool    `xml:"AutoPauseServer"`
-	DeleteSkeletonOnDecay *bool    `xml:"DeleteSkeletonOnDecay"`
 	UseSteamP2P           *bool    `xml:"UseSteamP2P"`
 	DisconnectTimeout     *int     `xml:"DisconnectTimeout"`
 	ServerVisible         *bool    `xml:"ServerVisible"`
@@ -2006,9 +1957,6 @@ func (h *ManagerHandlers) APIServersAnalyzeSave(c *gin.Context) {
 		if settings.AutoPauseServer != nil {
 			resp["auto_pause"] = *settings.AutoPauseServer
 		}
-		if settings.DeleteSkeletonOnDecay != nil {
-			resp["delete_skeleton_on_decay"] = *settings.DeleteSkeletonOnDecay
-		}
 		// Steam P2P is deprecated/disabled; ignore UseSteamP2P from settings
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			resp["disconnect_timeout"] = *settings.DisconnectTimeout
@@ -2047,7 +1995,6 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	autoSave := c.PostForm("auto_save") == "on"
 	autoPause := c.PostForm("auto_pause") == "on"
 	playerSaves := c.PostForm("player_saves") == "on"
-	deleteSkeletonOnDecay := c.PostForm("delete_skeleton_on_decay") == "on"
 	toggleValues := url.Values{}
 	if val := strings.TrimSpace(c.PostForm("card_toggle_present")); val != "" {
 		toggleValues.Set("card_toggle_present", val)
@@ -2149,9 +2096,6 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		if settings.AutoPauseServer != nil {
 			autoPause = *settings.AutoPauseServer
 		}
-		if settings.DeleteSkeletonOnDecay != nil {
-			deleteSkeletonOnDecay = *settings.DeleteSkeletonOnDecay
-		}
 		// Ignore UseSteamP2P from settings
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			disconnectTimeout = *settings.DisconnectTimeout
@@ -2252,7 +2196,6 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		PlayerSaves:               playerSaves,
 		MaxAutoSaves:              maxAutoSaves,
 		MaxQuickSaves:             maxQuickSaves,
-		DeleteSkeletonOnDecay:     deleteSkeletonOnDecay,
 		UseSteamP2P:               false,
 		DisconnectTimeout:         disconnectTimeout,
 		RestartDelaySeconds:       v.RestartDelay,
@@ -3886,6 +3829,112 @@ func (h *ManagerHandlers) APIServersStopAll(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"scheduled": scheduled})
 }
 
+func (h *ManagerHandlers) APIServersStartSelected(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	var req struct {
+		IDs []int `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ids required"})
+		return
+	}
+	ids := uniquePositiveInts(req.IDs)
+	if len(ids) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid ids provided"})
+		return
+	}
+	started := 0
+	shutdownsCanceled := 0
+	for _, id := range ids {
+		s := h.manager.ServerByID(id)
+		if s == nil {
+			continue
+		}
+		if s.Running && s.Stopping {
+			if s.CancelStop() {
+				shutdownsCanceled++
+				h.BroadcastStatusAndStats(s)
+				h.manager.NotifyServerEvent(s, "stopping-canceled", "Shutdown canceled via bulk start.")
+			}
+			continue
+		}
+		if s.IsRunning() || s.Starting {
+			continue
+		}
+		s.Start()
+		started++
+		h.manager.NotifyServerEvent(s, "started", "Server start initiated via bulk action.")
+		h.BroadcastStatusAndStats(s)
+	}
+	switch {
+	case started == 0 && shutdownsCanceled == 0:
+		ToastInfo(c, "Bulk Start", "No selected servers were eligible to start.")
+	case started > 0 && shutdownsCanceled > 0:
+		ToastSuccess(c, "Bulk Start", fmt.Sprintf("Starting %d server(s); canceled %d shutdown(s).", started, shutdownsCanceled))
+	case started > 0:
+		ToastSuccess(c, "Bulk Start", fmt.Sprintf("Starting %d server(s).", started))
+	default:
+		ToastSuccess(c, "Bulk Start", fmt.Sprintf("Canceled shutdowns for %d server(s).", shutdownsCanceled))
+	}
+	c.JSON(http.StatusOK, gin.H{"started": started, "shutdowns_canceled": shutdownsCanceled})
+}
+
+func (h *ManagerHandlers) APIServersStopSelected(c *gin.Context) {
+	if c.GetString("role") != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin required"})
+		return
+	}
+	var req struct {
+		IDs []int `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ids required"})
+		return
+	}
+	ids := uniquePositiveInts(req.IDs)
+	if len(ids) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid ids provided"})
+		return
+	}
+	scheduled := 0
+	for _, id := range ids {
+		s := h.manager.ServerByID(id)
+		if s == nil || !s.IsRunning() {
+			continue
+		}
+		s.StopAsync(func(srv *models.Server) {
+			h.BroadcastStatusAndStats(srv)
+		})
+		scheduled++
+		h.manager.NotifyServerEvent(s, "stopping", "Server shutdown scheduled via bulk action.")
+	}
+	if scheduled == 0 {
+		ToastInfo(c, "Bulk Stop", "No selected servers were running.")
+	} else {
+		ToastInfo(c, "Bulk Stop", fmt.Sprintf("Stopping %d server(s).", scheduled))
+	}
+	c.JSON(http.StatusOK, gin.H{"scheduled": scheduled})
+}
+
+func uniquePositiveInts(values []int) []int {
+	filtered := make([]int, 0, len(values))
+	seen := make(map[int]struct{})
+	for _, v := range values {
+		if v <= 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		filtered = append(filtered, v)
+	}
+	return filtered
+}
+
 // APIServerSaves lists server save files for a given type (e.g., auto, manual).
 // Query params:
 //
@@ -4475,7 +4524,6 @@ func (h *ManagerHandlers) APIStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-
 func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 	statsTimestamp := time.Now().UTC()
 	stats := gin.H{
@@ -4532,6 +4580,7 @@ func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 	systemHealthLabel := formatPercentLabel(systemHealthPercent)
 	systemHealth := fmt.Sprintf("%.0f%%", systemHealthPercent)
 	telemetrySample := ""
+	var telemetrySampleTime time.Time
 	cpuPercent := 0.0
 	memoryPercent := 0.0
 	memoryUsed := 0.0
@@ -4539,9 +4588,17 @@ func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 	diskPercent := 0.0
 	diskUsed := 0.0
 	diskTotal := 0.0
+	if telemetry != nil && !telemetry.SampledAt.IsZero() {
+		telemetrySampleTime = telemetry.SampledAt
+	}
 	if telemetryPayload != nil {
 		if sample, ok := telemetryPayload["sampled_at"].(string); ok {
 			telemetrySample = sample
+			if telemetrySampleTime.IsZero() {
+				if parsed, err := time.Parse(time.RFC3339, sample); err == nil {
+					telemetrySampleTime = parsed
+				}
+			}
 		}
 		cpuPercent = toFloat(telemetryPayload["cpu_percent"])
 		memoryPercent = toFloat(telemetryPayload["memory_percent"])
@@ -4551,6 +4608,7 @@ func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 		diskUsed = toFloat(telemetryPayload["disk_used"])
 		diskTotal = toFloat(telemetryPayload["disk_total"])
 	}
+	telemetryStatusLabel, telemetryStatusClass, telemetryStatusDetail, telemetryIsStale, telemetryAge := summarizeTelemetryStatus(telemetrySampleTime)
 
 	totalComponents, healthyComponents, pendingUpdates := h.managerComponentHealth()
 	memoryDetail := formatUsageDetail(memoryUsed, memoryTotal)
@@ -4584,6 +4642,11 @@ func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 	stats["diskDetail"] = diskDetail
 	stats["telemetrySample"] = telemetrySample
 	stats["telemetrySampleISO"] = telemetrySample
+	stats["telemetryStatus"] = telemetryStatusLabel
+	stats["telemetryStatusClass"] = telemetryStatusClass
+	stats["telemetryStatusDetail"] = telemetryStatusDetail
+	stats["telemetryIsStale"] = telemetryIsStale
+	stats["telemetrySampleAge"] = formatDurationShort(telemetryAge)
 	stats["lastUpdated"] = statsTimestamp.Format(time.RFC3339)
 	stats["lastUpdatedISO"] = statsTimestamp.Format(time.RFC3339)
 
@@ -4820,6 +4883,12 @@ func (h *ManagerHandlers) APIServers(c *gin.Context) {
 		}
 	}
 
+	filter := strings.ToLower(strings.TrimSpace(c.Query("filter")))
+	search := strings.TrimSpace(c.Query("search"))
+	if filter != "" || search != "" {
+		servers = filterServersForDashboard(servers, filter, search)
+	}
+
 	if strings.EqualFold(c.GetHeader("HX-Request"), "true") || strings.Contains(c.GetHeader("Accept"), "text/html") {
 		// Include role so nested partials (e.g., server_card.html) can conditionally render admin controls
 		c.HTML(http.StatusOK, "server_cards.html", gin.H{
@@ -4831,6 +4900,70 @@ func (h *ManagerHandlers) APIServers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"servers": servers,
 	})
+}
+
+func filterServersForDashboard(all []*models.Server, filter, search string) []*models.Server {
+	searchLower := strings.ToLower(search)
+	filtered := make([]*models.Server, 0, len(all))
+	for _, s := range all {
+		if s == nil {
+			continue
+		}
+		if filter != "" && !serverMatchesFilter(filter, s) {
+			continue
+		}
+		if searchLower != "" && !serverMatchesSearch(searchLower, s) {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+	return filtered
+}
+
+func serverMatchesFilter(filter string, s *models.Server) bool {
+	switch filter {
+	case "running":
+		return s.IsRunning()
+	case "starting":
+		return s.Starting
+	case "paused":
+		return s.IsRunning() && s.Paused
+	case "stopped", "offline":
+		return !s.IsRunning() && !s.Starting
+	case "errors", "error":
+		return strings.TrimSpace(s.LastError) != ""
+	case "storm", "storming":
+		return s.Storming
+	case "active":
+		return s.IsRunning() || s.Starting
+	case "all", "":
+		return true
+	default:
+		return true
+	}
+}
+
+func serverMatchesSearch(term string, s *models.Server) bool {
+	if s == nil || term == "" {
+		return true
+	}
+	name := strings.ToLower(strings.TrimSpace(s.Name))
+	world := strings.ToLower(strings.TrimSpace(s.World))
+	port := strconv.Itoa(s.Port)
+	id := strconv.Itoa(s.ID)
+	if strings.Contains(name, term) {
+		return true
+	}
+	if strings.Contains(world, term) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(port), term) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(id), term) {
+		return true
+	}
+	return false
 }
 
 func (h *ManagerHandlers) APIGetStartLocations(c *gin.Context) {

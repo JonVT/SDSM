@@ -388,7 +388,7 @@ var (
 		{
 			match: func(line string) []string {
 				lower := strings.ToLower(line)
-				if strings.Contains(lower, "started server") || strings.Contains(lower, "rocketnet succesfully hosted") {
+				if strings.Contains(lower, "started server") || strings.Contains(lower, "rocketnet succesfully hosted") || strings.Contains(lower, "registered with session") {
 					return []string{}
 				}
 				return nil

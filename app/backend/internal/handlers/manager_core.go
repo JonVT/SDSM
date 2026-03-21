@@ -1406,7 +1406,6 @@ func (h *ManagerHandlers) buildNewServerFormPayload(username interface{}, overri
 		"auto_save":                true,
 		"player_saves":             true,
 		"auto_pause":               true,
-		"delete_skeleton_on_decay": false,
 		// Steam P2P removed; always disabled
 		"use_steam_p2p":  false,
 		"server_visible": true,
@@ -1659,11 +1658,6 @@ func (h *ManagerHandlers) writeServerDeploySnapshot(s *models.Server) error {
 	// Best-effort permissions
 	_ = os.Chmod(dst, 0o644)
 	return nil
-}
-
-// Home redirects to the login page (root entry point).
-func (h *ManagerHandlers) Home(c *gin.Context) {
-	c.Redirect(http.StatusFound, "/login")
 }
 
 // Frame renders the outer frame shell with server list and active status.

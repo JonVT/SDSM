@@ -3,7 +3,8 @@
 
 {{define "server_status.html"}}
 <div class="server-content grid gap-6"
-    data-page-title="Server {{.server.Name}}"
+    data-server-root
+    data-page-title="{{.server.Name}}"
     data-server-id="{{.server.ID}}"
     data-server-name="{{.server.Name}}"
     data-server-running="{{if .server.Running}}true{{else}}false{{end}}"

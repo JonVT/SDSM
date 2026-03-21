@@ -274,6 +274,12 @@ function initServerStatusDashboard() {
             stormPill.classList.toggle('is-clear', !active);
             stormPill.textContent = active ? 'Storming' : 'Calm';
         }
+        const infoStormPill = document.querySelector('[data-server-storm-pill]');
+        if (infoStormPill) {
+            infoStormPill.classList.toggle('is-storm', active);
+            infoStormPill.classList.toggle('is-clear', !active);
+            infoStormPill.textContent = active ? 'Storming' : 'Calm';
+        }
         if (stormStatusText) {
             stormStatusText.textContent = active ? 'Storm active' : 'Calm skies';
         }
@@ -302,6 +308,10 @@ function initServerStatusDashboard() {
     const btnStop = document.getElementById('btn-stop');
     const btnPause = document.getElementById('btn-pause');
     const btnResume = document.getElementById('btn-resume');
+    const quickStartBtn = document.getElementById('server-quick-start');
+    const quickStopBtn = document.getElementById('server-quick-stop');
+    const quickSaveBtn = document.getElementById('server-quick-save');
+    const quickResumeBtn = document.getElementById('server-quick-resume');
         const worldDownloadSelect = document.getElementById('world-download-select');
         const worldDownloadStatus = document.getElementById('world-download-status');
     const btnSave = document.getElementById('btn-save');
@@ -312,6 +322,9 @@ function initServerStatusDashboard() {
     const btnDownloadWorld = document.getElementById('btn-download-world');
     const btnRenameServer = document.getElementById('btn-rename-server');
     const languageSelect = document.getElementById('server-language-select');
+    const languageStatus = document.getElementById('server-language-status');
+    let languageStatusTimer;
+    let currentLanguage = (serverContent?.dataset?.serverLanguage || '') || (languageSelect ? languageSelect.value : '');
     const startedAtEl = document.getElementById('server-started-at');
     const uptimeEl = document.getElementById('server-uptime');
     const lastSavedEl = document.getElementById('server-last-saved');
@@ -529,17 +542,31 @@ function initServerStatusDashboard() {
     const bannedPlayersEmpty = document.getElementById('banned-players-empty');
     const bannedCount = document.getElementById('banned-count');
 
-    const serverConfigForm = document.getElementById('server-config-form');
-    const serverConfigContent = document.getElementById('serverConfigContent');
-    const serverConfigToggle = document.getElementById('serverConfigToggle');
+    let serverConfigForm = null;
+    let serverConfigContent = null;
+    let serverConfigToggle = null;
     const serverLogsContent = document.getElementById('serverLogsContent');
     const serverLogsToggle = document.getElementById('serverLogsToggle');
-    const serverConfigCard = document.getElementById('server-config-card');
-    const configVersionSelect = document.getElementById('config-version');
-    const configWorldSelect = document.getElementById('config-world');
-    const configStartLocationSelect = document.getElementById('config-start-location');
-    const configStartConditionSelect = document.getElementById('config-start-condition');
-    const configDifficultySelect = document.getElementById('config-difficulty');
+    let serverConfigCard = null;
+    let configVersionSelect = null;
+    let configWorldSelect = null;
+    let configStartLocationSelect = null;
+    let configStartConditionSelect = null;
+    let configDifficultySelect = null;
+
+    function refreshConfigDomRefs() {
+        serverConfigForm = document.getElementById('server-config-form');
+        serverConfigContent = document.getElementById('serverConfigContent');
+        serverConfigToggle = document.getElementById('serverConfigToggle');
+        serverConfigCard = document.getElementById('server-config-card');
+        configVersionSelect = document.getElementById('config-version');
+        configWorldSelect = document.getElementById('config-world');
+        configStartLocationSelect = document.getElementById('config-start-location');
+        configStartConditionSelect = document.getElementById('config-start-condition');
+        configDifficultySelect = document.getElementById('config-difficulty');
+    }
+
+    refreshConfigDomRefs();
 
     const logViewer = document.getElementById('log-viewer');
     const logTabs = document.getElementById('log-tabs');
@@ -549,41 +576,52 @@ function initServerStatusDashboard() {
     const slClear = document.getElementById('sl-clear');
 
     let socket;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    const reconnectInterval = 2000;
 
+    // Use the global SDSM WebSocket connection (connects to /ws) rather than
+    // opening a separate connection. Register a listener that forwards
+    // server_status messages for this server to the local handler.
     function connectWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        socket = new WebSocket(`${protocol}//${window.location.host}/ws/server/${serverId}`);
+        // Ensure the global WebSocket is connected
+        if (typeof SDSM !== 'undefined' && SDSM.ws && typeof SDSM.ws.connect === 'function') {
+            socket = SDSM.ws.connect();
+        }
 
-        socket.onopen = () => {
-            console.log('WebSocket connected');
-            reconnectAttempts = 0;
-        };
-
-        socket.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            } catch (e) {
-                console.error("Error parsing websocket message", e);
+        // Hook into the global WebSocket's onmessage to intercept messages for this server.
+        // We wrap the existing handler so we don't break app.js's own message handling.
+        function attachListener() {
+            const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
+            if (!ws || ws._serverStatusHooked) {
+                return;
             }
-        };
+            ws._serverStatusHooked = true;
+            const originalOnMessage = ws.onmessage;
+            ws.onmessage = function(event) {
+                // Call the original handler first (app.js dashboard updates)
+                if (originalOnMessage) {
+                    originalOnMessage.call(ws, event);
+                }
+                // Then process locally for the server status page
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (e) {
+                    // ignore parse errors
+                }
+            };
+        }
 
-        socket.onclose = () => {
-            console.log('WebSocket disconnected');
-            if (reconnectAttempts < maxReconnectAttempts) {
-                setTimeout(connectWebSocket, reconnectInterval * (reconnectAttempts + 1));
-                reconnectAttempts++;
-            } else if (window.showToast) {
-                window.showToast('Error', 'Could not reconnect to server. Please refresh the page.', 'danger');
+        // The global WS may already be open or may connect shortly
+        attachListener();
+        // Re-check periodically in case it reconnects
+        const checkInterval = setInterval(() => {
+            const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
+            if (ws && !ws._serverStatusHooked) {
+                attachListener();
             }
-        };
+        }, 2000);
 
-        socket.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
+        // Clean up on page unload
+        window.addEventListener('beforeunload', () => clearInterval(checkInterval), { once: true });
     }
 
     function handleWebSocketMessage(data) {
@@ -641,6 +679,7 @@ function initServerStatusDashboard() {
     }
 
     function updateServerStatus(status) {
+        refreshConfigDomRefs();
         serverContent.dataset.serverRunning = status.running ? 'true' : 'false';
         serverContent.dataset.serverPaused = status.paused ? 'true' : 'false';
         serverContent.dataset.serverStarting = status.starting ? 'true' : 'false';
@@ -655,20 +694,29 @@ function initServerStatusDashboard() {
         lastKnownRunning = isRunning;
 
         let statusClass = 'status-stopped';
+        let pillClass = 'is-stopped';
         let text = 'Stopped';
 
-        if (status.starting) {
-            statusClass = 'status-starting';
-            text = 'Starting';
+        if (status.lastError) {
+            statusClass = 'status-error';
+            pillClass = 'is-error';
+            text = 'Error';
         } else if (status.stopping) {
             statusClass = 'status-stopping';
+            pillClass = 'is-stopping';
             text = 'Stopping';
+        } else if (status.starting) {
+            statusClass = 'status-starting';
+            pillClass = 'is-starting';
+            text = 'Starting';
         } else if (status.running) {
             if (status.paused) {
                 statusClass = 'status-paused';
+                pillClass = 'is-paused';
                 text = 'Paused';
             } else {
                 statusClass = 'status-running';
+                pillClass = 'is-running';
                 text = 'Running';
             }
         }
@@ -680,10 +728,21 @@ function initServerStatusDashboard() {
             statusText.textContent = text;
         }
 
+        const infoStatePill = document.querySelector('[data-server-state-pill]');
+        if (infoStatePill) {
+            infoStatePill.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting', 'is-stopping', 'is-error');
+            infoStatePill.classList.add(pillClass);
+            infoStatePill.textContent = text;
+        }
+
         if(btnStart) btnStart.disabled = status.running || status.starting;
         if(btnStop) btnStop.disabled = !status.running || status.stopping;
         if(btnPause) btnPause.disabled = !status.running || status.paused;
         if(btnResume) btnResume.disabled = !status.paused;
+        if(quickStartBtn) quickStartBtn.disabled = status.running || status.starting;
+        if(quickStopBtn) quickStopBtn.disabled = !status.running || status.stopping;
+        if(quickSaveBtn) quickSaveBtn.disabled = !status.running;
+        if(quickResumeBtn) quickResumeBtn.disabled = !status.paused;
         if(btnSave) btnSave.disabled = !status.running;
         if(btnQuickSave) btnQuickSave.disabled = !status.running;
         if(btnUpdate) btnUpdate.disabled = status.running;
@@ -746,7 +805,8 @@ function initServerStatusDashboard() {
                 paused: !!detail.status.paused,
                 starting: !!detail.status.starting,
                 stopping: !!detail.status.stopping,
-                storming: serverContent.dataset.serverStorming === 'true'
+                storming: typeof detail.status.storming !== 'undefined' ? !!detail.status.storming : serverContent.dataset.serverStorming === 'true',
+                lastError: detail.status.lastError || ''
             });
         }
     });
@@ -2046,20 +2106,52 @@ function initServerStatusDashboard() {
         btnRenameServer.addEventListener('click', () => renameServerPrompt(serverName));
     }
 
+    const updateLanguageStatus = (text, state) => {
+        if (!languageStatus) {
+            return;
+        }
+        languageStatus.textContent = text || '';
+        if (state) {
+            languageStatus.dataset.state = state;
+        } else if (languageStatus.dataset.state) {
+            delete languageStatus.dataset.state;
+        }
+        if (languageStatusTimer) {
+            clearTimeout(languageStatusTimer);
+            languageStatusTimer = null;
+        }
+        if (text) {
+            languageStatusTimer = setTimeout(() => {
+                languageStatus.textContent = '';
+                if (languageStatus.dataset.state) {
+                    delete languageStatus.dataset.state;
+                }
+            }, 2500);
+        }
+    };
+
     if (languageSelect) {
         languageSelect.addEventListener('change', async (event) => {
             const selected = (event.target.value || '').trim();
             if (!selected) {
                 return;
             }
-            const previous = languageSelect.value;
+            const previous = currentLanguage;
             languageSelect.disabled = true;
+            updateLanguageStatus('Applying…', 'pending');
             try {
                 await serverRequest('/language', { method: 'POST', body: { language: selected } });
                 serverContent.dataset.serverLanguage = selected;
+                currentLanguage = selected;
                 triggerCardRefresh(SERVER_INFO_CARD_ID);
+                updateLanguageStatus('Saved', 'success');
             } catch (error) {
-                languageSelect.value = previous;
+                if (previous) {
+                    languageSelect.value = previous;
+                } else if (languageSelect.options && languageSelect.options.length) {
+                    languageSelect.selectedIndex = 0;
+                }
+                updateLanguageStatus('Failed', 'error');
                 handleActionError('Language', error);
             } finally {
                 languageSelect.disabled = false;
@@ -2076,6 +2168,10 @@ function initServerStatusDashboard() {
         { button: btnQuickSave, endpoint: '/quicksave', label: 'Quick Save' },
         { button: btnUpdate, endpoint: '/update-server', label: 'Update' },
         { button: btnReinstall, endpoint: '/reinstall', label: 'Reinstall' },
+        { button: quickStartBtn, endpoint: '/start', label: 'Start' },
+        { button: quickStopBtn, endpoint: '/stop', label: 'Stop' },
+        { button: quickSaveBtn, endpoint: '/save', label: 'Save' },
+        { button: quickResumeBtn, endpoint: '/resume', label: 'Resume' },
     ];
 
     controlActions.forEach(({ button, endpoint, label }) => {
@@ -2246,6 +2342,50 @@ function initServerStatusDashboard() {
         return '';
     }
 
+    const copyTimers = new WeakMap();
+    async function copyTextToClipboard(value) {
+        if (!value) {
+            return;
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(value);
+            return;
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'absolute';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+    }
+
+    document.addEventListener('click', async (event) => {
+        const copyBtn = event.target.closest('[data-copy-value][data-copy-scope="server-info"]');
+        if (copyBtn) {
+            event.preventDefault();
+            event.stopPropagation();
+            const value = copyBtn.getAttribute('data-copy-value');
+            try {
+                await copyTextToClipboard(value);
+                copyBtn.setAttribute('data-copied', 'true');
+                if (copyTimers.has(copyBtn)) {
+                    clearTimeout(copyTimers.get(copyBtn));
+                }
+                const timeoutId = setTimeout(() => {
+                    copyBtn.removeAttribute('data-copied');
+                    copyTimers.delete(copyBtn);
+                }, 1500);
+                copyTimers.set(copyBtn, timeoutId);
+            } catch (err) {
+                console.warn('Copy failed', err);
+            }
+            return;
+        }
+    });
+
     document.body.addEventListener('click', (e) => {
         const kickBtn = e.target.closest('.btn-kick');
         if (kickBtn) {
@@ -2364,32 +2504,42 @@ function initServerStatusDashboard() {
     initializeConfigControls();
 
     function initializeConfigControls() {
+        refreshConfigDomRefs();
         if (!serverConfigForm || !configVersionSelect || !configWorldSelect) {
             return;
         }
         syncConfigControlDatasets();
         applyConfigVersionState();
-        configVersionSelect.addEventListener('change', () => {
-            applyConfigVersionState();
-        });
-        configWorldSelect.addEventListener('change', () => {
-            configWorldSelect.dataset.currentWorld = configWorldSelect.value || '';
-            if (serverConfigCard) {
-                serverConfigCard.dataset.currentWorld = configWorldSelect.dataset.currentWorld;
-            }
-            populateWorldDetails(getVersionKeyFromSelect(configVersionSelect), configWorldSelect.value);
-        });
-        if (configStartLocationSelect) {
+        if (!configVersionSelect.dataset.boundServerConfigVersion) {
+            configVersionSelect.dataset.boundServerConfigVersion = 'true';
+            configVersionSelect.addEventListener('change', () => {
+                applyConfigVersionState();
+            });
+        }
+        if (!configWorldSelect.dataset.boundServerConfigWorld) {
+            configWorldSelect.dataset.boundServerConfigWorld = 'true';
+            configWorldSelect.addEventListener('change', () => {
+                configWorldSelect.dataset.currentWorld = configWorldSelect.value || '';
+                if (serverConfigCard) {
+                    serverConfigCard.dataset.currentWorld = configWorldSelect.dataset.currentWorld;
+                }
+                populateWorldDetails(getVersionKeyFromSelect(configVersionSelect), configWorldSelect.value);
+            });
+        }
+        if (configStartLocationSelect && !configStartLocationSelect.dataset.boundServerConfigLocation) {
+            configStartLocationSelect.dataset.boundServerConfigLocation = 'true';
             configStartLocationSelect.addEventListener('change', () => {
                 configStartLocationSelect.dataset.currentValue = configStartLocationSelect.value || '';
             });
         }
-        if (configStartConditionSelect) {
+        if (configStartConditionSelect && !configStartConditionSelect.dataset.boundServerConfigCondition) {
+            configStartConditionSelect.dataset.boundServerConfigCondition = 'true';
             configStartConditionSelect.addEventListener('change', () => {
                 configStartConditionSelect.dataset.currentValue = configStartConditionSelect.value || '';
             });
         }
-        if (configDifficultySelect) {
+        if (configDifficultySelect && !configDifficultySelect.dataset.boundServerConfigDifficulty) {
+            configDifficultySelect.dataset.boundServerConfigDifficulty = 'true';
             configDifficultySelect.addEventListener('change', () => {
                 configDifficultySelect.dataset.currentValue = configDifficultySelect.value || '';
             });
@@ -2550,37 +2700,67 @@ function initServerStatusDashboard() {
     }
 
     if (serverConfigForm) {
-        const configSubmitButton = serverConfigForm.querySelector('button[type="submit"]');
-        const resetButton = document.getElementById('btn-reset-config');
-
-        if (resetButton) {
-            resetButton.addEventListener('click', () => {
-                serverConfigForm.reset();
-                setTimeout(() => {
-                    syncConfigControlDatasets();
-                    applyConfigVersionState();
-                }, 0);
-            });
-        }
-
-        serverConfigForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const prevDisabled = configSubmitButton ? configSubmitButton.disabled : false;
-            if (configSubmitButton) {
-                configSubmitButton.disabled = true;
-                configSubmitButton.dataset.originalText = configSubmitButton.dataset.originalText || configSubmitButton.innerHTML;
-                configSubmitButton.innerHTML = '<span>Saving...</span>';
+        const bindServerConfigActions = () => {
+            refreshConfigDomRefs();
+            if (!serverConfigForm) {
+                return;
             }
-            try {
-                const formData = new FormData(serverConfigForm);
-                await serverRequest('/settings', { method: 'POST', body: formData });
-            } catch (error) {
-                handleActionError('Update Configuration', error);
-            } finally {
-                if (configSubmitButton) {
-                    configSubmitButton.innerHTML = configSubmitButton.dataset.originalText || configSubmitButton.innerHTML;
-                    configSubmitButton.disabled = prevDisabled;
-                }
+            const configSubmitButton = serverConfigForm.querySelector('button[type="submit"]');
+            const resetButton = document.getElementById('btn-reset-config');
+
+            if (resetButton && !resetButton.dataset.boundServerConfigReset) {
+                resetButton.dataset.boundServerConfigReset = 'true';
+                resetButton.addEventListener('click', () => {
+                    refreshConfigDomRefs();
+                    if (!serverConfigForm) {
+                        return;
+                    }
+                    serverConfigForm.reset();
+                    setTimeout(() => {
+                        initializeConfigControls();
+                    }, 0);
+                });
+            }
+
+            if (!serverConfigForm.dataset.boundServerConfigSubmit) {
+                serverConfigForm.dataset.boundServerConfigSubmit = 'true';
+                serverConfigForm.addEventListener('submit', async (event) => {
+                    event.preventDefault();
+                    const form = event.currentTarget;
+                    const submitButton = form ? form.querySelector('button[type="submit"]') : null;
+                    const prevDisabled = submitButton ? submitButton.disabled : false;
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.dataset.originalText = submitButton.dataset.originalText || submitButton.innerHTML;
+                        submitButton.innerHTML = '<span>Saving...</span>';
+                    }
+                    try {
+                        const formData = new FormData(form);
+                        await serverRequest('/settings', { method: 'POST', body: formData });
+                    } catch (error) {
+                        handleActionError('Update Configuration', error);
+                    } finally {
+                        if (submitButton) {
+                            submitButton.innerHTML = submitButton.dataset.originalText || submitButton.innerHTML;
+                            submitButton.disabled = prevDisabled;
+                        }
+                    }
+                });
+            }
+        };
+
+        bindServerConfigActions();
+
+        document.addEventListener('htmx:afterSwap', (event) => {
+            const swapRoot = event.target instanceof Element ? event.target : null;
+            if (!swapRoot) {
+                return;
+            }
+            if (swapRoot.id === 'server-config-card' || swapRoot.querySelector('#server-config-card')) {
+                refreshConfigDomRefs();
+                setupCollapsible(serverConfigToggle, serverConfigContent);
+                initializeConfigControls();
+                bindServerConfigActions();
             }
         });
     }
@@ -2652,8 +2832,6 @@ function initServerStatusDashboard() {
             if (btn) {
                 logTabs.querySelectorAll('.log-file-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                logTabs.querySelectorAll('.log-file-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
                 const logFile = btn.dataset.logFile;
                 fetchLogContent(logFile);
             }
@@ -2703,12 +2881,10 @@ function initServerStatusDashboard() {
         if (statusRefreshTimer) {
             clearInterval(statusRefreshTimer);
         }
-        if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-            try {
-                socket.close(1000, 'page unload');
-            } catch (_) {
-                // ignore
-            }
+        // Unhook our listener from the global WebSocket
+        const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
+        if (ws) {
+            ws._serverStatusHooked = false;
         }
     });
 }

@@ -78,9 +78,46 @@
 <div class="card server-card"
      data-server-id="{{$server.ID}}"
      data-target-url="/server/{{$server.ID}}">
-    <div class="card-header">
+    <div class="server-card-top">
+        {{if eq $role "admin"}}
+        <div class="server-select-control" data-stop-navigation="true">
+            <label class="server-select-checkbox">
+                <input type="checkbox"
+                       class="server-select-input"
+                       value="{{$server.ID}}"
+                       data-server-select
+                       data-server-name="{{$server.Name}}"
+                       aria-label="Select {{$server.Name}}"
+                       tabindex="-1">
+                <span class="server-select-indicator" aria-hidden="true"></span>
+            </label>
+        </div>
+        {{end}}
+        <div class="card-header">
         <div class="server-heading">
-            <div class="server-name" data-server-name>{{$server.Name}}</div>
+            <div class="server-heading-row">
+            <div class="server-name">
+                {{if $server.Beta}}
+                <span class="server-version-icon icon-beta" title="Beta build" aria-label="Beta build">β</span>
+                {{else}}
+                <span class="server-version-icon icon-release" title="Release build" aria-label="Release build">R</span>
+                {{end}}
+                <span class="server-name-text" data-server-name>{{$server.Name}}</span>
+            </div>
+            {{if eq $role "admin"}}
+            <button type="button"
+                    class="btn btn-icon btn-ghost server-rename-btn"
+                    title="Rename the server"
+                    aria-label="Rename the server"
+                    data-action="rename-server"
+                    data-server-id="{{$server.ID}}"
+                    data-server-name="{{$server.Name}}"
+                    data-stop-navigation="true">
+                {{template "icon_edit" .}}
+                <span class="sr-only">Rename the server</span>
+            </button>
+            {{end}}
+            </div>
             <div class="server-status-row">
                 <span class="status-pill {{$statusClass}}" data-status aria-label="{{$statusLabel}}" title="{{$statusLabel}}">
                     {{$statusLabel}}
@@ -102,50 +139,82 @@
                 {{if $server.Storming}}Storm{{else}}Clear{{end}}
             </span>
         </div>
+        </div>
     </div>
 
     <div class="card-content">
         {{if $server.LastError}}
-        <div class="alert alert-danger alert-compact" data-stop-navigation="true">
-            <div class="alert-title">Startup Error</div>
-            <div class="alert-message">{{$server.LastError}}</div>
+        <div class="alert alert-danger alert-compact server-alert" data-stop-navigation="true">
+            <div>
+                <div class="alert-title">Startup Error</div>
+                <div class="alert-message">{{$server.LastError}}</div>
+            </div>
+            <div class="alert-actions">
+                <button type="button"
+                        class="btn btn-sm btn-warning"
+                        data-restart-server="{{$server.ID}}"
+                        data-server-name="{{$server.Name}}"
+                        data-stop-navigation="true">
+                    {{template "icon_restart" .}} Restart
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-neutral"
+                        data-server-logs="/server/{{$server.ID}}#logs"
+                        data-stop-navigation="true">
+                    {{template "icon_logs" .}} View Logs
+                </button>
+            </div>
         </div>
         {{end}}
 
-        <div class="server-info">
-            <div class="info-inline-row">
-                <div class="info-label">World</div>
-                <div class="info-value world" data-world-value>{{if $server.World}}{{$server.World}}{{else}}Unknown{{end}}</div>
-            </div>
-            <div class="info-inline-row">
+        <div class="server-world-row">
+            <div class="info-label">World</div>
+            <div class="info-value world" data-world-value>{{if $server.World}}{{$server.World}}{{else}}Unknown{{end}}</div>
+        </div>
+        <div class="server-info-grid">
+            <div class="info-item">
                 <div class="info-label">Players</div>
                 <div class="info-value" data-player-count>{{$server.ClientCount}} / {{$server.MaxClients}}</div>
             </div>
-            <div class="info-inline-row">
+            <div class="info-item">
                 <div class="info-label">Port</div>
                 <div class="info-value" data-port-value>{{if gt $server.Port 0}}{{$server.Port}}{{else}}—{{end}}</div>
             </div>
-            <div class="info-inline-row">
+            <div class="info-item">
                 <div class="info-label">Password</div>
                 <div class="info-value">{{if $server.Password}}Enabled{{else}}Disabled{{end}}</div>
             </div>
+            <div class="info-item">
+                <div class="info-label">Storm</div>
+                <div class="info-value">{{if $server.Storming}}Active{{else}}Clear{{end}}</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Auto Save</div>
+                <div class="info-value">{{if $server.AutoSave}}Enabled{{else}}Disabled{{end}}</div>
+            </div>
         </div>
 
-        <div class="resource-usage" data-resource-usage>
-            <div class="usage-row">
-                <div class="usage-label">CPU</div>
+        <div class="resource-usage usage-grid" data-resource-usage>
+            <div class="usage-card">
+                <div class="usage-header">
+                    <span class="usage-label">CPU</span>
+                    <span class="usage-value" data-cpu-text>{{if $usage}}{{printf "%.0f%%" $usage.CPUPercent}}{{else}}—{{end}}</span>
+                </div>
                 <div class="usage-meter" aria-hidden="true">
                     <div class="usage-bar-fill cpu" data-cpu-bar style="width: {{if $usage}}{{printf "%.1f" $usage.CPUPercent}}{{else}}0{{end}}%;"></div>
                 </div>
-                <div class="usage-value" data-cpu-text>{{if $usage}}{{printf "%.0f%%" $usage.CPUPercent}}{{else}}—{{end}}</div>
             </div>
-            <div class="usage-row">
-                <div class="usage-label">RAM</div>
+            <div class="usage-card">
+                <div class="usage-header">
+                    <span class="usage-label">RAM</span>
+                    <span class="usage-value"
+                          data-memory-text
+                          data-memory-bytes="{{if $usage}}{{$usage.MemoryRSSBytes}}{{else}}0{{end}}">
+                        {{if $usage}}{{printf "%.0f%%" $usage.MemoryPercent}}{{else}}—{{end}}
+                    </span>
+                </div>
                 <div class="usage-meter" aria-hidden="true">
                     <div class="usage-bar-fill memory" data-memory-bar style="width: {{if $usage}}{{printf "%.1f" $usage.MemoryPercent}}{{else}}0{{end}}%;"></div>
-                </div>
-                <div class="usage-value" data-memory-text data-memory-bytes="{{if $usage}}{{$usage.MemoryRSSBytes}}{{else}}0{{end}}">
-                    {{if $usage}}{{printf "%.0f%%" $usage.MemoryPercent}}{{else}}—{{end}}
                 </div>
             </div>
         </div>
@@ -169,19 +238,10 @@
                     {{template "icon_play" .}} Start
                 </button>
             {{end}}
-            {{if eq $role "admin"}}
-            <button type="button"
-                    class="btn btn-sm btn-secondary"
-                    data-action="rename-server"
-                    data-server-id="{{$server.ID}}"
-                    data-server-name="{{$server.Name}}"
-                    data-stop-navigation="true">
-                {{template "icon_edit" .}} Rename
-            </button>
-            {{end}}
             <a href="/server/{{$server.ID}}"
                class="btn btn-sm btn-secondary"
                hx-get="/api/pages/server/{{$server.ID}}"
+               hx-target="#content-area"
                hx-push-url="/server/{{$server.ID}}">
                 Manage {{template "icon_arrow_right" .}}
             </a>

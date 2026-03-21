@@ -9,7 +9,6 @@ require (
 	github.com/StackExchange/wmi v1.2.1
 	github.com/getlantern/systray v1.2.1
 	github.com/gin-gonic/gin v1.11.0
-	github.com/go-playground/validator/v10 v10.28.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/libp2p/go-nat v0.2.0
@@ -21,6 +20,7 @@ require (
 
 require (
 	github.com/ebitengine/purego v0.9.0 // indirect
+	github.com/go-playground/validator/v10 v10.28.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
