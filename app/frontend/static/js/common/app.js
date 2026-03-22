@@ -1416,6 +1416,8 @@
         updateTimeElement('cluster-stats-updated', stats.lastUpdatedISO || stats.lastUpdated);
 
         this.renderSystemHealthCard(stats);
+
+        document.dispatchEvent(new CustomEvent('sdsm:stats-update', { detail: stats }));
       },
 
       bindServerCardNavigation: function(root) {
@@ -3504,6 +3506,7 @@
       this.relativeTime.init();
 
       this.dashboard.init();
+      this.ui.startStatsPoll();
       if (this.cards) {
         this.cards.bindHtmxHooks();
         this.cards.init(document);
