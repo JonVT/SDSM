@@ -8,12 +8,18 @@
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'manager-configuration'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header">
-        <div>
-            <h2 class="card-title">Configuration</h2>
-            <p class="card-subtitle">Tune how SDSM runs, updates, and secures access.</p>
-        </div>
-    </div>
+    <details class="card-collapse" data-collapse-id="manager-configuration" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div>
+                <h2 class="card-title">Configuration</h2>
+                <p class="card-subtitle">Tune how SDSM runs, updates, and secures access.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
     <form id="manager-settings-form" hx-post="/api/manager/update" hx-target="#manager-settings-form" hx-swap="outerHTML" class="config-form flex flex-col gap-4">
         <div class="form-group">
             <label for="steam_id">Steam ID</label>
@@ -122,5 +128,7 @@
         </div>
     </form>
     <p class="text-secondary text-sm"><strong>Note:</strong> Changes may restart SDSM so updates to TLS and ports can take effect.</p>
+        </div>
+    </details>
 </div>
 {{end}}

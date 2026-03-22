@@ -543,10 +543,6 @@ function initServerStatusDashboard() {
     const bannedCount = document.getElementById('banned-count');
 
     let serverConfigForm = null;
-    let serverConfigContent = null;
-    let serverConfigToggle = null;
-    const serverLogsContent = document.getElementById('serverLogsContent');
-    const serverLogsToggle = document.getElementById('serverLogsToggle');
     let serverConfigCard = null;
     let configVersionSelect = null;
     let configWorldSelect = null;
@@ -556,8 +552,6 @@ function initServerStatusDashboard() {
 
     function refreshConfigDomRefs() {
         serverConfigForm = document.getElementById('server-config-form');
-        serverConfigContent = document.getElementById('serverConfigContent');
-        serverConfigToggle = document.getElementById('serverConfigToggle');
         serverConfigCard = document.getElementById('server-config-card');
         configVersionSelect = document.getElementById('config-version');
         configWorldSelect = document.getElementById('config-world');
@@ -567,13 +561,6 @@ function initServerStatusDashboard() {
     }
 
     refreshConfigDomRefs();
-
-    const logViewer = document.getElementById('log-viewer');
-    const logTabs = document.getElementById('log-tabs');
-    const logTabsEmpty = document.getElementById('log-tabs-empty');
-    const slRefresh = document.getElementById('sl-refresh');
-    const slDownload = document.getElementById('sl-download');
-    const slClear = document.getElementById('sl-clear');
 
     let socket;
 
@@ -2263,8 +2250,9 @@ function initServerStatusDashboard() {
             if (!logsCard) {
                 return;
             }
-            if (serverLogsToggle && serverLogsToggle.getAttribute('aria-expanded') === 'false') {
-                serverLogsToggle.click();
+            const logsDetails = document.querySelector('[data-collapse-id="server-status-logs"]');
+            if (logsDetails && !logsDetails.open) {
+                logsDetails.open = true;
             }
             logsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -2488,18 +2476,6 @@ function initServerStatusDashboard() {
         });
     }
 
-
-    function setupCollapsible(toggle, content) {
-        if (!toggle || !content) return;
-        toggle.addEventListener('click', () => {
-            const isHidden = content.classList.toggle('hidden');
-            toggle.setAttribute('aria-expanded', !isHidden);
-            toggle.classList.toggle('active', !isHidden);
-        });
-    }
-
-    setupCollapsible(serverConfigToggle, serverConfigContent);
-    setupCollapsible(serverLogsToggle, serverLogsContent);
 
     initializeConfigControls();
 
@@ -2758,107 +2734,8 @@ function initServerStatusDashboard() {
             }
             if (swapRoot.id === 'server-config-card' || swapRoot.querySelector('#server-config-card')) {
                 refreshConfigDomRefs();
-                setupCollapsible(serverConfigToggle, serverConfigContent);
                 initializeConfigControls();
                 bindServerConfigActions();
-            }
-        });
-    }
-
-    // Log viewer logic
-    let activeLogFile = '';
-
-    async function fetchLogFiles() {
-        if (!logTabs) return;
-        logTabs.innerHTML = '';
-        try {
-            const data = await serverRequest('/logs', { method: 'GET' });
-            const files = Array.isArray(data.files) ? data.files : [];
-            if (!files.length) {
-                if (logTabsEmpty) logTabsEmpty.classList.remove('hidden');
-                if (logViewer) logViewer.textContent = '';
-                return;
-            }
-            if (logTabsEmpty) logTabsEmpty.classList.add('hidden');
-            files.forEach(file => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'log-file-btn';
-                btn.dataset.logFile = file;
-                btn.textContent = file;
-                if (file === activeLogFile) {
-                    btn.classList.add('active');
-                }
-                logTabs.appendChild(btn);
-            });
-            const targetFile = activeLogFile && files.includes(activeLogFile) ? activeLogFile : files[0];
-            const targetButton = Array.from(logTabs.querySelectorAll('.log-file-btn')).find(btn => btn.dataset.logFile === targetFile);
-            if (targetButton) {
-                targetButton.classList.add('active');
-                fetchLogContent(targetFile);
-            }
-        } catch (error) {
-            handleActionError('Fetch Logs', error);
-            if (logTabsEmpty) logTabsEmpty.classList.remove('hidden');
-        }
-    }
-
-    async function fetchLogContent(logFile) {
-        if (!logViewer) return;
-        activeLogFile = logFile;
-        logViewer.textContent = 'Loading log...';
-        try {
-            const response = await fetch(`${serverApiBase}/log${buildQuery({ name: logFile })}`, {
-                method: 'GET',
-                headers: { Accept: 'text/plain', 'HX-Request': 'true' },
-                credentials: 'same-origin',
-            });
-            if (!response.ok) {
-                throw new Error('Unable to load log file');
-            }
-            const text = await response.text();
-            logViewer.textContent = text;
-        } catch (error) {
-            handleActionError('Fetch Log', error);
-            if (logViewer) {
-                logViewer.textContent = 'Unable to load log file.';
-            }
-        }
-    }
-
-    if (logTabs) {
-        logTabs.addEventListener('click', (e) => {
-            const btn = e.target.closest('.log-file-btn');
-            if (btn) {
-                logTabs.querySelectorAll('.log-file-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                const logFile = btn.dataset.logFile;
-                fetchLogContent(logFile);
-            }
-        });
-    }
-
-    if(slRefresh) slRefresh.addEventListener('click', fetchLogFiles);
-    if (slClear) {
-        slClear.addEventListener('click', () => {
-            if (confirm('Are you sure you want to clear all server logs?')) {
-                if (!activeLogFile) {
-                    handleActionError('Clear Log', new Error('Select a log file to clear.'));
-                    return;
-                }
-                serverRequest('/log/clear', { method: 'POST', body: { name: activeLogFile } })
-                    .then(fetchLogFiles)
-                    .catch(err => handleActionError('Clear Log', err));
-            }
-        });
-    }
-    if(slDownload) {
-        slDownload.addEventListener('click', () => {
-            const activeLog = logTabs ? logTabs.querySelector('.log-file-btn.active') : null;
-            if (activeLog) {
-                window.location.href = `${serverApiBase}/log/download${buildQuery({ name: activeLog.dataset.logFile })}`;
-            } else {
-                showToast('Info', 'Please select a log file to download.', 'info');
             }
         });
     }
@@ -2868,10 +2745,6 @@ function initServerStatusDashboard() {
     fetchLatestStatus();
     startStatusRefreshLoop();
     fetchSaves('all');
-    
-    if (logViewer) {
-        fetchLogFiles();
-    }
 
     if (typeof window.WebSocket !== 'undefined') {
         connectWebSocket();

@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/static/css/modern.css?v={{.buildTime}}">
     <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
     <script src="/static/js/common/app.js?v={{.buildTime}}" defer></script>
+    <script src="/static/js/common/card-sort.js?v={{.buildTime}}" defer></script>
 </head>
 <body 
     class="frame-shell" 
@@ -102,6 +103,7 @@
                     <span class="nav-item-text">{{.Name}}</span>
                     <span class="nav-badge" data-server-badge {{if not .IsRunning}}hidden{{end}}></span>
                 </a>
+                <div class="nav-submenu" data-server-submenu="{{.ID}}" hidden aria-label="Server sections"></div>
                 {{end}}
                 {{else}}
                 <div class="nav-empty-text">

@@ -2,7 +2,7 @@
 {{define "page"}}manager{{end}}
 
 {{define "manager.html"}}
-<div data-page-title="Manager Settings" data-manager-root class="manager-content flex flex-col gap-6">
+<div data-page-title="Manager Settings" data-manager-root class="manager-content" data-card-sortable="manager">
     {{- $pageData := . -}}
     {{- $cardSlots := .cardSlots -}}
     {{- if not $cardSlots -}}
@@ -26,45 +26,35 @@
     {{- end -}}
 
     {{- if not $hasManagerControlCard -}}
-    <div>
         {{ template "cards/manager_control.html" $pageData }}
-    </div>
     {{- end -}}
 
     {{- $gridCards := index $cardSlots "grid" -}}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start" data-slot="grid">
-        {{- if $gridCards -}}
-            {{- range $gridCards -}}
-                {{- renderCard .Template .Data -}}
-            {{- end -}}
+    {{- if $gridCards -}}
+        {{- range $gridCards -}}
+            {{- renderCard .Template .Data -}}
         {{- end -}}
-        {{- if not $hasManagerConfigCard -}}
-            {{ template "cards/manager_configuration.html" $pageData }}
-        {{- end -}}
-        {{- if not $hasManagerVersionCard -}}
-            {{ template "cards/manager_version_status.html" $pageData }}
-        {{- end -}}
-    </div>
+    {{- end -}}
+    {{- if not $hasManagerConfigCard -}}
+        {{ template "cards/manager_configuration.html" $pageData }}
+    {{- end -}}
+    {{- if not $hasManagerVersionCard -}}
+        {{ template "cards/manager_version_status.html" $pageData }}
+    {{- end -}}
 
     {{- $footerCards := index $cardSlots "footer" -}}
     {{- if $footerCards -}}
-    <div class="flex flex-col gap-6" data-slot="footer">
         {{- range $footerCards -}}
             {{- renderCard .Template .Data -}}
         {{- end -}}
-    </div>
     {{- end -}}
 
     {{- if not $hasManagerDiscordCard -}}
-    <div>
         {{ template "cards/manager_discord.html" $pageData }}
-    </div>
     {{- end -}}
 
     {{- if not $hasManagerLogsCard -}}
-    <div>
         {{ template "cards/manager_logs.html" $pageData }}
-    </div>
     {{- end -}}
 
 </div>

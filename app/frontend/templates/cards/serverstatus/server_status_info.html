@@ -113,11 +113,24 @@
 <div class="card card-server-info"
     id="card-server-status-info"
     data-card-id="server-status-info"
+    data-server-section
+    data-section-title="Server Info"
     hx-get="/server/{{$server.ID}}/cards/server-status-info"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-info'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header server-info-header">
+    <details class="card-collapse" data-collapse-id="server-status-info" open>
+        <summary class="card-collapse-summary">
+            <div class="card-header-text">
+                <h2 class="card-title">Server Info</h2>
+                <p class="card-subtitle">Identity, world, and configuration at a glance.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="server-info-header">
         <div class="server-identity">
             <div class="server-title-row">
                 <div class="server-name-block">
@@ -348,5 +361,7 @@
             </div>
         </div>
     </div>
+        </div>
+    </details>
 </div>
 {{end}}

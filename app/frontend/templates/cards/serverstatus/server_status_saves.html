@@ -1,29 +1,37 @@
 {{define "cards/server_status_saves.html"}}
 <div class="card card-secondary card-saves" id="saves-card"
     data-card-id="server-status-saves"
+    data-server-section
+    data-section-title="Saves"
     data-card-lazy="true"
     data-player-saves="{{if .server.PlayerSaves}}true{{else}}false{{end}}"
     hx-get="/server/{{.server.ID}}/cards/server-status-saves"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-saves'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header card-header-with-actions">
-        <div>
-            <h2 class="card-title">Saves</h2>
-            <p class="card-subtitle">Browse auto, quick, manual, and per-player snapshots.</p>
-        </div>
-        <div class="chip-row">
-            <span class="chip chip-sm {{if .server.PlayerSaves}}chip-success{{else}}chip-muted{{end}}">
-                <i data-feather="user-check"></i>
-                Player Saves {{if .server.PlayerSaves}}Enabled{{else}}Disabled{{end}}
+    <details class="card-collapse" data-collapse-id="server-status-saves" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
+                <h2 class="card-title">Saves</h2>
+                <p class="card-subtitle">Browse auto, quick, manual, and per-player snapshots.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
             </span>
-            <span class="chip chip-sm chip-muted">
-                <i data-feather="clock"></i>
-                Every {{if gt .server.SaveInterval 0}}{{.server.SaveInterval}}s{{else}}default{{end}}
-            </span>
-        </div>
-    </div>
-    <div class="card-body saves-body">
+        </summary>
+        <div class="card-collapse-body">
+            <div class="chip-row">
+                <span class="chip chip-sm {{if .server.PlayerSaves}}chip-success{{else}}chip-muted{{end}}">
+                    <i data-feather="user-check"></i>
+                    Player Saves {{if .server.PlayerSaves}}Enabled{{else}}Disabled{{end}}
+                </span>
+                <span class="chip chip-sm chip-muted">
+                    <i data-feather="clock"></i>
+                    Every {{if gt .server.SaveInterval 0}}{{.server.SaveInterval}}s{{else}}default{{end}}
+                </span>
+            </div>
+            <div class="card-body saves-body">
         <div class="latest-save-summary" id="latest-save-summary">
             <div class="latest-save-details">
                 <div class="latest-save-icon" aria-hidden="true">
@@ -73,6 +81,8 @@
                 <p class="empty-state-description">Select a tab or trigger a save from the controls card.</p>
             </div>
         </div>
-    </div>
+            </div>
+        </div>
+    </details>
 </div>
 {{end}}

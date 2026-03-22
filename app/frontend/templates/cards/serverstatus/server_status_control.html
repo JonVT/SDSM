@@ -21,25 +21,34 @@
 {{- end -}}
 <div class="card" id="server-control-card"
     data-card-id="server-status-control"
+    data-server-section
+    data-section-title="Server Control"
     hx-get="/server/{{.server.ID}}/cards/server-status-control"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-control'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header flex justify-between items-center gap-4 flex-wrap">
-        <div class="flex items-center gap-3">
-            <h2 class="card-title">Server Control</h2>
-            <div id="server-status-indicator" class="status-indicator {{$ctlStatusClass}}">
-                <div class="status-light"></div>
-                <span class="status-text">{{$ctlStatusLabel}}</span>
+    <details class="card-collapse" data-collapse-id="server-status-control" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
+                <h2 class="card-title">Server Control</h2>
+                <p class="card-subtitle">Power, saves, updates, and console commands.</p>
             </div>
-        </div>
-        <div class="card-header-actions flex items-center gap-3">
-            <div id="storm-status-pill" class="status-pill storm-pill {{if .server.Storming}}is-storm{{else}}is-clear{{end}}">
-                {{if .server.Storming}}Storming{{else}}Calm{{end}}
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="flex items-center justify-between gap-3">
+                <div id="server-status-indicator" class="status-indicator {{$ctlStatusClass}}">
+                    <div class="status-light"></div>
+                    <span class="status-text">{{$ctlStatusLabel}}</span>
+                </div>
+                <div id="storm-status-pill" class="status-pill storm-pill {{if .server.Storming}}is-storm{{else}}is-clear{{end}}">
+                    {{if .server.Storming}}Storming{{else}}Calm{{end}}
+                </div>
             </div>
-        </div>
-    </div>
-    <div class="card-body space-y-6">
+            <div class="card-body space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 control-metrics">
             <div class="control-metric">
                 <div class="metric-label text-sm text-muted uppercase tracking-wide">Started</div>
@@ -166,6 +175,8 @@
                 </div>
             </form>
         </div>
-    </div>
+            </div>
+        </div>
+    </details>
 </div>
 {{end}}

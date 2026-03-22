@@ -4,32 +4,40 @@
 {{$bannedEntries := .banned}}
 <div class="card card-players" id="players-card"
     data-card-id="server-status-players"
+    data-server-section
+    data-section-title="Players"
     hx-get="/server/{{.server.ID}}/cards/server-status-players"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-players'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header card-header-with-actions">
-        <div>
-            <h2 class="card-title">Players</h2>
-            <p class="card-subtitle">Monitor active sessions, historic joins, and ban state in one place.</p>
-        </div>
-        <div class="chip-row" aria-label="Server player configuration">
-            <span class="chip chip-sm {{if .server.PlayerSaves}}chip-success{{else}}chip-muted{{end}}">
-                <i data-feather="save"></i>
-                Player Saves {{if .server.PlayerSaves}}Enabled{{else}}Disabled{{end}}
+    <details class="card-collapse" data-collapse-id="server-status-players" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
+                <h2 class="card-title">Players</h2>
+                <p class="card-subtitle">Monitor active sessions, historic joins, and ban state in one place.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
             </span>
-            <span class="chip chip-sm {{if .server.AutoPause}}chip-success{{else}}chip-muted{{end}}">
-                <i data-feather="pause"></i>
-                Auto Pause {{if .server.AutoPause}}On{{else}}Off{{end}}
-            </span>
-            <span class="chip chip-sm chip-muted">
-                <i data-feather="users"></i>
-                Max {{if gt .server.MaxClients 0}}{{.server.MaxClients}}{{else}}—{{end}} Clients
-            </span>
-        </div>
-    </div>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="chip-row" aria-label="Server player configuration">
+                <span class="chip chip-sm {{if .server.PlayerSaves}}chip-success{{else}}chip-muted{{end}}">
+                    <i data-feather="save"></i>
+                    Player Saves {{if .server.PlayerSaves}}Enabled{{else}}Disabled{{end}}
+                </span>
+                <span class="chip chip-sm {{if .server.AutoPause}}chip-success{{else}}chip-muted{{end}}">
+                    <i data-feather="pause"></i>
+                    Auto Pause {{if .server.AutoPause}}On{{else}}Off{{end}}
+                </span>
+                <span class="chip chip-sm chip-muted">
+                    <i data-feather="users"></i>
+                    Max {{if gt .server.MaxClients 0}}{{.server.MaxClients}}{{else}}—{{end}} Clients
+                </span>
+            </div>
 
-    <div class="card-body p-0">
+            <div class="card-body p-0">
         <div class="tabs" role="tablist">
             <button class="tab active" id="tab-live" role="tab" aria-selected="true" aria-controls="players-live-panel">
                 Live <span class="badge" id="live-count">{{len $liveClients}}</span>
@@ -204,6 +212,8 @@
             </div>
         </div>
         {{end}}
-    </div>
+            </div>
+        </div>
+    </details>
 </div>
 {{end}}

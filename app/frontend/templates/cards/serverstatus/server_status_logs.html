@@ -1,31 +1,53 @@
 {{define "cards/server_status_logs.html"}}
 <div class="card col-span-full" id="server-logs-card"
     data-card-id="server-status-logs"
+    data-server-section
+    data-section-title="Logs"
     data-card-lazy="true"
+    data-log-viewer
+    data-log-base-url="/api/servers/{{.server.ID}}"
     hx-get="/server/{{.server.ID}}/cards/server-status-logs"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-logs'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <button id="serverLogsToggle" class="card-header" aria-expanded="true" aria-controls="serverLogsContent">
-        <h2 class="card-title">Logs</h2>
-        <div class="card-header-actions">
-            <div class="btn-group">
-                <button type="button" id="sl-refresh" class="btn btn-sm btn-secondary">Refresh</button>
-                <button type="button" id="sl-download" class="btn btn-sm btn-secondary">Download</button>
-                {{if eq .role "admin"}}
-                <button type="button" id="sl-clear" class="btn btn-sm btn-danger">Clear</button>
-                {{end}}
+    <details class="card-collapse" data-collapse-id="server-status-logs" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
+                <h2 class="card-title">Logs</h2>
+                <p class="card-subtitle">Tail server log files with live streaming.</p>
             </div>
-            <i data-feather="chevron-down" class="ml-2"></i>
-        </div>
-    </button>
-    <div id="serverLogsContent" class="card-body">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div id="log-tabs" role="tablist" class="flex flex-col gap-1">
-                <div class="empty-state hidden" id="log-tabs-empty">No log files found</div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="card-actions">
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-secondary" data-log-refresh>
+                        <i data-feather="refresh-cw" aria-hidden="true"></i>
+                        <span>Refresh</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-log-download>
+                        <i data-feather="download" aria-hidden="true"></i>
+                        <span>Download</span>
+                    </button>
+                    {{if eq .role "admin"}}
+                    <button type="button" class="btn btn-sm btn-danger" data-log-clear>
+                        <i data-feather="trash-2" aria-hidden="true"></i>
+                        <span>Clear</span>
+                    </button>
+                    {{end}}
+                </div>
             </div>
-            <div id="log-viewer" class="md:col-span-3 log-viewer" role="region"></div>
+            <div class="tabs" role="tablist" aria-label="Log files" data-log-tabs>
+                <div class="empty-state" data-log-empty>Loading log list…</div>
+            </div>
+            <div class="log-viewer" data-log-view aria-live="polite" aria-label="Log output">
+                <div class="empty-state">Select a log to stream its output.</div>
+            </div>
+            <div class="log-status" data-log-status></div>
         </div>
-    </div>
+    </details>
 </div>
 {{end}}

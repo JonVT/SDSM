@@ -2,27 +2,35 @@
 {{$chatMessages := .server.Chat}}
 <div class="card card-secondary card-chat" id="chat-card"
     data-card-id="server-status-chat"
+    data-server-section
+    data-section-title="Chat"
     hx-get="/server/{{.server.ID}}/cards/server-status-chat"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-chat'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header card-header-with-actions">
-        <div>
-            <h2 class="card-title">Chat</h2>
-            <p class="card-subtitle">Live transcript pulled from server SAY events.</p>
-        </div>
-        <div class="chip-row">
-            <span class="chip chip-sm {{if .server.Running}}chip-success{{else}}chip-muted{{end}}">
-                <i data-feather="activity"></i>
-                {{if .server.Running}}Live{{else}}Server Offline{{end}}
+    <details class="card-collapse" data-collapse-id="server-status-chat" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
+                <h2 class="card-title">Chat</h2>
+                <p class="card-subtitle">Live transcript pulled from server SAY events.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
             </span>
-            <span class="chip chip-sm chip-muted">
-                <i data-feather="message-square"></i>
-                {{len $chatMessages}} messages captured
-            </span>
-        </div>
-    </div>
-    <div class="card-body chat-body">
+        </summary>
+        <div class="card-collapse-body">
+            <div class="chip-row">
+                <span class="chip chip-sm {{if .server.Running}}chip-success{{else}}chip-muted{{end}}">
+                    <i data-feather="activity"></i>
+                    {{if .server.Running}}Live{{else}}Server Offline{{end}}
+                </span>
+                <span class="chip chip-sm chip-muted">
+                    <i data-feather="message-square"></i>
+                    {{len $chatMessages}} messages captured
+                </span>
+            </div>
+            <div class="card-body chat-body">
         <div class="chat-log" id="chat-log" aria-live="polite">
             {{if $chatMessages}}
                 {{range $chatMessages}}
@@ -59,5 +67,7 @@
             </button>
         </form>
     </div>
+        </div>
+    </details>
 </div>
 {{end}}

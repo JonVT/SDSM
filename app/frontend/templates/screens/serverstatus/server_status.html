@@ -2,7 +2,7 @@
 {{define "page"}}server/{{.server.ID}}{{end}}
 
 {{define "server_status.html"}}
-<div class="server-content grid gap-6"
+<div class="server-content"
     data-server-root
     data-page-title="{{.server.Name}}"
     data-server-id="{{.server.ID}}"
@@ -60,7 +60,7 @@
     {{- end -}}
 
     {{- $gridCards := index $cardSlots "grid" -}}
-    <div class="server-card-grid server-card-grid-halves" data-slot="grid">
+    <div class="server-card-grid server-card-grid-halves" data-slot="grid" data-card-sortable="server-{{.server.ID}}">
         {{- if $gridCards -}}
             {{- range $gridCards -}}
                 {{- renderCard .Template .Data -}}
@@ -85,6 +85,9 @@
         {{- if not $hasDiscordCard -}}
             {{template "cards/server_status_discord.html" $pageData}}
         {{- end -}}
+        {{- if not $hasLogsCard -}}
+            {{template "cards/server_status_logs.html" $pageData}}
+        {{- end -}}
     </div>
 
     {{- $footerCards := index $cardSlots "footer" -}}
@@ -94,9 +97,6 @@
                 {{- renderCard .Template .Data -}}
             {{- end -}}
         </div>
-    {{- end -}}
-    {{- if not $hasLogsCard -}}
-        {{template "cards/server_status_logs.html" $pageData}}
     {{- end -}}
 </div>
 

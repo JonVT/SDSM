@@ -2544,15 +2544,21 @@
       }
     },
 
-    // Manager logs card
-    managerLogs: {
+    // Generic log viewer – works for both manager and server logs cards.
+    // Each card element must have:
+    //   data-log-viewer           – marks the card as a log viewer instance
+    //   data-log-base-url="..."   – API prefix, e.g. "/api/manager" or "/api/servers/1"
+    // Inside the card use data-* attributes for child elements:
+    //   data-log-tabs, data-log-empty, data-log-view, data-log-status,
+    //   data-log-refresh, data-log-download, data-log-clear
+    logViewer: {
       tailInterval: 4000,
       maxBuffer: 500000,
       instances: new WeakMap(),
 
       init: function(root) {
         const scope = root instanceof Element ? root : document;
-        const cards = scope.querySelectorAll('[data-manager-logs]');
+        const cards = scope.querySelectorAll('[data-log-viewer]');
         cards.forEach((card) => {
           if (card && card.isConnected) {
             this.mount(card);
@@ -2564,13 +2570,17 @@
         if (!card || this.instances.has(card)) {
           return;
         }
+        const baseUrl = card.getAttribute('data-log-base-url') || '';
         const state = {
           card,
+          baseUrl,
           tabs: card.querySelector('[data-log-tabs]'),
           empty: card.querySelector('[data-log-empty]'),
           view: card.querySelector('[data-log-view]'),
           status: card.querySelector('[data-log-status]'),
           refresh: card.querySelector('[data-log-refresh]'),
+          download: card.querySelector('[data-log-download]'),
+          clear: card.querySelector('[data-log-clear]'),
           activeLog: null,
           offset: -1,
           pollTimer: null,
@@ -2587,19 +2597,53 @@
       },
 
       bind: function(card, state) {
+        const self = this;
         if (state.tabs) {
           state.tabs.addEventListener('click', (event) => {
             const tab = event.target.closest('[data-log-file]');
             if (!tab) return;
             const file = tab.dataset.logFile;
             if (file) {
-              SDSM.managerLogs.activate(card, state, file);
+              self.activate(card, state, file);
             }
           });
         }
         if (state.refresh) {
           state.refresh.addEventListener('click', () => {
-            SDSM.managerLogs.fetchList(card, state, { force: true });
+            self.fetchList(card, state, { force: true });
+          });
+        }
+        if (state.download) {
+          state.download.addEventListener('click', () => {
+            if (!state.activeLog) {
+              if (window.showToast) window.showToast('Info', 'Please select a log file to download.', 'info');
+              return;
+            }
+            window.location.href = `${state.baseUrl}/log/download?name=${encodeURIComponent(state.activeLog)}`;
+          });
+        }
+        if (state.clear) {
+          state.clear.addEventListener('click', () => {
+            if (!state.activeLog) {
+              if (window.showToast) window.showToast('Info', 'Select a log file to clear.', 'info');
+              return;
+            }
+            if (!confirm('Are you sure you want to clear this log?')) return;
+            fetch(`${state.baseUrl}/log/clear`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'HX-Request': 'true' },
+              credentials: 'same-origin',
+              body: JSON.stringify({ name: state.activeLog })
+            })
+            .then((resp) => {
+              if (!resp.ok) throw new Error('Unable to clear log.');
+              state.offset = -1;
+              state.buffer = '';
+              self.fetchList(card, state, { force: true });
+            })
+            .catch((err) => {
+              if (window.showToast) window.showToast('Logs', err.message || 'Unable to clear log.', 'danger');
+            });
           });
         }
         if (state.view) {
@@ -2639,17 +2683,17 @@
         }
         state.loadingList = true;
         if (state.empty) {
-          state.empty.textContent = 'Loading log list…';
+          state.empty.textContent = 'Loading log list\u2026';
           state.empty.classList.remove('hidden');
         }
-        fetch('/api/manager/logs', {
+        fetch(`${state.baseUrl}/logs`, {
           method: 'GET',
           headers: { Accept: 'application/json', 'HX-Request': 'true' },
           credentials: 'same-origin'
         })
         .then((resp) => {
           if (resp.status === 403) {
-            throw new Error('Admin access required to read logs.');
+            throw new Error('Access denied.');
           }
           if (!resp.ok) {
             throw new Error('Unable to load log list.');
@@ -2673,7 +2717,6 @@
       },
 
       showListError: function(state, error) {
-        console.error('Manager log list failed:', error);
         if (state.empty) {
           state.empty.textContent = error && error.message ? error.message : 'Unable to load logs.';
           state.empty.classList.remove('hidden');
@@ -2730,7 +2773,7 @@
         this.clearTimers(state);
         this.updateTabs(state);
         if (state.view) {
-          state.view.textContent = 'Connecting to log…';
+          state.view.textContent = 'Connecting to log\u2026';
         }
         this.updateStatus(state, { pending: true });
         this.pollTail(card, state);
@@ -2765,7 +2808,7 @@
           back: '8192',
           max: '65536'
         });
-        fetch(`/api/manager/log/tail?${params.toString()}`, {
+        fetch(`${state.baseUrl}/log/tail?${params.toString()}`, {
           method: 'GET',
           headers: { Accept: 'application/json', 'HX-Request': 'true' },
           credentials: 'same-origin',
@@ -2823,7 +2866,6 @@
       },
 
       handleTailError: function(state, error) {
-        console.error('Manager log tail failed:', error);
         if (!state.hadError && window.showToast) {
           window.showToast('Logs', error && error.message ? error.message : 'Unable to tail log.', 'danger');
         }
@@ -2846,7 +2888,7 @@
           }
         }
         if (!state.buffer) {
-          state.view.textContent = 'Waiting for log data…';
+          state.view.textContent = 'Waiting for log data\u2026';
           return;
         }
         const stick = state.autoScroll || (state.view.scrollHeight - state.view.clientHeight - state.view.scrollTop < 24);
@@ -2863,15 +2905,20 @@
           return;
         }
         if (opts.pending) {
-          state.status.textContent = `Connecting to ${state.activeLog}…`;
+          state.status.textContent = `Connecting to ${state.activeLog}\u2026`;
           return;
         }
         const sizeLabel = typeof state.lastSize === 'number' && state.lastSize >= 0
           ? (SDSM.ui && typeof SDSM.ui.formatBytes === 'function' ? SDSM.ui.formatBytes(state.lastSize) : `${state.lastSize} bytes`)
           : 'Size unknown';
         const timestamp = new Date().toLocaleTimeString();
-        state.status.textContent = `Streaming ${state.activeLog} · ${sizeLabel} · Updated ${timestamp}`;
+        state.status.textContent = `Streaming ${state.activeLog} \u00b7 ${sizeLabel} \u00b7 Updated ${timestamp}`;
       }
+    },
+
+    // Backward compat alias
+    managerLogs: {
+      init: function(root) { SDSM.logViewer.init(root); }
     },
 
     // Frame Management
@@ -3016,6 +3063,156 @@
           if (!target) {
             return;
           }
+          const area = this.contentArea || document.getElementById('content-area');
+          if (area && this.prefersContentScroll()) {
+            const containerRect = area.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            const offset = targetRect.top - containerRect.top + area.scrollTop - 12;
+            area.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+          } else {
+            const top = target.getBoundingClientRect().top + window.pageYOffset - 80;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          }
+          this.setActive(sectionId);
+        },
+
+        setActive(sectionId) {
+          this.activeId = sectionId;
+          this.sections.forEach((section) => {
+            if (section.button) {
+              section.button.classList.toggle('is-active', section.id === sectionId);
+            }
+          });
+        }
+      },
+
+      serverSubmenu: {
+        containers: {},
+        contentArea: null,
+        sections: [],
+        activeId: null,
+        currentPath: '',
+
+        init() {
+          this.contentArea = document.getElementById('content-area');
+          document.querySelectorAll('[data-server-submenu]').forEach((el) => {
+            const id = el.getAttribute('data-server-submenu');
+            el.setAttribute('role', 'menu');
+            this.containers[id] = el;
+          });
+        },
+
+        serverIdFromPath(path) {
+          const m = /^\/server\/(\d+)$/.exec(path);
+          return m ? m[1] : null;
+        },
+
+        refreshForPath(path) {
+          this.currentPath = path || '';
+          const activeId = this.serverIdFromPath(path);
+          // Hide all server submenus
+          Object.keys(this.containers).forEach((id) => {
+            if (id !== activeId) {
+              this.hideContainer(this.containers[id]);
+              this.clearContainer(this.containers[id]);
+            }
+          });
+          if (!activeId || !this.containers[activeId]) {
+            this.sections = [];
+            this.activeId = null;
+            return;
+          }
+          this.contentArea = document.getElementById('content-area');
+          this.showContainer(this.containers[activeId]);
+          this.build(activeId);
+        },
+
+        handleContentSwap(target) {
+          if (!target || target.id !== 'content-area') return;
+          this.contentArea = target;
+          const activeId = this.serverIdFromPath(this.currentPath || window.location.pathname);
+          if (activeId && this.containers[activeId]) {
+            this.showContainer(this.containers[activeId]);
+            this.build(activeId, target);
+          }
+        },
+
+        clearContainer(container) {
+          if (!container) return;
+          container.innerHTML = '';
+        },
+
+        showContainer(container) {
+          if (!container) return;
+          container.hidden = false;
+          container.classList.add('active');
+        },
+
+        hideContainer(container) {
+          if (!container) return;
+          container.classList.remove('active');
+          container.hidden = true;
+        },
+
+        build(serverId, root) {
+          const container = this.containers[serverId];
+          if (!container) return;
+          const scope = root || this.contentArea || document.getElementById('content-area');
+          if (!scope) {
+            this.clearContainer(container);
+            this.hideContainer(container);
+            return;
+          }
+          this.contentArea = scope;
+          const nodes = Array.from(scope.querySelectorAll('[data-server-section]'));
+          if (!nodes.length) {
+            this.clearContainer(container);
+            this.hideContainer(container);
+            return;
+          }
+          this.sections = nodes.map((node, index) => {
+            if (!node.id) {
+              node.id = `server-section-${index + 1}`;
+            }
+            const title = (node.dataset.sectionTitle || this.extractHeading(node) || `Section ${index + 1}`).trim();
+            return { id: node.id, title, node };
+          });
+          this.renderButtons(container);
+          if (this.sections[0]) {
+            this.setActive(this.sections[0].id);
+          }
+        },
+
+        extractHeading(node) {
+          const heading = node.querySelector('[data-section-label], .card-title, h2, h3, h4, summary');
+          return heading ? heading.textContent : '';
+        },
+
+        renderButtons(container) {
+          if (!container) return;
+          const fragment = document.createDocumentFragment();
+          container.innerHTML = '';
+          this.sections.forEach((section) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'nav-submenu-item';
+            btn.textContent = section.title;
+            btn.dataset.sectionId = section.id;
+            btn.addEventListener('click', () => this.scrollToSection(section.id));
+            section.button = btn;
+            fragment.appendChild(btn);
+          });
+          container.appendChild(fragment);
+        },
+
+        prefersContentScroll() {
+          const area = this.contentArea || document.getElementById('content-area');
+          return !!(area && area.scrollHeight - area.clientHeight > 12);
+        },
+
+        scrollToSection(sectionId) {
+          const target = document.getElementById(sectionId);
+          if (!target) return;
           const area = this.contentArea || document.getElementById('content-area');
           if (area && this.prefersContentScroll()) {
             const containerRect = area.getBoundingClientRect();
@@ -3210,6 +3407,7 @@
 
       init: () => {
         SDSM.frame.managerSubmenu.init();
+        SDSM.frame.serverSubmenu.init();
         SDSM.frame.sidebar.init();
 
         // Update date/time display
@@ -3235,6 +3433,7 @@
           SDSM.frame.updateTitle(targetPath);
           SDSM.frame.updateActiveNav(targetPath);
           SDSM.frame.managerSubmenu.refreshForPath(targetPath);
+          SDSM.frame.serverSubmenu.refreshForPath(targetPath);
         };
 
         // Listen for HTMX navigation to update title and active nav item
@@ -3251,6 +3450,7 @@
             if (evt.target && evt.target.id === 'content-area') {
               syncNavState(window.location.pathname);
               SDSM.frame.managerSubmenu.handleContentSwap(evt.target);
+              SDSM.frame.serverSubmenu.handleContentSwap(evt.target);
             }
           });
         }
@@ -3262,6 +3462,7 @@
           if (target && target.dataset.target) {
             SDSM.frame.updateActiveNav(target.dataset.target);
             SDSM.frame.managerSubmenu.refreshForPath(target.dataset.target);
+            SDSM.frame.serverSubmenu.refreshForPath(target.dataset.target);
             // Close the mobile drawer after navigation
             if (window.matchMedia('(max-width: 1024px)').matches) {
               SDSM.frame.sidebar.closeMobileMenu();
@@ -3306,6 +3507,9 @@
       if (this.cards) {
         this.cards.bindHtmxHooks();
         this.cards.init(document);
+      }
+      if (this.cardSort) {
+        this.cardSort.init(document);
       }
 
       const themeToggleBtn = document.getElementById('theme-toggle');
@@ -3375,15 +3579,17 @@
               }
             }
             SDSM.frame.managerSubmenu.handleContentSwap(swapRoot);
+            SDSM.frame.serverSubmenu.handleContentSwap(swapRoot);
           }
 
           if (swapRoot) {
             this.relativeTime.refresh(swapRoot);
             this.collapses.init(swapRoot);
-            this.managerLogs.init(swapRoot);
+            this.logViewer.init(swapRoot);
             if (this.cards) {
               this.cards.init(swapRoot);
             }
+            // cardSort self-initialises via htmx:load in card-sort.js.
           } else {
             this.relativeTime.refresh(e.target);
           }
@@ -3532,7 +3738,7 @@
       this.forms.syncTlsFields();
 
       this.collapses.init();
-      this.managerLogs.init();
+      this.logViewer.init();
 
       document.body.addEventListener('click', (event) => {
         const renameBtn = event.target.closest('[data-action="rename-server"]');

@@ -10,27 +10,29 @@
 {{$startConditions := index $selectedWorldEntry "conditions"}}
 {{$difficultyOptions := .release_difficulties}}
 {{if .server.Beta}}{{$difficultyOptions = .beta_difficulties}}{{end}}
-<div class="card card-secondary col-span-full card-config" id="server-config-card"
+<div class="card card-secondary card-config" id="server-config-card"
     data-card-id="server-status-config"
+    data-server-section
+    data-section-title="Configuration"
     data-current-version="{{$versionKey}}"
     data-current-world="{{$selectedWorldID}}"
     hx-get="/server/{{.server.ID}}/cards/server-status-config"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'server-status-config'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <form id="server-config-form" class="config-form" autocomplete="off">
-        <div class="card-header card-header-with-actions">
-            <div>
+    <details class="card-collapse" data-collapse-id="server-status-config">
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div class="card-header-text">
                 <h2 class="card-title">Configuration</h2>
                 <p class="card-subtitle">Adjust world, automation, and networking from one panel.</p>
             </div>
-            <button type="button" id="serverConfigToggle" class="btn btn-ghost btn-sm" aria-expanded="false" aria-controls="serverConfigContent">
-                <span id="serverConfigToggleLabel">Expand</span>
+            <span class="collapse-chevron" data-collapse-icon>
                 <i data-feather="chevron-down" aria-hidden="true"></i>
-            </button>
-        </div>
-
-        <div id="serverConfigContent" class="config-content hidden">
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <form id="server-config-form" class="config-form" autocomplete="off">
             <section class="config-section">
                 <div class="config-section-header">
                     <p class="section-eyebrow">Identity &amp; World</p>
@@ -284,8 +286,9 @@
                     </button>
                 </div>
             </div>
+            </form>
         </div>
-    </form>
+    </details>
 </div>
 
 <script type="application/json" id="server-config-worlds-data">{{toJSON .worlds}}</script>
