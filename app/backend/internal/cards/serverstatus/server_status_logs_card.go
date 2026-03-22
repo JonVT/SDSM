@@ -29,7 +29,7 @@ func (serverStatusLogsCard) Screens() []cards.Screen {
 }
 
 func (serverStatusLogsCard) Slot() cards.Slot {
-	return cards.SlotFooter
+	return cards.SlotGrid
 }
 
 func (serverStatusLogsCard) FetchData(req *cards.Request) (gin.H, error) {

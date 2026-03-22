@@ -4781,6 +4781,50 @@ func (h *ManagerHandlers) APIServerPlayerSaveExclude(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "added": added, "deleted": deleted})
 }
 
+// APIServerPlayerSaveInclude removes a Steam ID from the server's player-save exclusion list.
+// JSON body: { "steam_id": "7656119..." }
+func (h *ManagerHandlers) APIServerPlayerSaveInclude(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	// Enforce RBAC
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	var req struct {
+		SteamID string `json:"steam_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.SteamID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "steam_id required"})
+		return
+	}
+
+	removed := s.RemovePlayerSaveExclude(req.SteamID)
+	if removed {
+		h.manager.Save()
+		ToastSuccess(c, "Player Save Enabled", "Player will now receive automatic saves.")
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "removed": removed})
+}
+
 // APIServerPlayerSaveDeleteAll deletes all player saves for a given SteamID without excluding the player.
 // JSON body: { "steam_id": "7656119..." }
 func (h *ManagerHandlers) APIServerPlayerSaveDeleteAll(c *gin.Context) {

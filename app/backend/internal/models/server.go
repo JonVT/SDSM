@@ -669,6 +669,21 @@ func (s *Server) AddPlayerSaveExclude(id string) bool {
 	return true
 }
 
+// RemovePlayerSaveExclude removes a Steam ID from the exclusion list.
+func (s *Server) RemovePlayerSaveExclude(id string) bool {
+	id = strings.TrimSpace(id)
+	if id == "" || s == nil {
+		return false
+	}
+	for i, v := range s.PlayerSaveExcludes {
+		if strings.EqualFold(v, id) {
+			s.PlayerSaveExcludes = append(s.PlayerSaveExcludes[:i], s.PlayerSaveExcludes[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) EnsureLogger(paths *utils.Paths) {
 	if paths == nil {
 		return
@@ -2568,7 +2583,6 @@ func (s *Server) Start() {
 		}
 		return b.String()
 	}
-	launchName := clean(s.Name)
 	launchWorld := clean(worldIdentifier)
 	launchDifficulty := clean(s.Difficulty)
 	launchStartCond := clean(s.StartCondition)
@@ -2578,7 +2592,7 @@ func (s *Server) Start() {
 	serverPassword := secure(s.Password)
 	serverAuthSecret := secure(s.AuthSecret)
 	args := []string{
-		"-FILE", "start", launchName, launchWorld, launchDifficulty, launchStartCond, launchStartLoc,
+		"-FILE", "start", s.Name, launchWorld, launchDifficulty, launchStartCond, launchStartLoc,
 		"-logFile", s.Paths.ServerOutputFile(s.ID),
 		"-SETTINGSPATH", s.Paths.ServerSettingsFile(s.ID),
 		"-SETTINGS",

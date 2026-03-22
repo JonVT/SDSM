@@ -199,39 +199,19 @@
                         </div>
                     </div>
                 </div>
-                <div class="server-quick-actions">
-                    <div class="quick-action-group">
-                        <button type="button" id="server-quick-start" class="btn btn-sm btn-success quick-action-btn">
-                            <i data-feather="play" class="btn-icon-left"></i>
-                            Start
-                        </button>
-                        <button type="button" id="server-quick-stop" class="btn btn-sm btn-danger quick-action-btn">
-                            <i data-feather="square" class="btn-icon-left"></i>
-                            Stop
-                        </button>
-                        <button type="button" id="server-quick-save" class="btn btn-sm btn-primary quick-action-btn">
-                            <i data-feather="save" class="btn-icon-left"></i>
-                            Save
-                        </button>
-                        <button type="button" id="server-quick-resume" class="btn btn-sm btn-secondary quick-action-btn">
-                            <i data-feather="play-circle" class="btn-icon-left"></i>
-                            Resume
-                        </button>
+                {{if .language_options}}
+                <div class="language-select compact">
+                    <label for="server-language-select" class="form-label">Language</label>
+                    <div class="language-select-control">
+                        <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
+                            {{range .language_options}}
+                            <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
+                            {{end}}
+                        </select>
+                        <span class="language-status" id="server-language-status" role="status" aria-live="polite"></span>
                     </div>
-                    {{if .language_options}}
-                    <div class="language-select compact">
-                        <label for="server-language-select" class="form-label">Language</label>
-                        <div class="language-select-control">
-                            <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
-                                {{range .language_options}}
-                                <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
-                                {{end}}
-                            </select>
-                            <span class="language-status" id="server-language-status" role="status" aria-live="polite"></span>
-                        </div>
-                    </div>
-                    {{end}}
                 </div>
+                {{end}}
             </div>
         </div>
     </div>
@@ -339,25 +319,9 @@
                 <p class="info-hint">Remote console endpoint.</p>
             </div>
             <div class="info-stat">
-                <div class="info-label">Storm Status</div>
-                <div class="info-value">{{if $server.Storming}}Active{{else}}Clear{{end}}</div>
-                <p class="info-hint">Manage storms from Control card.</p>
-            </div>
-            <div class="info-stat">
                 <div class="info-label">Port Mapping</div>
                 <div class="info-value">{{if $server.PortForwardActive}}Active{{else}}Idle{{end}}</div>
                 <p class="info-hint">{{if $externalPort}}External {{$externalPort}}{{else}}Awaiting gateway{{end}}</p>
-            </div>
-            <div class="info-stat">
-                <div class="info-label">Last Save</div>
-                <div class="info-value">
-                    {{if $server.ServerSaved}}
-                        {{$server.ServerSaved.Format "Jan 2, 2006 3:04 PM"}}
-                    {{else}}
-                        Not saved yet
-                    {{end}}
-                </div>
-                <p class="info-hint">Use Quick Save for manual checkpoints.</p>
             </div>
         </div>
     </div>

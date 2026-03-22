@@ -196,9 +196,6 @@ function initServerStatusDashboard() {
                 ? formatDurationFromStart(startedISO)
                 : '0m';
         }
-        if (lastSavedEl) {
-            lastSavedEl.textContent = formatDateTime(serverContent.dataset.serverSaved);
-        }
         const lastLogValue = serverContent.dataset.serverLastLog;
         updateLastLogDisplay(lastLogValue);
         updateLatestSaveSummary();
@@ -269,19 +266,11 @@ function initServerStatusDashboard() {
 
     function updateStormDisplay(isStorming) {
         const active = !!isStorming;
-        if (stormPill) {
-            stormPill.classList.toggle('is-storm', active);
-            stormPill.classList.toggle('is-clear', !active);
-            stormPill.textContent = active ? 'Storming' : 'Calm';
-        }
         const infoStormPill = document.querySelector('[data-server-storm-pill]');
         if (infoStormPill) {
             infoStormPill.classList.toggle('is-storm', active);
             infoStormPill.classList.toggle('is-clear', !active);
             infoStormPill.textContent = active ? 'Storming' : 'Calm';
-        }
-        if (stormStatusText) {
-            stormStatusText.textContent = active ? 'Storm active' : 'Calm skies';
         }
         if (btnStartStorm) {
             btnStartStorm.disabled = !lastKnownRunning || active;
@@ -301,17 +290,10 @@ function initServerStatusDashboard() {
         });
     }
     
-    const statusIndicator = document.getElementById('server-status-indicator');
-    const statusText = statusIndicator ? statusIndicator.querySelector('.status-text') : null;
-
     const btnStart = document.getElementById('btn-start');
     const btnStop = document.getElementById('btn-stop');
     const btnPause = document.getElementById('btn-pause');
-    const btnResume = document.getElementById('btn-resume');
-    const quickStartBtn = document.getElementById('server-quick-start');
-    const quickStopBtn = document.getElementById('server-quick-stop');
-    const quickSaveBtn = document.getElementById('server-quick-save');
-    const quickResumeBtn = document.getElementById('server-quick-resume');
+    const btnRestart = document.getElementById('btn-restart');
         const worldDownloadSelect = document.getElementById('world-download-select');
         const worldDownloadStatus = document.getElementById('world-download-status');
     const btnSave = document.getElementById('btn-save');
@@ -327,15 +309,13 @@ function initServerStatusDashboard() {
     let currentLanguage = (serverContent?.dataset?.serverLanguage || '') || (languageSelect ? languageSelect.value : '');
     const startedAtEl = document.getElementById('server-started-at');
     const uptimeEl = document.getElementById('server-uptime');
-    const lastSavedEl = document.getElementById('server-last-saved');
     const lastLogEl = document.getElementById('server-last-log');
     const latestSaveSummary = document.getElementById('latest-save-summary');
     const latestSaveNameEl = document.getElementById('latest-save-name');
     const latestSavePathEl = document.getElementById('latest-save-path');
     const latestSaveTimestampEl = document.getElementById('latest-save-timestamp');
     const latestSaveButton = document.getElementById('btn-load-latest-save');
-    const stormPill = document.getElementById('storm-status-pill');
-    const stormStatusText = document.getElementById('storm-status-text');
+
     const btnStartStorm = document.getElementById('btn-start-storm');
     const btnStopStorm = document.getElementById('btn-stop-storm');
     const cleanupButtons = Array.from(document.querySelectorAll('[data-cleanup-scope]'));
@@ -708,13 +688,6 @@ function initServerStatusDashboard() {
             }
         }
         
-        if(statusIndicator) {
-            statusIndicator.className = `status-indicator ${statusClass}`;
-        }
-        if(statusText) {
-            statusText.textContent = text;
-        }
-
         const infoStatePill = document.querySelector('[data-server-state-pill]');
         if (infoStatePill) {
             infoStatePill.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting', 'is-stopping', 'is-error');
@@ -724,12 +697,23 @@ function initServerStatusDashboard() {
 
         if(btnStart) btnStart.disabled = status.running || status.starting;
         if(btnStop) btnStop.disabled = !status.running || status.stopping;
-        if(btnPause) btnPause.disabled = !status.running || status.paused;
-        if(btnResume) btnResume.disabled = !status.paused;
-        if(quickStartBtn) quickStartBtn.disabled = status.running || status.starting;
-        if(quickStopBtn) quickStopBtn.disabled = !status.running || status.stopping;
-        if(quickSaveBtn) quickSaveBtn.disabled = !status.running;
-        if(quickResumeBtn) quickResumeBtn.disabled = !status.paused;
+        if(btnRestart) btnRestart.disabled = !status.running || status.stopping;
+        if(btnPause) {
+            btnPause.disabled = !status.running || status.stopping;
+            const icon = btnPause.querySelector('[data-feather], svg');
+            if (icon) {
+                if (icon.tagName === 'svg') {
+                    const i = document.createElement('i');
+                    i.setAttribute('data-feather', status.paused ? 'play' : 'pause');
+                    icon.replaceWith(i);
+                    if (typeof feather !== 'undefined') feather.replace();
+                } else {
+                    icon.setAttribute('data-feather', status.paused ? 'play' : 'pause');
+                    if (typeof feather !== 'undefined') feather.replace();
+                }
+            }
+            btnPause.title = status.paused ? 'Resume the server' : 'Pause the server';
+        }
         if(btnSave) btnSave.disabled = !status.running;
         if(btnQuickSave) btnQuickSave.disabled = !status.running;
         if(btnUpdate) btnUpdate.disabled = status.running;
@@ -1078,17 +1062,29 @@ function initServerStatusDashboard() {
 
         const statusCell = document.createElement('td');
         statusCell.className = 'player-status';
-        const savePill = document.createElement('span');
-        savePill.className = saveState.className;
-        if (saveState.icon) {
-            savePill.innerHTML = `<i data-feather="${saveState.icon}"></i> ${saveState.label}`;
+        if (saveState.state === 'enabled' || saveState.state === 'excluded') {
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = saveState.className + ' btn-toggle-player-save';
+            saveBtn.dataset.steamId = steamId;
+            saveBtn.dataset.playerName = player.name || steamId || '';
+            saveBtn.dataset.saveState = saveState.state;
+            if (saveState.icon) {
+                saveBtn.innerHTML = `<i data-feather="${saveState.icon}"></i> ${saveState.label}`;
+            } else {
+                saveBtn.textContent = saveState.label;
+            }
+            saveBtn.title = saveState.state === 'enabled' ? 'Click to disable player saves' : 'Click to enable player saves';
+            statusCell.appendChild(saveBtn);
         } else {
+            const savePill = document.createElement('span');
+            savePill.className = saveState.className;
             savePill.textContent = saveState.label;
+            if (saveState.title) {
+                savePill.title = saveState.title;
+            }
+            statusCell.appendChild(savePill);
         }
-        if (saveState.title) {
-            savePill.title = saveState.title;
-        }
-        statusCell.appendChild(savePill);
         row.appendChild(statusCell);
 
         if (isAdminUser) {
@@ -1181,17 +1177,25 @@ function initServerStatusDashboard() {
 
         const statusCell = document.createElement('td');
         statusCell.className = 'player-status';
-        const savePill = document.createElement('span');
-        savePill.className = saveState.className;
-        if (saveState.icon) {
-            savePill.innerHTML = `<i data-feather="${saveState.icon}"></i> ${saveState.label}`;
+        if (saveState.state === 'enabled' || saveState.state === 'excluded') {
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = saveState.className + ' btn-toggle-player-save';
+            saveBtn.dataset.steamId = steamId;
+            saveBtn.dataset.playerName = player.name || steamId || '';
+            saveBtn.dataset.saveState = saveState.state;
+            saveBtn.innerHTML = '<i data-feather="save"></i>';
+            saveBtn.title = saveState.title;
+            statusCell.appendChild(saveBtn);
         } else {
+            const savePill = document.createElement('span');
+            savePill.className = saveState.className;
             savePill.textContent = saveState.label;
+            if (saveState.title) {
+                savePill.title = saveState.title;
+            }
+            statusCell.appendChild(savePill);
         }
-        if (saveState.title) {
-            savePill.title = saveState.title;
-        }
-        statusCell.appendChild(savePill);
         row.appendChild(statusCell);
 
         if (isAdminUser) {
@@ -1330,17 +1334,25 @@ function initServerStatusDashboard() {
 
         const statusCell = document.createElement('td');
         statusCell.className = 'player-status';
-        const savePill = document.createElement('span');
-        savePill.className = saveState.className;
-        if (saveState.icon) {
-            savePill.innerHTML = `<i data-feather="${saveState.icon}"></i> ${saveState.label}`;
+        if (saveState.state === 'enabled' || saveState.state === 'excluded') {
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = saveState.className + ' btn-toggle-player-save';
+            saveBtn.dataset.steamId = group.steamId;
+            saveBtn.dataset.playerName = group.name || group.steamId || '';
+            saveBtn.dataset.saveState = saveState.state;
+            saveBtn.innerHTML = '<i data-feather="save"></i>';
+            saveBtn.title = saveState.title;
+            statusCell.appendChild(saveBtn);
         } else {
+            const savePill = document.createElement('span');
+            savePill.className = saveState.className;
             savePill.textContent = saveState.label;
+            if (saveState.title) {
+                savePill.title = saveState.title;
+            }
+            statusCell.appendChild(savePill);
         }
-        if (saveState.title) {
-            savePill.title = saveState.title;
-        }
-        statusCell.appendChild(savePill);
         row.appendChild(statusCell);
 
         if (isAdminUser) {
@@ -1521,9 +1533,9 @@ function initServerStatusDashboard() {
             return { state: 'disabled', label: 'Steam ID Needed', className: 'player-pill is-save-disabled', title: 'Steam ID required for player saves' };
         }
         if (playerSaveExcludes.has(steamId)) {
-            return { state: 'excluded', label: 'Save Excluded', className: 'player-pill is-save-disabled', icon: 'slash', title: 'Excluded from automatic player saves' };
+            return { state: 'excluded', className: 'btn btn-icon btn-sm btn-secondary save-off', icon: 'save', title: 'Click to enable player saves' };
         }
-        return { state: 'enabled', label: 'Save Active', className: 'player-pill is-save-enabled', icon: 'save', title: 'Player saves enabled' };
+        return { state: 'enabled', className: 'btn btn-icon btn-sm btn-success', icon: 'save', title: 'Click to disable player saves' };
     }
 
     function formatPlayerTimestamp(value) {
@@ -2149,16 +2161,11 @@ function initServerStatusDashboard() {
     const controlActions = [
         { button: btnStart, endpoint: '/start', label: 'Start' },
         { button: btnStop, endpoint: '/stop', label: 'Stop' },
-        { button: btnPause, endpoint: '/pause', label: 'Pause' },
-        { button: btnResume, endpoint: '/resume', label: 'Resume' },
+        { button: btnRestart, endpoint: '/restart', label: 'Restart' },
         { button: btnSave, endpoint: '/save', label: 'Save' },
         { button: btnQuickSave, endpoint: '/quicksave', label: 'Quick Save' },
         { button: btnUpdate, endpoint: '/update-server', label: 'Update' },
         { button: btnReinstall, endpoint: '/reinstall', label: 'Reinstall' },
-        { button: quickStartBtn, endpoint: '/start', label: 'Start' },
-        { button: quickStopBtn, endpoint: '/stop', label: 'Stop' },
-        { button: quickSaveBtn, endpoint: '/save', label: 'Save' },
-        { button: quickResumeBtn, endpoint: '/resume', label: 'Resume' },
     ];
 
     controlActions.forEach(({ button, endpoint, label }) => {
@@ -2172,6 +2179,20 @@ function initServerStatusDashboard() {
             }
         });
     });
+
+    if (btnPause) {
+        btnPause.addEventListener('click', async () => {
+            const isPaused = serverContent && serverContent.dataset.serverPaused === 'true';
+            const endpoint = isPaused ? '/resume' : '/pause';
+            const label = isPaused ? 'Resume' : 'Pause';
+            try {
+                await serverRequest(endpoint, { method: 'POST' });
+                fetchLatestStatus();
+            } catch (error) {
+                handleActionError(label, error);
+            }
+        });
+    }
 
     async function toggleStorm(start) {
         const button = start ? btnStartStorm : btnStopStorm;
@@ -2422,6 +2443,53 @@ function initServerStatusDashboard() {
                 serverRequest(`/saves${buildQuery({ type, name: filename })}`, { method: 'DELETE' })
                     .then(() => fetchSaves(currentSavesFilter))
                     .catch(err => handleActionError('Delete Save', err));
+            }
+            return;
+        }
+        const toggleSaveBtn = e.target.closest('.btn-toggle-player-save');
+        if (toggleSaveBtn) {
+            if (!playerSavesEnabled) {
+                return;
+            }
+            const steamId = toggleSaveBtn.dataset.steamId;
+            const playerName = toggleSaveBtn.dataset.playerName || steamId || 'this player';
+            const currentState = toggleSaveBtn.dataset.saveState;
+            if (!steamId) {
+                return;
+            }
+            if (currentState === 'enabled') {
+                const warning = `Exclude ${playerName} from player saves?\n\nThis will immediately delete all of their saved data and block future saves until re-enabled.`;
+                if (!confirm(warning)) {
+                    return;
+                }
+                toggleSaveBtn.disabled = true;
+                serverRequest('/player-saves/exclude', { method: 'POST', body: { steam_id: steamId } })
+                    .then(() => {
+                        playerSaveExcludes.add(steamId);
+                        syncPlayerSaveExcludeDataset();
+                        toggleSaveBtn.dataset.saveState = 'excluded';
+                        toggleSaveBtn.className = 'btn btn-icon btn-sm btn-secondary save-off btn-toggle-player-save';
+                        toggleSaveBtn.title = 'Click to enable player saves';
+                        toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
+                        if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
+                        fetchSaves('player');
+                    })
+                    .catch((err) => handleActionError('Exclude Player', err))
+                    .finally(() => { toggleSaveBtn.disabled = false; });
+            } else {
+                toggleSaveBtn.disabled = true;
+                serverRequest('/player-saves/include', { method: 'POST', body: { steam_id: steamId } })
+                    .then(() => {
+                        playerSaveExcludes.delete(steamId);
+                        syncPlayerSaveExcludeDataset();
+                        toggleSaveBtn.dataset.saveState = 'enabled';
+                        toggleSaveBtn.className = 'btn btn-icon btn-sm btn-success btn-toggle-player-save';
+                        toggleSaveBtn.title = 'Click to disable player saves';
+                        toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
+                        if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
+                    })
+                    .catch((err) => handleActionError('Include Player', err))
+                    .finally(() => { toggleSaveBtn.disabled = false; });
             }
             return;
         }

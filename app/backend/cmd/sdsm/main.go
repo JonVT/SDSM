@@ -605,6 +605,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/servers/:server_id/ban", managerHandlers.APIServerBan)
 		api.POST("/servers/:server_id/unban", managerHandlers.APIServerUnban)
 		api.POST("/servers/:server_id/player-saves/exclude", managerHandlers.APIServerPlayerSaveExclude)
+		api.POST("/servers/:server_id/player-saves/include", managerHandlers.APIServerPlayerSaveInclude)
 		api.POST("/servers/:server_id/player-saves/delete-all", managerHandlers.APIServerPlayerSaveDeleteAll)
 		api.POST("/servers/:server_id/settings", managerHandlers.APIServerUpdateSettings)
 		api.POST("/servers/:server_id/rename", managerHandlers.APIServerRename)

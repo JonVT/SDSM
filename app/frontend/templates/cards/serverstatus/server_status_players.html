@@ -81,13 +81,13 @@
                                 </td>
                                 <td class="player-status">
                                     {{if $playerSaveEligible}}
-                                        <span class="player-pill is-save-enabled" title="Player saves enabled">
-                                            <i data-feather="save"></i> Save Active
-                                        </span>
+                                        <button type="button" class="btn btn-icon btn-sm btn-success btn-toggle-player-save" title="Click to disable player saves" data-steam-id="{{$steamID}}" data-player-name="{{if .Name}}{{.Name}}{{else}}{{$steamID}}{{end}}" data-save-state="enabled">
+                                            <i data-feather="save"></i>
+                                        </button>
                                     {{else if and $.server.PlayerSaves (ne $steamID "")}}
-                                        <span class="player-pill is-save-disabled" title="Excluded from automatic player saves">
-                                            <i data-feather="slash"></i> Save Excluded
-                                        </span>
+                                        <button type="button" class="btn btn-icon btn-sm btn-secondary btn-toggle-player-save save-off" title="Click to enable player saves" data-steam-id="{{$steamID}}" data-player-name="{{if .Name}}{{.Name}}{{else}}{{$steamID}}{{end}}" data-save-state="excluded">
+                                            <i data-feather="save"></i>
+                                        </button>
                                     {{else if $.server.PlayerSaves}}
                                         <span class="player-pill is-save-disabled" title="Steam ID required for player saves">Steam ID Needed</span>
                                     {{else}}
@@ -151,9 +151,13 @@
                                 </td>
                                 <td class="player-status">
                                     {{if $playerSaveEligible}}
-                                        <span class="player-pill is-save-enabled"><i data-feather="save"></i> Save Active</span>
+                                        <button type="button" class="btn btn-icon btn-sm btn-success btn-toggle-player-save" title="Click to disable player saves" data-steam-id="{{$steamID}}" data-player-name="{{if .Name}}{{.Name}}{{else}}{{$steamID}}{{end}}" data-save-state="enabled">
+                                            <i data-feather="save"></i>
+                                        </button>
                                     {{else if and $.server.PlayerSaves (ne $steamID "")}}
-                                        <span class="player-pill is-save-disabled">Excluded</span>
+                                        <button type="button" class="btn btn-icon btn-sm btn-secondary btn-toggle-player-save save-off" title="Click to enable player saves" data-steam-id="{{$steamID}}" data-player-name="{{if .Name}}{{.Name}}{{else}}{{$steamID}}{{end}}" data-save-state="excluded">
+                                            <i data-feather="save"></i>
+                                        </button>
                                     {{else if $.server.PlayerSaves}}
                                         <span class="player-pill is-save-disabled">Steam ID Needed</span>
                                     {{else}}

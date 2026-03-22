@@ -131,6 +131,13 @@
     flex-shrink: 0;
 }
 
+/* Keep title text left-aligned when drag handle is present */
+.card-collapse-summary > .card-drag-handle + *,
+.card-header > .card-drag-handle + * {
+    flex: 1;
+    min-width: 0;
+}
+
 .card-collapse[open] .collapse-chevron {
     transform: rotate(180deg);
 }
@@ -162,6 +169,11 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: var(--space-3);
+    }
+
+    .discord-collapse-summary > .card-drag-handle + * {
+        flex: 1;
+        min-width: 0;
     }
 
     .discord-collapse summary::-webkit-details-marker {
@@ -3218,6 +3230,34 @@ code.token-ref.copied {
     color: #fca5a5;
 }
 
+/* Toggle button for player save status in player rows */
+button.btn-toggle-player-save {
+    cursor: pointer;
+    transition: opacity var(--transition-fast), filter var(--transition-fast);
+    position: relative;
+}
+button.btn-toggle-player-save:hover {
+    opacity: 0.8;
+    filter: brightness(1.2);
+}
+button.btn-toggle-player-save:disabled {
+    cursor: wait;
+    opacity: 0.5;
+}
+/* Diagonal slash overlay for deactivated save state */
+button.btn-toggle-player-save.save-off::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 70%;
+    height: 2px;
+    background: currentColor;
+    border-radius: 1px;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    pointer-events: none;
+}
+
 .player-save-warning {
     display: flex;
     align-items: center;
@@ -3879,6 +3919,16 @@ code.token-ref.copied {
 
 .server-card-grid > .card {
     height: 100%;
+}
+
+/* Collapsed cards should not stretch to match their row neighbor */
+.server-card-grid > .card:has(details[data-collapse-id]:not([open])),
+.manager-content > .card:has(details[data-collapse-id]:not([open])),
+.manager-content > .glass-card:has(details[data-collapse-id]:not([open])),
+/* Cards without a collapse mechanism should also not stretch */
+.manager-content > .card:not(:has(details[data-collapse-id])) {
+    align-self: start;
+    height: auto;
 }
 
 .history-view-toggle {
