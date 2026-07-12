@@ -13,7 +13,6 @@ import (
 	"sdsm/app/backend/internal/version"
 )
 
-
 type bugReportRequest struct {
 	Title              string `json:"title"`
 	Description        string `json:"description"`
@@ -27,8 +26,15 @@ func (h *ManagerHandlers) BugReportPOST(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "uninitialized"})
 		return
 	}
-	// Use fixed webhook constant from shared constants package
-	wh := constants.SDSMCommunityBugReportWebhook
+	wh := constants.SDSMCommunityBugReportWebhook()
+	if wh == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":      "bug report webhook is not configured",
+			"env_var":    constants.SDSMCommunityBugReportWebhookEnv,
+			"retry_after": "configure webhook and retry",
+		})
+		return
+	}
 	var req bugReportRequest
 	if strings.Contains(c.GetHeader("Content-Type"), "application/json") {
 		if err := c.BindJSON(&req); err != nil {

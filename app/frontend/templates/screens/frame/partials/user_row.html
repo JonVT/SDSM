@@ -31,11 +31,11 @@
     </td>
     <td class="text-right">
         <div class="btn-group">
-            <button type="button" class="btn btn-secondary" onclick="SDSM.users.showResetPasswordModal('{{.Username}}')">
+            <button type="button" class="btn btn-secondary" data-users-action="reset-password" data-username="{{.Username}}">
                 <i data-feather="key"></i>
                 <span>Password</span>
             </button>
-            <button type="button" class="btn btn-secondary" onclick="SDSM.users.showAccessModal(this)" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" {{if not .CanEditAccess}}disabled title="Admins have access to all servers"{{end}}>
+            <button type="button" class="btn btn-secondary" data-users-action="access" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" {{if not .CanEditAccess}}disabled title="Admins have access to all servers"{{end}}>
                 <i data-feather="unlock"></i>
                 <span>Access</span>
             </button>

@@ -1,7 +1,17 @@
 package constants
 
-// SDSMCommunityBugReportWebhook is the fixed Discord webhook endpoint for routing
-// SDSM bug reports to the community server. Pre-1.0.0: no backward compatibility
-// guarantees; location or value may change freely. Post-1.0.0: treat as a stable
-// integration constant (changes require migration notes).
-const SDSMCommunityBugReportWebhook = "https://discord.com/api/webhooks/1439251050119954593/mZtNLOqb4rER-7zheo9HTXQ5Q75YIo5s7ikWYi8YGHfOOs2MHzrkITobRcgRsnUA23ze"
+import (
+	"os"
+	"strings"
+)
+
+// SDSMCommunityBugReportWebhookEnv is the environment variable used to resolve
+// the bug-report webhook at runtime. Keeping this external avoids hardcoding a
+// live secret in source and binaries.
+const SDSMCommunityBugReportWebhookEnv = "SDSM_COMMUNITY_BUG_REPORT_WEBHOOK"
+
+// SDSMCommunityBugReportWebhook returns the configured bug-report webhook URL.
+// Empty string means bug-report delivery is not configured.
+func SDSMCommunityBugReportWebhook() string {
+	return strings.TrimSpace(os.Getenv(SDSMCommunityBugReportWebhookEnv))
+}

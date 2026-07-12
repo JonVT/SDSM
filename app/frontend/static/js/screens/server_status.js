@@ -5,13 +5,146 @@ function initServerStatusDashboard() {
         return;
     }
 
+    if (typeof serverContent.__sdsmCleanup === 'function') {
+        try {
+            serverContent.__sdsmCleanup();
+        } catch (error) {
+            console.warn('Previous server status cleanup failed', error);
+        }
+    }
+
+    const cleanupCallbacks = [];
+    let isDisposed = false;
+    const registerCleanup = (fn) => {
+        if (typeof fn === 'function') {
+            cleanupCallbacks.push(fn);
+        }
+    };
+    const on = (target, type, handler, options) => {
+        if (!target || typeof target.addEventListener !== 'function') {
+            return;
+        }
+        target.addEventListener(type, handler, options);
+        registerCleanup(() => target.removeEventListener(type, handler, options));
+    };
+    const runCleanup = () => {
+        if (isDisposed) {
+            return;
+        }
+        isDisposed = true;
+        while (cleanupCallbacks.length) {
+            const disposer = cleanupCallbacks.pop();
+            try {
+                disposer();
+            } catch (error) {
+                console.warn('Server status cleanup error', error);
+            }
+        }
+        if (serverContent && serverContent.__sdsmCleanup === runCleanup) {
+            delete serverContent.__sdsmCleanup;
+        }
+    };
+    serverContent.__sdsmCleanup = runCleanup;
+
+    const sharedUtils = window.SDSMServerStatusUtils || {};
+    const parseCSVList = typeof sharedUtils.parseCSVList === 'function'
+        ? sharedUtils.parseCSVList
+        : function(value) {
+            if (!value) {
+                return [];
+            }
+            return value
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry.length > 0);
+        };
+    const readJSONScript = typeof sharedUtils.readJSONScript === 'function'
+        ? sharedUtils.readJSONScript
+        : function(id) {
+            const el = document.getElementById(id);
+            if (!el) {
+                return null;
+            }
+            const text = (el.textContent || '').trim();
+            if (!text) {
+                return null;
+            }
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                console.warn(`Unable to parse JSON from #${id}`, error);
+                return null;
+            }
+        };
+    const buildQuery = typeof sharedUtils.buildQuery === 'function'
+        ? sharedUtils.buildQuery
+        : function(params = {}) {
+            const search = new URLSearchParams();
+            Object.entries(params).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    search.append(key, value);
+                }
+            });
+            const query = search.toString();
+            return query ? `?${query}` : '';
+        };
+    const formatDateTime = typeof sharedUtils.formatDateTime === 'function'
+        ? sharedUtils.formatDateTime
+        : function(value) {
+            if (!value) {
+                return '—';
+            }
+            const date = value instanceof Date ? value : new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '—';
+            }
+            return date.toLocaleString();
+        };
+    const formatDurationFromStart = typeof sharedUtils.formatDurationFromStart === 'function'
+        ? sharedUtils.formatDurationFromStart
+        : function(startISO) {
+            if (!startISO) {
+                return '0m';
+            }
+            const start = new Date(startISO);
+            if (Number.isNaN(start.getTime())) {
+                return '0m';
+            }
+            let diff = Date.now() - start.getTime();
+            if (diff <= 0) {
+                return '0m';
+            }
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) {
+                return `${Math.max(1, Math.floor(diff / 1000))}s`;
+            }
+            const hours = Math.floor(mins / 60);
+            const days = Math.floor(hours / 24);
+            if (days > 0) {
+                const remHours = hours % 24;
+                return `${days}d ${String(remHours).padStart(2, '0')}h`;
+            }
+            if (hours > 0) {
+                const remMins = mins % 60;
+                return `${hours}h ${String(remMins).padStart(2, '0')}m`;
+            }
+            return `${mins}m`;
+        };
+
+    const chatHelpers = window.SDSMServerStatusChat || {};
+    const playerHelpers = window.SDSMServerStatusPlayers || {};
+    const saveHelpers = window.SDSMServerStatusSaves || {};
+    const configHelpers = window.SDSMServerStatusConfig || {};
+
     const serverId = serverContent.dataset.serverId;
     const serverName = serverContent.dataset.serverName || '';
     const serverApiBase = `/api/servers/${serverId}`;
     const hasApiHelper = window.SDSM && SDSM.api && typeof SDSM.api.request === 'function';
     const hasApiDownloadHelper = window.SDSM && SDSM.api && typeof SDSM.api.downloadWorld === 'function';
 
-    let lastKnownRunning = serverContent.dataset.serverRunning === 'true';
+    const runtimeState = {
+        lastKnownRunning: serverContent.dataset.serverRunning === 'true',
+    };
 
     const SERVER_INFO_CARD_ID = 'server-status-info';
 
@@ -36,33 +169,6 @@ function initServerStatusDashboard() {
         target.dispatchEvent(new CustomEvent('sdsm:card-refresh', {
             detail: { cardId },
         }));
-    }
-
-    function parseCSVList(value) {
-        if (!value) {
-            return [];
-        }
-        return value
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter((entry) => entry.length > 0);
-    }
-
-    function readJSONScript(id) {
-        const el = document.getElementById(id);
-        if (!el) {
-            return null;
-        }
-        const text = (el.textContent || '').trim();
-        if (!text) {
-            return null;
-        }
-        try {
-            return JSON.parse(text);
-        } catch (error) {
-            console.warn(`Unable to parse JSON from #${id}`, error);
-            return null;
-        }
     }
 
     function refreshFeatherIcons() {
@@ -128,57 +234,6 @@ function initServerStatusDashboard() {
         if (!hasApiHelper && window.showToast && error?.message) {
             window.showToast('Error', error.message, 'danger');
         }
-    }
-
-    function buildQuery(params = {}) {
-        const search = new URLSearchParams();
-        Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null && value !== '') {
-                search.append(key, value);
-            }
-        });
-        const query = search.toString();
-        return query ? `?${query}` : '';
-    }
-
-    function formatDateTime(value) {
-        if (!value) {
-            return '—';
-        }
-        const date = value instanceof Date ? value : new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return '—';
-        }
-        return date.toLocaleString();
-    }
-
-    function formatDurationFromStart(startISO) {
-        if (!startISO) {
-            return '0m';
-        }
-        const start = new Date(startISO);
-        if (Number.isNaN(start.getTime())) {
-            return '0m';
-        }
-        let diff = Date.now() - start.getTime();
-        if (diff <= 0) {
-            return '0m';
-        }
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) {
-            return `${Math.max(1, Math.floor(diff / 1000))}s`;
-        }
-        const hours = Math.floor(mins / 60);
-        const days = Math.floor(hours / 24);
-        if (days > 0) {
-            const remHours = hours % 24;
-            return `${days}d ${String(remHours).padStart(2, '0')}h`;
-        }
-        if (hours > 0) {
-            const remMins = mins % 60;
-            return `${hours}h ${String(remMins).padStart(2, '0')}m`;
-        }
-        return `${mins}m`;
     }
 
     let uptimeTimerId;
@@ -273,10 +328,10 @@ function initServerStatusDashboard() {
             infoStormPill.textContent = active ? 'Storming' : 'Calm';
         }
         if (btnStartStorm) {
-            btnStartStorm.disabled = !lastKnownRunning || active;
+            btnStartStorm.disabled = !runtimeState.lastKnownRunning || active;
         }
         if (btnStopStorm) {
-            btnStopStorm.disabled = !lastKnownRunning || !active;
+            btnStopStorm.disabled = !runtimeState.lastKnownRunning || !active;
         }
     }
 
@@ -300,6 +355,7 @@ function initServerStatusDashboard() {
     const btnQuickSave = document.getElementById('btn-quicksave');
     const btnUpdate = document.getElementById('btn-update');
     const btnReinstall = document.getElementById('btn-reinstall');
+    const btnDeleteServer = document.getElementById('btn-delete-server');
     const btnUploadWorld = document.getElementById('btn-upload-world');
     const btnDownloadWorld = document.getElementById('btn-download-world');
     const btnRenameServer = document.getElementById('btn-rename-server');
@@ -336,6 +392,45 @@ function initServerStatusDashboard() {
     const chatInput = document.getElementById('chat-input');
     const chatSend = document.getElementById('chat-send');
 
+    const screenElements = {
+        btnStart,
+        btnStop,
+        btnPause,
+        btnRestart,
+        worldDownloadSelect,
+        worldDownloadStatus,
+        btnSave,
+        btnQuickSave,
+        btnUpdate,
+        btnReinstall,
+        btnDeleteServer,
+        btnUploadWorld,
+        btnDownloadWorld,
+        btnRenameServer,
+        languageSelect,
+        languageStatus,
+        startedAtEl,
+        uptimeEl,
+        lastLogEl,
+        latestSaveSummary,
+        latestSaveNameEl,
+        latestSavePathEl,
+        latestSaveTimestampEl,
+        latestSaveButton,
+        btnStartStorm,
+        btnStopStorm,
+        cleanupButtons,
+        consoleForm,
+        consoleInput,
+        consoleSubmit,
+        logsButton,
+        chatLog,
+        chatForm,
+        chatInput,
+        chatSend,
+        playerTabsContainer: document.querySelector('.card-players .tabs'),
+    };
+
     function formatBytes(bytes) {
         if (typeof bytes !== 'number' || !isFinite(bytes) || bytes < 0) {
             return '';
@@ -355,6 +450,9 @@ function initServerStatusDashboard() {
     const savesList = document.getElementById('saves-list');
     const savesEmpty = document.getElementById('saves-empty');
     const savesTabs = document.getElementById('saves-tabs');
+    screenElements.savesList = savesList;
+    screenElements.savesEmpty = savesEmpty;
+    screenElements.savesTabs = savesTabs;
     let currentSavesFilter = 'all';
     let activePlayerSaveGroupKey = null;
     const SAVE_FILTER_MAP = {
@@ -538,57 +636,15 @@ function initServerStatusDashboard() {
         configStartLocationSelect = document.getElementById('config-start-location');
         configStartConditionSelect = document.getElementById('config-start-condition');
         configDifficultySelect = document.getElementById('config-difficulty');
+        screenElements.serverConfigForm = serverConfigForm;
     }
 
     refreshConfigDomRefs();
 
-    let socket;
-
-    // Use the global SDSM WebSocket connection (connects to /ws) rather than
-    // opening a separate connection. Register a listener that forwards
-    // server_status messages for this server to the local handler.
-    function connectWebSocket() {
-        // Ensure the global WebSocket is connected
+    function ensureWebSocketConnection() {
         if (typeof SDSM !== 'undefined' && SDSM.ws && typeof SDSM.ws.connect === 'function') {
-            socket = SDSM.ws.connect();
+            SDSM.ws.connect();
         }
-
-        // Hook into the global WebSocket's onmessage to intercept messages for this server.
-        // We wrap the existing handler so we don't break app.js's own message handling.
-        function attachListener() {
-            const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
-            if (!ws || ws._serverStatusHooked) {
-                return;
-            }
-            ws._serverStatusHooked = true;
-            const originalOnMessage = ws.onmessage;
-            ws.onmessage = function(event) {
-                // Call the original handler first (app.js dashboard updates)
-                if (originalOnMessage) {
-                    originalOnMessage.call(ws, event);
-                }
-                // Then process locally for the server status page
-                try {
-                    const data = JSON.parse(event.data);
-                    handleWebSocketMessage(data);
-                } catch (e) {
-                    // ignore parse errors
-                }
-            };
-        }
-
-        // The global WS may already be open or may connect shortly
-        attachListener();
-        // Re-check periodically in case it reconnects
-        const checkInterval = setInterval(() => {
-            const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
-            if (ws && !ws._serverStatusHooked) {
-                attachListener();
-            }
-        }, 2000);
-
-        // Clean up on page unload
-        window.addEventListener('beforeunload', () => clearInterval(checkInterval), { once: true });
     }
 
     function handleWebSocketMessage(data) {
@@ -656,91 +712,23 @@ function initServerStatusDashboard() {
             updateStormDisplay(status.storming);
         }
 
-        const wasRunning = lastKnownRunning;
-        const isRunning = !!status.running;
-        lastKnownRunning = isRunning;
-
-        let statusClass = 'status-stopped';
-        let pillClass = 'is-stopped';
-        let text = 'Stopped';
-
-        if (status.lastError) {
-            statusClass = 'status-error';
-            pillClass = 'is-error';
-            text = 'Error';
-        } else if (status.stopping) {
-            statusClass = 'status-stopping';
-            pillClass = 'is-stopping';
-            text = 'Stopping';
-        } else if (status.starting) {
-            statusClass = 'status-starting';
-            pillClass = 'is-starting';
-            text = 'Starting';
-        } else if (status.running) {
-            if (status.paused) {
-                statusClass = 'status-paused';
-                pillClass = 'is-paused';
-                text = 'Paused';
-            } else {
-                statusClass = 'status-running';
-                pillClass = 'is-running';
-                text = 'Running';
-            }
-        }
-        
-        const infoStatePill = document.querySelector('[data-server-state-pill]');
-        if (infoStatePill) {
-            infoStatePill.classList.remove('is-running', 'is-stopped', 'is-paused', 'is-starting', 'is-stopping', 'is-error');
-            infoStatePill.classList.add(pillClass);
-            infoStatePill.textContent = text;
+        if (window.SDSMServerStatusView && typeof window.SDSMServerStatusView.applyStatus === 'function') {
+            window.SDSMServerStatusView.applyStatus({
+                state: runtimeState,
+                elements: screenElements,
+                updateStormDisplay,
+                syncCleanupAvailability,
+                fetchSaves,
+                getCurrentSavesFilter: () => currentSavesFilter,
+                refreshWorldDownloadOptions,
+                startUptimeTicker,
+                stopUptimeTicker,
+            }, status);
+            return;
         }
 
-        if(btnStart) btnStart.disabled = status.running || status.starting;
-        if(btnStop) btnStop.disabled = !status.running || status.stopping;
-        if(btnRestart) btnRestart.disabled = !status.running || status.stopping;
-        if(btnPause) {
-            btnPause.disabled = !status.running || status.stopping;
-            const icon = btnPause.querySelector('[data-feather], svg');
-            if (icon) {
-                if (icon.tagName === 'svg') {
-                    const i = document.createElement('i');
-                    i.setAttribute('data-feather', status.paused ? 'play' : 'pause');
-                    icon.replaceWith(i);
-                    if (typeof feather !== 'undefined') feather.replace();
-                } else {
-                    icon.setAttribute('data-feather', status.paused ? 'play' : 'pause');
-                    if (typeof feather !== 'undefined') feather.replace();
-                }
-            }
-            btnPause.title = status.paused ? 'Resume the server' : 'Pause the server';
-        }
-        if(btnSave) btnSave.disabled = !status.running;
-        if(btnQuickSave) btnQuickSave.disabled = !status.running;
-        if(btnUpdate) btnUpdate.disabled = status.running;
-        if(btnReinstall) btnReinstall.disabled = status.running;
-        if(btnUploadWorld) btnUploadWorld.disabled = status.running;
-        if(chatInput) chatInput.disabled = !status.running;
-        if(chatSend) chatSend.disabled = !status.running;
-        syncCleanupAvailability();
-        if (consoleInput) consoleInput.disabled = !status.running;
-        if (consoleSubmit) consoleSubmit.disabled = !status.running;
         if (typeof status.storming !== 'undefined') {
             updateStormDisplay(status.storming);
-        }
-        
-        const configSubmitButton = serverConfigForm ? serverConfigForm.querySelector('button[type="submit"]') : null;
-        if(configSubmitButton) {
-            configSubmitButton.disabled = status.running;
-        }
-
-        if (wasRunning && !isRunning) {
-            fetchSaves(currentSavesFilter);
-            refreshWorldDownloadOptions();
-        }
-        if (isRunning) {
-            startUptimeTicker();
-        } else {
-            stopUptimeTicker();
         }
     }
 
@@ -765,7 +753,7 @@ function initServerStatusDashboard() {
         updateStormDisplay(datasetStatus.storming);
     }
 
-    document.addEventListener('sdsm:server-status', (event) => {
+    on(document, 'sdsm:server-status', (event) => {
         const detail = event.detail || {};
         if (!detail || String(detail.serverId) !== String(serverId)) {
             return;
@@ -919,6 +907,9 @@ function initServerStatusDashboard() {
     }
 
     function formatChatTimestamp(value) {
+        if (typeof chatHelpers.formatChatTimestamp === 'function') {
+            return chatHelpers.formatChatTimestamp(value);
+        }
         if (!value) {
             return '';
         }
@@ -930,6 +921,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizeChatMessage(entry) {
+        if (typeof chatHelpers.normalizeChatMessage === 'function') {
+            return chatHelpers.normalizeChatMessage(entry);
+        }
         if (!entry) {
             return null;
         }
@@ -1433,6 +1427,9 @@ function initServerStatusDashboard() {
     }
 
     function groupHistoryEntriesByPlayer(entries) {
+        if (typeof playerHelpers.groupHistoryEntriesByPlayer === 'function') {
+            return playerHelpers.groupHistoryEntriesByPlayer(entries);
+        }
         const map = new Map();
         entries.forEach((entry) => {
             if (!entry) {
@@ -1465,10 +1462,16 @@ function initServerStatusDashboard() {
     }
 
     function sortHistorySessions(sessions) {
+        if (typeof playerHelpers.sortHistorySessions === 'function') {
+            return playerHelpers.sortHistorySessions(sessions);
+        }
         return [...sessions].sort((a, b) => getHistorySessionTimestamp(b) - getHistorySessionTimestamp(a));
     }
 
     function getHistorySessionTimestamp(entry) {
+        if (typeof playerHelpers.getHistorySessionTimestamp === 'function') {
+            return playerHelpers.getHistorySessionTimestamp(entry);
+        }
         if (!entry) {
             return 0;
         }
@@ -1476,6 +1479,9 @@ function initServerStatusDashboard() {
     }
 
     function toTimestamp(value) {
+        if (typeof playerHelpers.toTimestamp === 'function') {
+            return playerHelpers.toTimestamp(value);
+        }
         if (!value) {
             return 0;
         }
@@ -1539,6 +1545,9 @@ function initServerStatusDashboard() {
     }
 
     function formatPlayerTimestamp(value) {
+        if (typeof playerHelpers.formatPlayerTimestamp === 'function') {
+            return playerHelpers.formatPlayerTimestamp(value);
+        }
         if (!value) {
             return '—';
         }
@@ -1550,6 +1559,9 @@ function initServerStatusDashboard() {
     }
 
     function formatSessionDurationLabel(startISO, fallback = '0m') {
+        if (typeof playerHelpers.formatSessionDurationLabel === 'function') {
+            return playerHelpers.formatSessionDurationLabel(startISO, formatDurationFromStart, fallback);
+        }
         if (!startISO) {
             return fallback;
         }
@@ -1558,6 +1570,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizeLivePlayers(list) {
+        if (typeof playerHelpers.normalizeLivePlayers === 'function') {
+            return playerHelpers.normalizeLivePlayers(list);
+        }
         if (!Array.isArray(list)) {
             return [];
         }
@@ -1575,6 +1590,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizeHistoryPlayers(list) {
+        if (typeof playerHelpers.normalizeHistoryPlayers === 'function') {
+            return playerHelpers.normalizeHistoryPlayers(list);
+        }
         if (!Array.isArray(list)) {
             return [];
         }
@@ -1594,6 +1612,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizeBannedPlayers(list) {
+        if (typeof playerHelpers.normalizeBannedPlayers === 'function') {
+            return playerHelpers.normalizeBannedPlayers(list);
+        }
         if (!Array.isArray(list)) {
             return [];
         }
@@ -1775,6 +1796,9 @@ function initServerStatusDashboard() {
     }
 
     function formatSaveDate(value) {
+        if (typeof saveHelpers.formatSaveDate === 'function') {
+            return saveHelpers.formatSaveDate(value);
+        }
         if (!value) {
             return 'Unknown time';
         }
@@ -1786,6 +1810,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizeSaveItems(type, data) {
+        if (typeof saveHelpers.normalizeSaveItems === 'function') {
+            return saveHelpers.normalizeSaveItems(type, data, SAVE_TYPE_LABELS);
+        }
         if (!data) return [];
         if (type === 'player') {
             const groups = Array.isArray(data.groups) ? data.groups : [];
@@ -1818,6 +1845,9 @@ function initServerStatusDashboard() {
     }
 
     function normalizePlayerSaveGroups(data) {
+        if (typeof saveHelpers.normalizePlayerSaveGroups === 'function') {
+            return saveHelpers.normalizePlayerSaveGroups(data);
+        }
         const groups = Array.isArray(data?.groups) ? data.groups : [];
         return groups.map((group) => {
             const steamId = group?.steam_id || '';
@@ -2158,182 +2188,6 @@ function initServerStatusDashboard() {
         });
     }
 
-    const controlActions = [
-        { button: btnStart, endpoint: '/start', label: 'Start' },
-        { button: btnStop, endpoint: '/stop', label: 'Stop' },
-        { button: btnRestart, endpoint: '/restart', label: 'Restart' },
-        { button: btnSave, endpoint: '/save', label: 'Save' },
-        { button: btnQuickSave, endpoint: '/quicksave', label: 'Quick Save' },
-        { button: btnUpdate, endpoint: '/update-server', label: 'Update' },
-        { button: btnReinstall, endpoint: '/reinstall', label: 'Reinstall' },
-    ];
-
-    controlActions.forEach(({ button, endpoint, label }) => {
-        if (!button) return;
-        button.addEventListener('click', async () => {
-            try {
-                await serverRequest(endpoint, { method: 'POST' });
-                fetchLatestStatus();
-            } catch (error) {
-                handleActionError(label || 'Action', error);
-            }
-        });
-    });
-
-    if (btnPause) {
-        btnPause.addEventListener('click', async () => {
-            const isPaused = serverContent && serverContent.dataset.serverPaused === 'true';
-            const endpoint = isPaused ? '/resume' : '/pause';
-            const label = isPaused ? 'Resume' : 'Pause';
-            try {
-                await serverRequest(endpoint, { method: 'POST' });
-                fetchLatestStatus();
-            } catch (error) {
-                handleActionError(label, error);
-            }
-        });
-    }
-
-    async function toggleStorm(start) {
-        const button = start ? btnStartStorm : btnStopStorm;
-        if (button) {
-            button.disabled = true;
-        }
-        try {
-            await serverRequest('/storm', { method: 'POST', body: { start: !!start } });
-            await fetchLatestStatus();
-        } catch (error) {
-            handleActionError('Storm', error);
-        } finally {
-            if (button) {
-                button.disabled = false;
-            }
-        }
-    }
-
-    if (btnStartStorm) {
-        btnStartStorm.addEventListener('click', () => toggleStorm(true));
-    }
-    if (btnStopStorm) {
-        btnStopStorm.addEventListener('click', () => toggleStorm(false));
-    }
-
-    cleanupButtons.forEach((button) => {
-        button.addEventListener('click', async () => {
-            const scope = button.dataset.cleanupScope;
-            if (!scope) {
-                return;
-            }
-            button.disabled = true;
-            try {
-                await serverRequest('/cleanup', { method: 'POST', body: { scope } });
-                fetchLatestStatus();
-            } catch (error) {
-                handleActionError('Cleanup', error);
-            } finally {
-                button.disabled = false;
-            }
-        });
-    });
-
-    if (consoleForm) {
-        consoleForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const command = (consoleInput?.value || '').trim();
-            if (!command) {
-                return;
-            }
-            const original = consoleSubmit ? consoleSubmit.innerHTML : '';
-            const wasDisabled = consoleSubmit ? consoleSubmit.disabled : false;
-            if (consoleSubmit) {
-                consoleSubmit.disabled = true;
-                consoleSubmit.innerHTML = '<span>Sending…</span>';
-            }
-            try {
-                await serverRequest('/console', { method: 'POST', body: { command } });
-                if (consoleInput) {
-                    consoleInput.value = '';
-                }
-            } catch (error) {
-                handleActionError('Console', error);
-            } finally {
-                if (consoleSubmit) {
-                    consoleSubmit.disabled = wasDisabled;
-                    consoleSubmit.innerHTML = original || '<span>Send</span>';
-                }
-            }
-        });
-    }
-
-    if (logsButton) {
-        logsButton.addEventListener('click', () => {
-            const logsCard = document.getElementById('server-logs-card');
-            if (!logsCard) {
-                return;
-            }
-            const logsDetails = document.querySelector('[data-collapse-id="server-status-logs"]');
-            if (logsDetails && !logsDetails.open) {
-                logsDetails.open = true;
-            }
-            logsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }
-
-    if (btnDownloadWorld) {
-        btnDownloadWorld.addEventListener('click', async () => {
-            const downloadUrl = buildWorldDownloadUrl();
-            const selectedName = worldDownloadSelect && !worldDownloadSelect.disabled ? (worldDownloadSelect.value || '').trim() : '';
-            if (hasApiDownloadHelper) {
-                try {
-                    await SDSM.api.downloadWorld(serverId, selectedName, { serverName });
-                } catch (error) {
-                    handleActionError('Download World', error);
-                }
-                return;
-            }
-            if (hasApiHelper && SDSM.api && typeof SDSM.api.download === 'function') {
-                try {
-                    const options = selectedName ? { filename: selectedName } : {};
-                    await SDSM.api.download(downloadUrl, options);
-                } catch (error) {
-                    handleActionError('Download World', error);
-                }
-                return;
-            }
-            window.location.href = downloadUrl;
-        });
-    }
-
-    if (chatForm) {
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const message = (chatInput?.value || '').trim();
-            if (!message) {
-                return;
-            }
-            try {
-                await serverRequest('/chat', { method: 'POST', body: { message } });
-                if (chatInput) {
-                    chatInput.value = '';
-                }
-            } catch (error) {
-                handleActionError('Chat', error);
-            }
-        });
-    }
-
-    if (savesTabs) {
-        savesTabs.addEventListener('click', (e) => {
-            const tab = e.target.closest('.tab');
-            if (tab) {
-                savesTabs.querySelector('.active').classList.remove('active');
-                tab.classList.add('active');
-                const filter = tab.dataset.saveFilter || 'all';
-                fetchSaves(filter);
-            }
-        });
-    }
-
     function resolveSteamIdFromElement(element) {
         if (!element || !element.dataset) {
             return '';
@@ -2371,179 +2225,184 @@ function initServerStatusDashboard() {
         document.body.removeChild(textarea);
     }
 
-    document.addEventListener('click', async (event) => {
-        const copyBtn = event.target.closest('[data-copy-value][data-copy-scope="server-info"]');
-        if (copyBtn) {
-            event.preventDefault();
-            event.stopPropagation();
-            const value = copyBtn.getAttribute('data-copy-value');
-            try {
-                await copyTextToClipboard(value);
-                copyBtn.setAttribute('data-copied', 'true');
-                if (copyTimers.has(copyBtn)) {
-                    clearTimeout(copyTimers.get(copyBtn));
+    const hasServerStatusActionsModule = !!(window.SDSMServerStatusActions && typeof window.SDSMServerStatusActions.bind === 'function');
+    if (hasServerStatusActionsModule) {
+        window.SDSMServerStatusActions.bind({
+            on,
+            serverContent,
+            serverId,
+            serverName,
+            hasApiHelper,
+            hasApiDownloadHelper,
+            playerSavesEnabled,
+            playerSaveExcludes,
+            syncPlayerSaveExcludeDataset,
+            serverRequest,
+            fetchLatestStatus,
+            fetchSaves,
+            getCurrentSavesFilter: () => currentSavesFilter,
+            handleActionError,
+            buildWorldDownloadUrl,
+            buildQuery,
+            resolveSteamIdFromElement,
+            copyTextToClipboard,
+            copyTimers,
+            elements: screenElements,
+        });
+    } else {
+        on(document, 'click', async (event) => {
+            const copyBtn = event.target.closest('[data-copy-value][data-copy-scope="server-info"]');
+            if (copyBtn) {
+                event.preventDefault();
+                event.stopPropagation();
+                const value = copyBtn.getAttribute('data-copy-value');
+                try {
+                    await copyTextToClipboard(value);
+                    copyBtn.setAttribute('data-copied', 'true');
+                    if (copyTimers.has(copyBtn)) {
+                        clearTimeout(copyTimers.get(copyBtn));
+                    }
+                    const timeoutId = setTimeout(() => {
+                        copyBtn.removeAttribute('data-copied');
+                        copyTimers.delete(copyBtn);
+                    }, 1500);
+                    copyTimers.set(copyBtn, timeoutId);
+                } catch (err) {
+                    console.warn('Copy failed', err);
                 }
-                const timeoutId = setTimeout(() => {
-                    copyBtn.removeAttribute('data-copied');
-                    copyTimers.delete(copyBtn);
-                }, 1500);
-                copyTimers.set(copyBtn, timeoutId);
-            } catch (err) {
-                console.warn('Copy failed', err);
+                return;
             }
-            return;
-        }
-    });
+        });
 
-    document.body.addEventListener('click', (e) => {
-        const kickBtn = e.target.closest('.btn-kick');
-        if (kickBtn) {
-            const guid = resolveSteamIdFromElement(kickBtn);
-            if (guid) {
-                serverRequest('/kick', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Kick', err));
-            } else {
-                handleActionError('Kick', new Error('Steam ID required'));
-            }
-            return;
-        }
-        const banBtn = e.target.closest('.btn-ban');
-        if (banBtn) {
-            const guid = resolveSteamIdFromElement(banBtn);
-            if (guid) {
-                serverRequest('/ban', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Ban', err));
-            }
-            return;
-        }
-        const unbanBtn = e.target.closest('.btn-unban');
-        if (unbanBtn) {
-            const guid = resolveSteamIdFromElement(unbanBtn);
-            if (guid) {
-                serverRequest('/unban', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Unban', err));
-            }
-            return;
-        }
-        const loadSaveBtn = e.target.closest('.btn-load-save');
-        if (loadSaveBtn) {
-            const saveName = loadSaveBtn.dataset.saveLabel || loadSaveBtn.dataset.saveFilename;
-            const filename = loadSaveBtn.dataset.saveFilename;
-            const type = loadSaveBtn.dataset.saveType || 'manual';
-            if (filename && confirm(`Load save "${saveName}"? The server will stop before loading.`)) {
-                serverRequest('/load', { method: 'POST', body: { type, name: filename } })
-                    .then(() => fetchSaves(currentSavesFilter))
-                    .catch(err => handleActionError('Load Save', err));
-            }
-            return;
-        }
-        const deleteSaveBtn = e.target.closest('.btn-delete-save');
-        if (deleteSaveBtn) {
-            const saveName = deleteSaveBtn.dataset.saveLabel || deleteSaveBtn.dataset.saveFilename;
-            const filename = deleteSaveBtn.dataset.saveFilename;
-            const type = deleteSaveBtn.dataset.saveType || 'manual';
-            if (filename && confirm(`Delete save "${saveName}"? This cannot be undone.`)) {
-                serverRequest(`/saves${buildQuery({ type, name: filename })}`, { method: 'DELETE' })
-                    .then(() => fetchSaves(currentSavesFilter))
-                    .catch(err => handleActionError('Delete Save', err));
-            }
-            return;
-        }
-        const toggleSaveBtn = e.target.closest('.btn-toggle-player-save');
-        if (toggleSaveBtn) {
-            if (!playerSavesEnabled) {
+        on(document.body, 'click', (e) => {
+            const kickBtn = e.target.closest('.btn-kick');
+            if (kickBtn) {
+                const guid = resolveSteamIdFromElement(kickBtn);
+                if (guid) {
+                    serverRequest('/kick', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Kick', err));
+                } else {
+                    handleActionError('Kick', new Error('Steam ID required'));
+                }
                 return;
             }
-            const steamId = toggleSaveBtn.dataset.steamId;
-            const playerName = toggleSaveBtn.dataset.playerName || steamId || 'this player';
-            const currentState = toggleSaveBtn.dataset.saveState;
-            if (!steamId) {
+            const banBtn = e.target.closest('.btn-ban');
+            if (banBtn) {
+                const guid = resolveSteamIdFromElement(banBtn);
+                if (guid) {
+                    serverRequest('/ban', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Ban', err));
+                }
                 return;
             }
-            if (currentState === 'enabled') {
+            const unbanBtn = e.target.closest('.btn-unban');
+            if (unbanBtn) {
+                const guid = resolveSteamIdFromElement(unbanBtn);
+                if (guid) {
+                    serverRequest('/unban', { method: 'POST', body: { steam_id: guid } }).catch(err => handleActionError('Unban', err));
+                }
+                return;
+            }
+            const loadSaveBtn = e.target.closest('.btn-load-save');
+            if (loadSaveBtn) {
+                const saveName = loadSaveBtn.dataset.saveLabel || loadSaveBtn.dataset.saveFilename;
+                const filename = loadSaveBtn.dataset.saveFilename;
+                const type = loadSaveBtn.dataset.saveType || 'manual';
+                if (filename && confirm(`Load save "${saveName}"? The server will stop before loading.`)) {
+                    serverRequest('/load', { method: 'POST', body: { type, name: filename } })
+                        .then(() => fetchSaves(currentSavesFilter))
+                        .catch(err => handleActionError('Load Save', err));
+                }
+                return;
+            }
+            const deleteSaveBtn = e.target.closest('.btn-delete-save');
+            if (deleteSaveBtn) {
+                const saveName = deleteSaveBtn.dataset.saveLabel || deleteSaveBtn.dataset.saveFilename;
+                const filename = deleteSaveBtn.dataset.saveFilename;
+                const type = deleteSaveBtn.dataset.saveType || 'manual';
+                if (filename && confirm(`Delete save "${saveName}"? This cannot be undone.`)) {
+                    serverRequest(`/saves${buildQuery({ type, name: filename })}`, { method: 'DELETE' })
+                        .then(() => fetchSaves(currentSavesFilter))
+                        .catch(err => handleActionError('Delete Save', err));
+                }
+                return;
+            }
+            const toggleSaveBtn = e.target.closest('.btn-toggle-player-save');
+            if (toggleSaveBtn) {
+                if (!playerSavesEnabled) {
+                    return;
+                }
+                const steamId = toggleSaveBtn.dataset.steamId;
+                const playerName = toggleSaveBtn.dataset.playerName || steamId || 'this player';
+                const currentState = toggleSaveBtn.dataset.saveState;
+                if (!steamId) {
+                    return;
+                }
+                if (currentState === 'enabled') {
+                    const warning = `Exclude ${playerName} from player saves?\n\nThis will immediately delete all of their saved data and block future saves until re-enabled.`;
+                    if (!confirm(warning)) {
+                        return;
+                    }
+                    toggleSaveBtn.disabled = true;
+                    serverRequest('/player-saves/exclude', { method: 'POST', body: { steam_id: steamId } })
+                        .then(() => {
+                            playerSaveExcludes.add(steamId);
+                            syncPlayerSaveExcludeDataset();
+                            toggleSaveBtn.dataset.saveState = 'excluded';
+                            toggleSaveBtn.className = 'btn btn-icon btn-sm btn-secondary save-off btn-toggle-player-save';
+                            toggleSaveBtn.title = 'Click to enable player saves';
+                            toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
+                            if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
+                            fetchSaves('player');
+                        })
+                        .catch((err) => handleActionError('Exclude Player', err))
+                        .finally(() => { toggleSaveBtn.disabled = false; });
+                } else {
+                    toggleSaveBtn.disabled = true;
+                    serverRequest('/player-saves/include', { method: 'POST', body: { steam_id: steamId } })
+                        .then(() => {
+                            playerSaveExcludes.delete(steamId);
+                            syncPlayerSaveExcludeDataset();
+                            toggleSaveBtn.dataset.saveState = 'enabled';
+                            toggleSaveBtn.className = 'btn btn-icon btn-sm btn-success btn-toggle-player-save';
+                            toggleSaveBtn.title = 'Click to disable player saves';
+                            toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
+                            if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
+                        })
+                        .catch((err) => handleActionError('Include Player', err))
+                        .finally(() => { toggleSaveBtn.disabled = false; });
+                }
+                return;
+            }
+            const excludePlayerBtn = e.target.closest('.btn-exclude-player-save');
+            if (excludePlayerBtn) {
+                if (!playerSavesEnabled) {
+                    handleActionError('Exclude Player', new Error('Player saves are disabled.'));
+                    return;
+                }
+                const steamId = excludePlayerBtn.dataset.steamId;
+                const playerName = excludePlayerBtn.dataset.playerName || steamId || 'this player';
+                if (!steamId) {
+                    handleActionError('Exclude Player', new Error('Steam ID missing.'));
+                    return;
+                }
                 const warning = `Exclude ${playerName} from player saves?\n\nThis will immediately delete all of their saved data and block future saves until re-enabled.`;
                 if (!confirm(warning)) {
                     return;
                 }
-                toggleSaveBtn.disabled = true;
+                excludePlayerBtn.disabled = true;
                 serverRequest('/player-saves/exclude', { method: 'POST', body: { steam_id: steamId } })
                     .then(() => {
                         playerSaveExcludes.add(steamId);
                         syncPlayerSaveExcludeDataset();
-                        toggleSaveBtn.dataset.saveState = 'excluded';
-                        toggleSaveBtn.className = 'btn btn-icon btn-sm btn-secondary save-off btn-toggle-player-save';
-                        toggleSaveBtn.title = 'Click to enable player saves';
-                        toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
-                        if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
                         fetchSaves('player');
                     })
                     .catch((err) => handleActionError('Exclude Player', err))
-                    .finally(() => { toggleSaveBtn.disabled = false; });
-            } else {
-                toggleSaveBtn.disabled = true;
-                serverRequest('/player-saves/include', { method: 'POST', body: { steam_id: steamId } })
-                    .then(() => {
-                        playerSaveExcludes.delete(steamId);
-                        syncPlayerSaveExcludeDataset();
-                        toggleSaveBtn.dataset.saveState = 'enabled';
-                        toggleSaveBtn.className = 'btn btn-icon btn-sm btn-success btn-toggle-player-save';
-                        toggleSaveBtn.title = 'Click to disable player saves';
-                        toggleSaveBtn.innerHTML = '<i data-feather="save"></i>';
-                        if (typeof feather !== 'undefined') { feather.replace({ width: 14, height: 14 }); }
-                    })
-                    .catch((err) => handleActionError('Include Player', err))
-                    .finally(() => { toggleSaveBtn.disabled = false; });
-            }
-            return;
-        }
-        const excludePlayerBtn = e.target.closest('.btn-exclude-player-save');
-        if (excludePlayerBtn) {
-            if (!playerSavesEnabled) {
-                handleActionError('Exclude Player', new Error('Player saves are disabled.'));
+                    .finally(() => {
+                        excludePlayerBtn.disabled = false;
+                    });
                 return;
-            }
-            const steamId = excludePlayerBtn.dataset.steamId;
-            const playerName = excludePlayerBtn.dataset.playerName || steamId || 'this player';
-            if (!steamId) {
-                handleActionError('Exclude Player', new Error('Steam ID missing.'));
-                return;
-            }
-            const warning = `Exclude ${playerName} from player saves?\n\nThis will immediately delete all of their saved data and block future saves until re-enabled.`;
-            if (!confirm(warning)) {
-                return;
-            }
-            excludePlayerBtn.disabled = true;
-            serverRequest('/player-saves/exclude', { method: 'POST', body: { steam_id: steamId } })
-                .then(() => {
-                    playerSaveExcludes.add(steamId);
-                    syncPlayerSaveExcludeDataset();
-                    fetchSaves('player');
-                })
-                .catch((err) => handleActionError('Exclude Player', err))
-                .finally(() => {
-                    excludePlayerBtn.disabled = false;
-                });
-            return;
-        }
-    });
-
-    // Player list tabs
-    const playerTabsContainer = document.querySelector('.card-players .tabs');
-    if (playerTabsContainer) {
-        playerTabsContainer.addEventListener('click', (e) => {
-            const tab = e.target.closest('.tab');
-            if (tab) {
-                playerTabsContainer.querySelectorAll('.tab').forEach(t => {
-                    t.classList.remove('active');
-                    t.setAttribute('aria-selected', 'false');
-                    const panel = document.getElementById(t.getAttribute('aria-controls'));
-                    if(panel) panel.classList.add('hidden');
-                });
-                tab.classList.add('active');
-                tab.setAttribute('aria-selected', 'true');
-                const panel = document.getElementById(tab.getAttribute('aria-controls'));
-                if(panel) panel.classList.remove('hidden');
             }
         });
     }
-
 
     initializeConfigControls();
 
@@ -2660,7 +2519,11 @@ function initServerStatusDashboard() {
         populateSelectOptions(configStartConditionSelect, conditions, configStartConditionSelect?.dataset?.currentValue, { valueKey: 'ID', labelKey: 'Name', emptyLabel: 'Select a world first' });
     }
 
-    function populateSelectOptions(select, items, preferredValue, { valueKey = 'value', labelKey = 'label', emptyLabel = 'Select an option' } = {}) {
+    function populateSelectOptions(select, items, preferredValue, options = {}) {
+        if (typeof configHelpers.populateSelectOptions === 'function') {
+            return configHelpers.populateSelectOptions(select, items, preferredValue, options);
+        }
+        const { valueKey = 'value', labelKey = 'label', emptyLabel = 'Select an option' } = options;
         if (!select) {
             return;
         }
@@ -2737,6 +2600,9 @@ function initServerStatusDashboard() {
     }
 
     function getVersionKeyFromSelect(select) {
+        if (typeof configHelpers.getVersionKeyFromSelect === 'function') {
+            return configHelpers.getVersionKeyFromSelect(select);
+        }
         if (!select) {
             return 'release';
         }
@@ -2772,7 +2638,6 @@ function initServerStatusDashboard() {
                     event.preventDefault();
                     const form = event.currentTarget;
                     const submitButton = form ? form.querySelector('button[type="submit"]') : null;
-                    const prevDisabled = submitButton ? submitButton.disabled : false;
                     if (submitButton) {
                         submitButton.disabled = true;
                         submitButton.dataset.originalText = submitButton.dataset.originalText || submitButton.innerHTML;
@@ -2786,7 +2651,8 @@ function initServerStatusDashboard() {
                     } finally {
                         if (submitButton) {
                             submitButton.innerHTML = submitButton.dataset.originalText || submitButton.innerHTML;
-                            submitButton.disabled = prevDisabled;
+                            const isLifecycleLocked = serverContent.dataset.serverRunning === 'true' || serverContent.dataset.serverStarting === 'true' || serverContent.dataset.serverStopping === 'true';
+                            submitButton.disabled = isLifecycleLocked;
                         }
                     }
                 });
@@ -2795,7 +2661,7 @@ function initServerStatusDashboard() {
 
         bindServerConfigActions();
 
-        document.addEventListener('htmx:afterSwap', (event) => {
+        on(document, 'htmx:afterSwap', (event) => {
             const swapRoot = event.target instanceof Element ? event.target : null;
             if (!swapRoot) {
                 return;
@@ -2815,17 +2681,32 @@ function initServerStatusDashboard() {
     fetchSaves('all');
 
     if (typeof window.WebSocket !== 'undefined') {
-        connectWebSocket();
+        ensureWebSocketConnection();
     }
 
-    window.addEventListener('beforeunload', () => {
+    registerCleanup(() => {
         if (statusRefreshTimer) {
             clearInterval(statusRefreshTimer);
+            statusRefreshTimer = null;
         }
-        // Unhook our listener from the global WebSocket
-        const ws = (typeof SDSM !== 'undefined' && SDSM.state) ? SDSM.state.ws : null;
-        if (ws) {
-            ws._serverStatusHooked = false;
+        if (uptimeTimerId) {
+            clearInterval(uptimeTimerId);
+            uptimeTimerId = null;
+        }
+        if (languageStatusTimer) {
+            clearTimeout(languageStatusTimer);
+            languageStatusTimer = null;
+        }
+    });
+
+    on(window, 'beforeunload', runCleanup, { once: true });
+    on(document.body, 'htmx:beforeSwap', (event) => {
+        const target = event?.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        if (target === serverContent || target.contains(serverContent)) {
+            runCleanup();
         }
     });
 }

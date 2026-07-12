@@ -38,6 +38,7 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 		return ts.Format(time.RFC3339)
 	}
 	usage := s.ResourceUsage()
+	state := s.LifecycleSnapshot()
 	var cpuPercent, memPercent float64
 	var memRSS uint64
 	var usageSample string
@@ -58,29 +59,22 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 			"world":       s.World,
 			"playerCount": s.ClientCount(),
 			"maxPlayers":  s.MaxClients,
-			"running":     s.IsRunning(),
-			"starting":    s.Starting,
-			"stopping":    s.Stopping,
+			"running":     state.Running,
+			"starting":    state.Starting,
+			"stopping":    state.Stopping,
 			"stopping_eta": func() int {
-				if s.Stopping && !s.StoppingEnds.IsZero() {
-					remaining := int(time.Until(s.StoppingEnds).Seconds())
-					if remaining < 0 {
-						return 0
-					}
-					return remaining
-				}
-				return 0
+				return state.StoppingETASeconds(time.Now())
 			}(),
-			"paused":        s.Paused,
-			"storming":      s.Storming,
-			"startedAt":     formatTimestamp(s.ServerStarted),
-			"lastStoppedAt": formatTimestamp(s.LastStoppedAt),
+			"paused":        state.Paused,
+			"storming":      state.Storming,
+			"startedAt":     formatTimestamp(state.ServerStarted),
+			"lastStoppedAt": formatTimestamp(state.LastStoppedAt),
 			"uptimeSeconds": s.UptimeSeconds(),
 			"downtimeSeconds": func() int64 {
-				if s.LastStoppedAt == nil {
+				if state.LastStoppedAt == nil {
 					return 0
 				}
-				return int64(time.Since(*s.LastStoppedAt) / time.Second)
+				return int64(time.Since(*state.LastStoppedAt) / time.Second)
 			}(),
 			"lastError":         s.LastError,
 			"cpuPercent":        cpuPercent,
@@ -189,15 +183,17 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		return
 	}
 
+	state := s.LifecycleSnapshot()
+
 	var started, saved, stopped string
-	if s.ServerStarted != nil {
-		started = s.ServerStarted.Format(time.RFC3339)
+	if state.ServerStarted != nil {
+		started = state.ServerStarted.Format(time.RFC3339)
 	}
 	if s.ServerSaved != nil {
 		saved = s.ServerSaved.Format(time.RFC3339)
 	}
-	if s.LastStoppedAt != nil {
-		stopped = s.LastStoppedAt.Format(time.RFC3339)
+	if state.LastStoppedAt != nil {
+		stopped = state.LastStoppedAt.Format(time.RFC3339)
 	}
 
 	liveClients := s.LiveClients()
@@ -266,18 +262,11 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 	resp := gin.H{
 		"id":       s.ID,
 		"name":     s.Name,
-		"running":  s.IsRunning(),
-		"starting": s.Starting,
-		"stopping": s.Stopping,
+		"running":  state.Running,
+		"starting": state.Starting,
+		"stopping": state.Stopping,
 		"stopping_eta": func() int {
-			if s.Stopping && !s.StoppingEnds.IsZero() {
-				rem := int(time.Until(s.StoppingEnds).Seconds())
-				if rem < 0 {
-					return 0
-				}
-				return rem
-			}
-			return 0
+			return state.StoppingETASeconds(time.Now())
 		}(),
 		"port":            s.Port,
 		"max_clients":     s.MaxClients,
@@ -289,13 +278,13 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"last_stopped_at": stopped,
 		"uptime_seconds":  s.UptimeSeconds(),
 		"downtime_seconds": func() int64 {
-			if s.LastStoppedAt == nil {
+			if state.LastStoppedAt == nil {
 				return 0
 			}
-			return int64(time.Since(*s.LastStoppedAt) / time.Second)
+			return int64(time.Since(*state.LastStoppedAt) / time.Second)
 		}(),
-		"paused":        s.Paused,
-		"storming":      s.Storming,
+		"paused":        state.Paused,
+		"storming":      state.Storming,
 		"clients":       history,
 		"chat_messages": chatMessages,
 		"banned":        banned,
@@ -465,7 +454,8 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	}
 
 	// If server is currently in a delayed shutdown window, treat Start as a cancellation request.
-	if s.Running && s.Stopping {
+	state := s.LifecycleSnapshot()
+	if state.Running && state.Stopping {
 		if s.CancelStop() {
 			// Broadcast updated state (still running, stopping cleared)
 			h.BroadcastStatusAndStats(s)
@@ -482,7 +472,7 @@ func (h *ManagerHandlers) APIServerStart(c *gin.Context) {
 	}
 
 	// Mark as starting immediately so the UI reflects it before the goroutine runs.
-	s.Starting = true
+	s.MarkStarting()
 
 	// Run startup asynchronously so the UI reflects "Starting" immediately.
 	// Start() also sets s.Starting = true early (idempotent).
@@ -534,9 +524,10 @@ func (h *ManagerHandlers) APIServerStop(c *gin.Context) {
 	s.StopAsync(func(srv *models.Server) {
 		// Broadcast each significant state change (scheduled, canceled, final stopped)
 		h.BroadcastStatusAndStats(srv)
-		if srv.Stopping && srv.Running {
+		srvState := srv.LifecycleSnapshot()
+		if srvState.Stopping && srvState.Running {
 			// countdown in progress
-		} else if !srv.Running && !srv.Starting {
+		} else if !srvState.Running && !srvState.Starting {
 			h.manager.NotifyServerEvent(srv, "stopped", "Server shutdown completed.")
 		}
 	})
@@ -660,7 +651,7 @@ func (h *ManagerHandlers) APIServerPause(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "server not running"})
 		return
 	}
-	if s.Paused {
+	if s.LifecycleSnapshot().Paused {
 		c.JSON(http.StatusOK, gin.H{"status": "already-paused"})
 		return
 	}
@@ -670,7 +661,7 @@ func (h *ManagerHandlers) APIServerPause(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	s.Paused = true
+	s.SetPaused(true)
 	h.manager.NotifyServerEvent(s, "paused", "Server paused via API.")
 	h.BroadcastStatusAndStats(s)
 	ToastSuccess(c, "Server Paused", s.Name+" paused.")
@@ -708,7 +699,7 @@ func (h *ManagerHandlers) APIServerResume(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "server not running"})
 		return
 	}
-	if !s.Paused {
+	if !s.LifecycleSnapshot().Paused {
 		c.JSON(http.StatusOK, gin.H{"status": "already-running"})
 		return
 	}
@@ -718,7 +709,7 @@ func (h *ManagerHandlers) APIServerResume(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	s.Paused = false
+	s.SetPaused(false)
 	h.manager.NotifyServerEvent(s, "resumed", "Server resumed via API.")
 	h.BroadcastStatusAndStats(s)
 	ToastSuccess(c, "Server Resumed", s.Name+" resumed.")
@@ -752,14 +743,10 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 	}
 
 	// If a stop countdown is already in progress, treat this as a pending restart
-	if s.Stopping {
+	state := s.LifecycleSnapshot()
+	if state.Stopping {
 		eta := 0
-		if !s.StoppingEnds.IsZero() {
-			rem := int(time.Until(s.StoppingEnds).Seconds())
-			if rem > 0 {
-				eta = rem
-			}
-		}
+		eta = state.StoppingETASeconds(time.Now())
 		ToastInfo(c, "Restart Pending", s.Name+" shutdown already in progress; restart will follow.")
 		h.manager.NotifyServerEvent(s, "restart-pending", fmt.Sprintf("Shutdown already in progress; restart will follow (ETA %d seconds).", eta))
 		c.JSON(http.StatusOK, gin.H{"status": "restart-pending", "shutdown_eta_seconds": eta})
@@ -772,30 +759,29 @@ func (h *ManagerHandlers) APIServerRestart(c *gin.Context) {
 	if s.ClientCount() == 0 {
 		shutdownDelay = 0
 	}
-	if s.Running && shutdownDelay > 0 {
+	if state.Running && shutdownDelay > 0 {
 		// Schedule asynchronous shutdown; after completion, schedule restart
 		s.StopAsync(func(srv *models.Server) {
 			// Broadcast each state change
 			h.BroadcastStatusAndStats(srv)
 			// When fully stopped, queue restart after restart delay
-			if !srv.Running && !srv.Starting {
+			srvState := srv.LifecycleSnapshot()
+			if !srvState.Running && !srvState.Starting {
 				restartDelay := srv.RestartDelaySeconds
 				if restartDelay < 0 {
 					restartDelay = models.DefaultRestartDelaySeconds
 				}
-				go func(sd int, srv2 *models.Server) {
-					if sd > 0 {
-						time.Sleep(time.Duration(sd) * time.Second)
+				srv.ScheduleRestartAfter(time.Duration(restartDelay)*time.Second, func(srv2 *models.Server) {
+					// Guard against deleted/replaced server objects while delayed timer runs.
+					if h == nil || h.manager == nil || srv2 == nil {
+						return
 					}
-					// Start server
-					srv2.Start()
-					// Notify restart execution
+					if current := h.manager.ServerByID(srv2.ID); current != srv2 {
+						return
+					}
 					h.manager.NotifyServerEvent(srv2, "restarting", "Server restarting now.")
-					// Broadcast new running state
 					h.BroadcastStatusAndStats(srv2)
-					// Notify restart completion
-					h.manager.NotifyServerEvent(srv2, "started", "Restart complete.")
-				}(restartDelay, srv)
+				})
 			}
 		})
 		ToastInfo(c, "Restart Scheduled", s.Name+" will restart after shutdown completes.")
@@ -832,7 +818,8 @@ func (h *ManagerHandlers) APIServerDelete(c *gin.Context) {
 	}
 
 	// Stop if running
-	if s.IsRunning() {
+	s.CancelScheduledRestart()
+	if s.LifecycleSnapshot().Running {
 		s.Stop()
 	}
 
@@ -1033,6 +1020,13 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		return
 	}
 
+	state := s.LifecycleSnapshot()
+	if state.Running || state.Starting || state.Stopping {
+		ToastWarn(c, "Update Failed", "Stop the server before saving configuration changes.")
+		c.JSON(http.StatusConflict, gin.H{"error": "server must be stopped"})
+		return
+	}
+
 	// Extract inputs from JSON or form
 	var (
 		body     map[string]string
@@ -1107,10 +1101,10 @@ func (h *ManagerHandlers) APIServerUpdateSettings(c *gin.Context) {
 		s.SCONPort = s.Port + 1
 	}
 
-	if v := body["password"]; v != "" {
+	if v, ok := body["password"]; ok {
 		s.Password = v
 	}
-	if v := body["auth_secret"]; v != "" {
+	if v, ok := body["auth_secret"]; ok {
 		s.AuthSecret = v
 	}
 
@@ -1505,7 +1499,8 @@ func (h *ManagerHandlers) APIServerReinstall(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
 		return
 	}
-	if s.IsRunning() || s.Starting {
+	state := s.LifecycleSnapshot()
+	if state.Running || state.Starting {
 		ToastWarn(c, "Reinstall Blocked", "Stop the server before reinstalling.")
 		c.JSON(http.StatusConflict, gin.H{"error": "server running"})
 		return
@@ -3706,7 +3701,8 @@ func (h *ManagerHandlers) APIServerBan(c *gin.Context) {
 		} // fallback
 	}
 	// Try console BAN when running, else write to blacklist file
-	if s.Running {
+	state := s.LifecycleSnapshot()
+	if state.Running {
 		if err := s.SendCommand("console", "BAN "+steam); err != nil {
 			ToastError(c, "Ban Failed", err.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -3779,8 +3775,9 @@ func (h *ManagerHandlers) APIServersStartAll(c *gin.Context) {
 		if s == nil {
 			continue
 		}
+		state := s.LifecycleSnapshot()
 		// If a shutdown countdown is in progress, cancel instead of issuing a new start.
-		if s.Running && s.Stopping {
+		if state.Running && state.Stopping {
 			if s.CancelStop() {
 				shutdownsCanceled++
 				h.BroadcastStatusAndStats(s)
@@ -3788,7 +3785,7 @@ func (h *ManagerHandlers) APIServersStartAll(c *gin.Context) {
 			}
 			continue
 		}
-		if s.IsRunning() || s.Starting {
+		if state.Running || state.Starting {
 			continue
 		}
 		s.Start()
@@ -3853,7 +3850,8 @@ func (h *ManagerHandlers) APIServersStartSelected(c *gin.Context) {
 		if s == nil {
 			continue
 		}
-		if s.Running && s.Stopping {
+		state := s.LifecycleSnapshot()
+		if state.Running && state.Stopping {
 			if s.CancelStop() {
 				shutdownsCanceled++
 				h.BroadcastStatusAndStats(s)
@@ -3861,7 +3859,7 @@ func (h *ManagerHandlers) APIServersStartSelected(c *gin.Context) {
 			}
 			continue
 		}
-		if s.IsRunning() || s.Starting {
+		if state.Running || state.Starting {
 			continue
 		}
 		s.Start()
@@ -4566,7 +4564,8 @@ func (h *ManagerHandlers) collectStatsSnapshot() gin.H {
 		if srv == nil {
 			continue
 		}
-		if !srv.IsRunning() || srv.Stopping {
+		srvState := srv.LifecycleSnapshot()
+		if !srvState.Running || srvState.Stopping {
 			startableServers++
 		}
 	}
@@ -4965,21 +4964,22 @@ func filterServersForDashboard(all []*models.Server, filter, search string) []*m
 }
 
 func serverMatchesFilter(filter string, s *models.Server) bool {
+	state := s.LifecycleSnapshot()
 	switch filter {
 	case "running":
-		return s.IsRunning()
+		return state.Running
 	case "starting":
-		return s.Starting
+		return state.Starting
 	case "paused":
-		return s.IsRunning() && s.Paused
+		return state.Running && state.Paused
 	case "stopped", "offline":
-		return !s.IsRunning() && !s.Starting
+		return !state.Running && !state.Starting
 	case "errors", "error":
 		return strings.TrimSpace(s.LastError) != ""
 	case "storm", "storming":
-		return s.Storming
+		return state.Storming
 	case "active":
-		return s.IsRunning() || s.Starting
+		return state.Running || state.Starting
 	case "all", "":
 		return true
 	default:

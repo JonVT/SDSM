@@ -5,6 +5,7 @@
 {{ $bepOutdated := and .bepinex_deployed (ne .bepinex_deployed .bepinex_latest) }}
 {{ $lpOutdated := and .launchpad_deployed (ne .launchpad_deployed .launchpad_latest) }}
 {{ $sconOutdated := and .scon_deployed (ne .scon_deployed .scon_latest) }}
+{{ $anyOutdated := or $steamOutdated (or $releaseOutdated (or $betaOutdated (or $bepOutdated (or $lpOutdated $sconOutdated)))) }}
 
 <div class="versions-panel" data-version-updating="{{if .updating}}true{{else}}false{{end}}">
     <form class="versions-form" autocomplete="off" aria-label="Software component versions">
@@ -26,6 +27,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="steamcmd"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-steamcmd-deployed">{{.steamcmd_deployed}}</td>
@@ -39,9 +41,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $steamOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $steamOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -54,6 +57,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="release"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-release-deployed">{{.release_deployed}}</td>
@@ -67,9 +71,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $releaseOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $releaseOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -82,6 +87,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="beta"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-beta-deployed">{{.beta_deployed}}</td>
@@ -95,9 +101,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $betaOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $betaOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -110,6 +117,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="bepinex"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-bepinex-deployed">{{.bepinex_deployed}}</td>
@@ -123,9 +131,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $bepOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $bepOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -138,6 +147,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="launchpad"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-launchpad-deployed">{{.launchpad_deployed}}</td>
@@ -151,9 +161,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $lpOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $lpOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -166,6 +177,7 @@
                                 <div class="progress-bar">
                                     <div class="progress-fill" data-progress="scon"></div>
                                 </div>
+                                <div class="progress-text" data-progress-label>Idle</div>
                             </div>
                         </td>
                         <td class="col-deployed" id="ver-scon-deployed">{{.scon_deployed}}</td>
@@ -179,9 +191,10 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
+                                        hx-disabled-elt="this"
+                                        {{if not $sconOutdated}}disabled aria-disabled="true" title="Already up to date"{{end}}>
                                     <i data-feather="arrow-up-circle" aria-hidden="true"></i>
-                                    <span>Update</span>
+                                    <span>{{if $sconOutdated}}Update{{else}}Current{{end}}</span>
                                 </button>
                             </div>
                         </td>
@@ -198,10 +211,18 @@
                                         hx-headers='{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}'
                                         hx-swap="none"
                                         hx-trigger="click"
-                                        hx-disabled-elt="this">
-                                    Update All
+                                        hx-disabled-elt="this"
+                                        {{if not $anyOutdated}}disabled aria-disabled="true" title="All components are up to date"{{end}}>
+                                    {{if $anyOutdated}}Update All{{else}}All Current{{end}}
                                 </button>
                                 <p id="updateMessage" class="update-message" role="status" aria-live="polite"></p>
+                                <details id="updateMessageDetails" class="update-message-details" hidden>
+                                    <summary>More details</summary>
+                                    <div class="update-message-details-body">
+                                        <p id="updateMessageError" class="update-message-detail-line"></p>
+                                        <p id="updateMessageAction" class="update-message-detail-line"></p>
+                                    </div>
+                                </details>
                             </div>
                         </td>
                     </tr>

@@ -99,7 +99,9 @@
     card.querySelectorAll('[data-filter-value]').forEach(btn => {
       const isActive = btn.dataset.filterValue === normalized;
       btn.classList.toggle('is-active', isActive);
-      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
   };
 
@@ -286,6 +288,7 @@
       setFilterButtonState(card, card.dataset.activeFilter || 'all');
 
       const filterButtons = card.querySelectorAll('[data-filter-value]');
+      const filterButtonsArray = Array.from(filterButtons);
       filterButtons.forEach(btn => {
         const handler = () => {
           const value = btn.dataset.filterValue || 'all';
@@ -295,6 +298,45 @@
         };
         btn.addEventListener('click', handler);
         cleanup.push(() => btn.removeEventListener('click', handler));
+
+        const keyHandler = (event) => {
+          const currentIndex = filterButtonsArray.indexOf(btn);
+          if (currentIndex < 0) return;
+
+          let nextIndex = -1;
+          switch (event.key) {
+            case 'Enter':
+            case ' ':
+              event.preventDefault();
+              btn.click();
+              return;
+            case 'ArrowLeft':
+            case 'ArrowUp':
+              nextIndex = (currentIndex - 1 + filterButtonsArray.length) % filterButtonsArray.length;
+              break;
+            case 'ArrowRight':
+            case 'ArrowDown':
+              nextIndex = (currentIndex + 1) % filterButtonsArray.length;
+              break;
+            case 'Home':
+              nextIndex = 0;
+              break;
+            case 'End':
+              nextIndex = filterButtonsArray.length - 1;
+              break;
+            default:
+              return;
+          }
+
+          event.preventDefault();
+          const nextBtn = filterButtonsArray[nextIndex];
+          if (!nextBtn) return;
+          nextBtn.focus();
+          nextBtn.click();
+        };
+
+        btn.addEventListener('keydown', keyHandler);
+        cleanup.push(() => btn.removeEventListener('keydown', keyHandler));
       });
       const debouncedSearch = debounce((value) => {
         card.dataset.searchQuery = value.trim();

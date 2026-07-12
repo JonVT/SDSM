@@ -7,10 +7,14 @@
 <script>
     (function() {
         const toastIcons = {
-            success: '<i data-feather="check-circle"></i>',
-            error: '<i data-feather="x-circle"></i>',
-            info: '<i data-feather="info"></i>',
-            warning: '<i data-feather="alert-triangle"></i>'
+            success: 'check-circle',
+            error: 'x-circle',
+            info: 'info',
+            warning: 'alert-triangle'
+        };
+
+        const toastTypeAliases = {
+            danger: 'error'
         };
 
         let toastCounter = 0;
@@ -23,13 +27,25 @@
             return Number.isFinite(val) && val >= 0 ? val : 5000;
         }
 
-        function showToast(options) {
-            const {
-                type = 'info',
-                title = '',
-                message = '',
-                closable = true
-            } = options;
+        function normalizeShowToastArgs(args) {
+            if (args.length === 1 && args[0] && typeof args[0] === 'object') {
+                return args[0];
+            }
+
+            return {
+                title: args[0] == null ? '' : String(args[0]),
+                message: args[1] == null ? '' : String(args[1]),
+                type: args[2] == null ? 'info' : String(args[2]),
+                closable: args[3] !== false
+            };
+        }
+
+        function showToast(...args) {
+            const options = normalizeShowToastArgs(args);
+            const normalizedType = toastTypeAliases[options.type] || options.type || 'info';
+            const title = options.title == null ? '' : String(options.title);
+            const message = options.message == null ? '' : String(options.message);
+            const closable = options.closable !== false;
 
             const container = document.getElementById('toast-container');
             if (!container) return;
@@ -37,23 +53,48 @@
             const toastId = `toast-${++toastCounter}`;
             const toast = document.createElement('div');
             toast.id = toastId;
-            toast.className = `toast toast-${type}`;
+            toast.className = `toast toast-${normalizedType}`;
             toast.setAttribute('role', 'alert');
 
-            const icon = toastIcons[type] || toastIcons.info;
+            const iconName = toastIcons[normalizedType] || toastIcons.info;
 
-            toast.innerHTML = `
-                <div class="toast-icon">${icon}</div>
-                <div class="toast-content">
-                    ${title ? `<div class="toast-title">${title}</div>` : ''}
-                    <div class="toast-message">${message}</div>
-                </div>
-                ${closable ? `
-                    <button class="toast-close" onclick="window.closeToast('${toastId}')" aria-label="Close notification">
-                        <i data-feather="x"></i>
-                    </button>
-                ` : ''}
-            `;
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'toast-icon';
+            const icon = document.createElement('i');
+            icon.setAttribute('data-feather', iconName);
+            iconWrap.appendChild(icon);
+
+            const content = document.createElement('div');
+            content.className = 'toast-content';
+
+            if (title) {
+                const titleEl = document.createElement('div');
+                titleEl.className = 'toast-title';
+                titleEl.textContent = title;
+                content.appendChild(titleEl);
+            }
+
+            const messageEl = document.createElement('div');
+            messageEl.className = 'toast-message';
+            messageEl.textContent = message;
+            content.appendChild(messageEl);
+
+            toast.appendChild(iconWrap);
+            toast.appendChild(content);
+
+            if (closable) {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'toast-close';
+                closeBtn.setAttribute('aria-label', 'Close notification');
+                closeBtn.addEventListener('click', () => {
+                    window.closeToast(toastId);
+                });
+
+                const closeIcon = document.createElement('i');
+                closeIcon.setAttribute('data-feather', 'x');
+                closeBtn.appendChild(closeIcon);
+                toast.appendChild(closeBtn);
+            }
 
             container.appendChild(toast);
             if (window.feather) {

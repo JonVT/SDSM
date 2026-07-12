@@ -13,7 +13,7 @@
                 {{len .users}} user{{if ne (len .users) 1}}s{{end}} &bull; {{len .serverOptions}} server{{if ne (len .serverOptions) 1}}s{{end}}
             </p>
         </div>
-        <button class="btn btn-primary" type="button" onclick="SDSM.users.showAddUserModal()">
+        <button class="btn btn-primary" type="button" data-users-action="add-user">
             <i data-feather="plus"></i>
             <span>Add User</span>
         </button>

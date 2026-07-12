@@ -212,7 +212,9 @@ var (
 							delay = 0
 						}
 						go func(srv *Server, text string, c map[string]string, d int) {
-							time.Sleep(time.Duration(d) * time.Second)
+							if !srv.waitForRunningDelay(time.Duration(d) * time.Second) {
+								return
+							}
 							_ = srv.SendCommand("chat", srv.RenderChatMessage(text, c))
 						}(s, msg, ctx, delay)
 					}

@@ -12,8 +12,10 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,11 +25,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var steamIDPattern = regexp.MustCompile(`^\d{4,12}$`)
+
 func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 	if !middleware.ValidateFormData(c, []string{}) { // No required fields for this form
 		return
 	}
 
+	isHX := strings.EqualFold(c.GetHeader("HX-Request"), "true")
 	isAsync := strings.Contains(strings.ToLower(c.GetHeader("Accept")), "application/json") ||
 		strings.EqualFold(c.GetHeader("X-Requested-With"), "XMLHttpRequest")
 
@@ -97,9 +102,34 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 
 		port, err := middleware.ValidatePort(portStr)
 		if err != nil {
-			c.HTML(http.StatusBadRequest, "manager.html", gin.H{
-				"error": "Invalid port number",
-			})
+			h.renderManagerSettingsValidationError(c, isHX, isAsync, http.StatusBadRequest, h.managerSettingsFormData(c), gin.H{
+				"port": "Port must be a valid number between 1 and 65535.",
+			}, "Invalid port number")
+			return
+		}
+
+		fieldErrs := gin.H{}
+		if steamID == "" {
+			fieldErrs["steam_id"] = "Steam ID is required."
+		} else if !steamIDPattern.MatchString(steamID) {
+			fieldErrs["steam_id"] = "Steam ID must be numeric (4-12 digits)."
+		}
+
+		if strings.TrimSpace(rootPath) == "" {
+			fieldErrs["root_path"] = "Root Path is required."
+		} else if !isAbsolutePathLike(rootPath) {
+			fieldErrs["root_path"] = "Root Path must be an absolute path."
+		}
+
+		if webhookErr := validateWebhookURL(dcManager); webhookErr != "" {
+			fieldErrs["discord_manager_webhook"] = webhookErr
+		}
+		if webhookErr := validateWebhookURL(dcDefault); webhookErr != "" {
+			fieldErrs["discord_default_webhook"] = webhookErr
+		}
+
+		if len(fieldErrs) > 0 {
+			h.renderManagerSettingsValidationError(c, isHX, isAsync, http.StatusBadRequest, h.managerSettingsFormData(c), fieldErrs, "Please correct highlighted configuration fields.")
 			return
 		}
 
@@ -146,9 +176,11 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 				// Disable TLS on failure to avoid broken startup and surface error
 				h.manager.TLSEnabled = false
 				h.manager.Log.Write("TLS asset installation failed: " + copyErr.Error())
-				if isAsync {
-					ToastError(c, "TLS Setup Failed", copyErr.Error())
-				}
+				h.renderManagerSettingsValidationError(c, isHX, isAsync, http.StatusBadRequest, h.managerSettingsFormData(c), gin.H{
+					"tls_cert": copyErr.Error(),
+					"tls_key":  copyErr.Error(),
+				}, copyErr.Error())
+				return
 			} else {
 				if strings.TrimSpace(certRel) != "" {
 					h.manager.TLSCertPath = certRel
@@ -170,9 +202,11 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 					// Read and parse PEM
 					if certPath == "" || keyPath == "" {
 						h.manager.TLSEnabled = false
-						if isAsync {
-							ToastError(c, "TLS Invalid", "Certificate or key path missing.")
-						}
+						h.renderManagerSettingsValidationError(c, isHX, isAsync, http.StatusBadRequest, h.managerSettingsFormData(c), gin.H{
+							"tls_cert": "Certificate path is required when HTTPS is enabled.",
+							"tls_key":  "Private key path is required when HTTPS is enabled.",
+						}, "Certificate or key path missing.")
+						return
 					} else {
 						cerr := validatePEMCertificate(certPath)
 						kobj, kerr := validatePEMKey(keyPath)
@@ -191,9 +225,18 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 							if msg == "" {
 								msg = "certificate and key do not match"
 							}
-							if isAsync {
-								ToastError(c, "TLS Invalid", msg)
+							fieldErrs := gin.H{}
+							if cerr != nil {
+								fieldErrs["tls_cert"] = cerr.Error()
 							}
+							if kerr != nil {
+								fieldErrs["tls_key"] = kerr.Error()
+							}
+							if cerr == nil && kerr == nil {
+								fieldErrs["tls_key"] = "Certificate and key do not match."
+							}
+							h.renderManagerSettingsValidationError(c, isHX, isAsync, http.StatusBadRequest, h.managerSettingsFormData(c), fieldErrs, msg)
+							return
 						}
 					}
 				}
@@ -423,6 +466,69 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 	c.Redirect(http.StatusFound, "/manager")
 }
 
+func (h *ManagerHandlers) managerSettingsFormData(c *gin.Context) gin.H {
+	data := h.buildManagerPagePayload(c)
+	if data == nil {
+		data = gin.H{}
+	}
+
+	if v := strings.TrimSpace(c.PostForm("steam_id")); v != "" {
+		data["steam_id"] = middleware.SanitizeString(v)
+	}
+	if v := strings.TrimSpace(c.PostForm("root_path")); v != "" {
+		data["root_path"] = middleware.SanitizePath(v)
+	}
+	if v := strings.TrimSpace(c.PostForm("port")); v != "" {
+		data["port"] = v
+	}
+	if v := strings.TrimSpace(c.PostForm("auto_update")); v != "" {
+		data["auto_update_time"] = v
+	}
+	data["discord_manager_webhook"] = strings.TrimSpace(c.PostForm("discord_manager_webhook"))
+	data["discord_default_webhook"] = strings.TrimSpace(c.PostForm("discord_default_webhook"))
+
+	data["start_update"] = c.PostForm("start_update") == "on"
+	data["detached"] = c.PostForm("detached_servers") == "on"
+	data["tray_enabled"] = c.PostForm("tray_enabled") == "on"
+	data["tls_enabled"] = c.PostForm("tls_enabled") == "on"
+	data["auto_port_forward_manager"] = c.PostForm("auto_port_forward_manager") == "on"
+	data["tls_cert"] = middleware.SanitizePath(strings.TrimSpace(c.PostForm("tls_cert")))
+	data["tls_key"] = middleware.SanitizePath(strings.TrimSpace(c.PostForm("tls_key")))
+
+	if _, ok := data["field_errors"]; !ok {
+		data["field_errors"] = gin.H{}
+	}
+
+	return data
+}
+
+func (h *ManagerHandlers) renderManagerSettingsValidationError(c *gin.Context, isHX, isAsync bool, status int, data gin.H, fieldErrors gin.H, message string) {
+	if data == nil {
+		data = gin.H{}
+	}
+	if fieldErrors == nil {
+		fieldErrors = gin.H{}
+	}
+	data["field_errors"] = fieldErrors
+	if strings.TrimSpace(message) != "" {
+		data["error"] = strings.TrimSpace(message)
+	}
+
+	if isAsync {
+		ToastError(c, "Configuration Error", message)
+		c.JSON(status, gin.H{"error": message, "field_errors": fieldErrors})
+		return
+	}
+
+	if isHX {
+		ToastError(c, "Configuration Error", message)
+		c.HTML(status, "cards/manager_settings_form.html", data)
+		return
+	}
+
+	c.HTML(status, "manager.html", data)
+}
+
 // generateSelfSignedCert creates a minimal self-signed certificate and key suitable for local HTTPS.
 func generateSelfSignedCert(certPath, keyPath string) error {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -615,6 +721,45 @@ func keysMatch(certPath string, priv any) bool {
 		}
 	default:
 		// Unsupported; assume OK
+		return true
+	}
+	return false
+}
+
+func validateWebhookURL(raw string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return ""
+	}
+	u, err := url.ParseRequestURI(v)
+	if err != nil {
+		return "Webhook URL must be a valid URL."
+	}
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "https" && scheme != "http" {
+		return "Webhook URL must start with http:// or https://"
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return "Webhook URL must include a host."
+	}
+	return ""
+}
+
+func isAbsolutePathLike(pathValue string) bool {
+	p := strings.TrimSpace(pathValue)
+	if p == "" {
+		return false
+	}
+	if filepath.IsAbs(p) {
+		return true
+	}
+	if len(p) >= 3 {
+		first := p[0]
+		if ((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')) && p[1] == ':' && (p[2] == '\\' || p[2] == '/') {
+			return true
+		}
+	}
+	if strings.HasPrefix(p, "\\\\") || strings.HasPrefix(p, "//") {
 		return true
 	}
 	return false

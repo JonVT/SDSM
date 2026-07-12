@@ -16,6 +16,7 @@
   "cookie_force_secure": false,
   "cookie_samesite": "none",
   "allow_iframe": false,
+  "ws_allowed_origins": [],
   "windows_discovery_wmi_enabled": true,
   "scon_repo_override": "",
   "scon_url_linux_override": "",

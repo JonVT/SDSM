@@ -47,11 +47,11 @@
         const bodyEl = modal.querySelector('.modal-body');
 
         if (titleEl && opts.title) titleEl.textContent = opts.title;
-        if (bodyEl && opts.body) {
+        if (bodyEl && typeof opts.body !== 'undefined' && opts.body !== null) {
+            bodyEl.replaceChildren();
             if (typeof opts.body === 'string') {
-                bodyEl.innerHTML = opts.body;
+                bodyEl.textContent = opts.body;
             } else if (opts.body instanceof Node) {
-                bodyEl.innerHTML = '';
                 bodyEl.appendChild(opts.body);
             }
         }
@@ -152,6 +152,7 @@
             confirmText: 'OK',
             cancelText: 'Cancel',
             hint: '',
+            danger: false,
             validate: null,
             ...options
         };
@@ -181,6 +182,10 @@
 
         const confirmBtn = setButton(modal, '[data-confirm]', opts.confirmText);
         const cancelBtn = setButton(modal, '[data-cancel]', opts.cancelText);
+        if (opts.danger && confirmBtn) {
+            confirmBtn.classList.remove('btn-primary');
+            confirmBtn.classList.add('btn-danger');
+        }
 
         return new Promise(resolve => {
             let trapDisposer;

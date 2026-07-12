@@ -22,7 +22,7 @@ func initMinimalApp(t *testing.T) {
 	app = &App{
 		manager:     mgr,
 		authService: middleware.NewAuthService(),
-		wsHub:       middleware.NewHub(nil),
+		wsHub:       middleware.NewHub(nil, nil),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Second), 100),
 		userStore:   manager.NewUserStore(mgr.Paths),
 	}

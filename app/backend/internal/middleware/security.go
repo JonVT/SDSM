@@ -18,15 +18,38 @@ type RateLimiter struct {
 	rate     rate.Limit
 	burst    int
 	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 func NewRateLimiter(rps rate.Limit, burst int) *RateLimiter {
-	return &RateLimiter{
+	rl := &RateLimiter{
 		limiters: make(map[string]*rate.Limiter),
 		rate:     rps,
 		burst:    burst,
 		stopCh:   make(chan struct{}),
 	}
+	rl.startCleanupLoop()
+	return rl
+}
+
+func (rl *RateLimiter) startCleanupLoop() {
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				rl.mu.Lock()
+				// Remove limiters that haven't been active
+				for ip := range rl.limiters {
+					delete(rl.limiters, ip)
+				}
+				rl.mu.Unlock()
+			case <-rl.stopCh:
+				return
+			}
+		}
+	}()
 }
 
 func (rl *RateLimiter) getLimiter(clientIP string) *rate.Limiter {
@@ -51,25 +74,6 @@ func (rl *RateLimiter) getLimiter(clientIP string) *rate.Limiter {
 }
 
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
-	// Clean up old limiters periodically
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				rl.mu.Lock()
-				// Remove limiters that haven't been active
-				for ip := range rl.limiters {
-					delete(rl.limiters, ip)
-				}
-				rl.mu.Unlock()
-			case <-rl.stopCh:
-				return
-			}
-		}
-	}()
-
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 		if strings.HasPrefix(path, "/static/") ||
@@ -100,7 +104,9 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 }
 
 func (rl *RateLimiter) Stop() {
-	close(rl.stopCh)
+	rl.stopOnce.Do(func() {
+		close(rl.stopCh)
+	})
 }
 
 // Security headers middleware

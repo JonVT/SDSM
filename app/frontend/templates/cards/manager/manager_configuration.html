@@ -20,10 +20,26 @@
             </span>
         </summary>
         <div class="card-collapse-body">
+    {{template "cards/manager_settings_form.html" .}}
+    <p class="text-secondary text-sm"><strong>Note:</strong> Changes may restart SDSM so updates to TLS and ports can take effect.</p>
+        </div>
+    </details>
+</div>
+{{end}}
+
+{{define "cards/manager_settings_form.html"}}
     <form id="manager-settings-form" hx-post="/api/manager/update" hx-target="#manager-settings-form" hx-swap="outerHTML" class="config-form flex flex-col gap-4">
+        {{with .error}}
+        <div class="alert alert-danger" role="alert">{{.}}</div>
+        {{end}}
+        <div class="settings-impact-legend" aria-label="Settings apply guidance">
+            <span class="setting-impact setting-impact--immediate">Applies immediately</span>
+            <span class="setting-impact setting-impact--restart">Restart required</span>
+        </div>
         <div class="form-group">
             <label for="steam_id">Steam ID</label>
             <input type="text" id="steam_id" name="steam_id" value="{{ .steam_id }}" class="form-control">
+            {{with .field_errors}}{{with index . "steam_id"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
         </div>
         <div class="form-group">
             <label for="root_path">Root Path</label>
@@ -34,20 +50,22 @@
                     <span>Select Path</span>
                 </button>
             </div>
+            {{with .field_errors}}{{with index . "root_path"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
         </div>
         <div class="form-group">
-            <label for="port">Web UI Port</label>
+            <label for="port">Web UI Port <span class="setting-impact setting-impact--restart">Restart required</span></label>
             <input type="number" id="port" name="port" value="{{ .port }}" class="form-control">
+            {{with .field_errors}}{{with index . "port"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
         </div>
         <div class="form-group top-align">
-            <label for="auto_port_forward_manager">Port Forward (UPnP)</label>
+            <label for="auto_port_forward_manager">Port Forward (UPnP) <span class="setting-impact setting-impact--immediate">Applies immediately</span></label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="auto_port_forward_manager" name="auto_port_forward_manager" {{ if .auto_port_forward_manager }}checked{{ end }} class="form-checkbox">
                 <span class="text-secondary text-sm" aria-live="polite">Attempt UPnP/NAT-PMP port forwarding for the manager UI port. <br><strong>WARNING:</strong> Only enable this if you know what you're doing.</span>
             </div>
         </div>
         <div class="form-group">
-            <label for="auto_update_time">Auto Update Time</label>
+            <label for="auto_update_time">Auto Update Time <span class="setting-impact setting-impact--immediate">Applies immediately</span></label>
             <div class="flex wrap gap-2">
                 <input type="time" id="auto_update_time" name="auto_update" value="{{ .auto_update_time }}" step="60" class="form-control flex-grow-input">
                 <button type="button" class="btn btn-neutral" data-show-picker="auto_update_time" aria-label="Open time picker">
@@ -57,28 +75,28 @@
             </div>
         </div>
         <div class="form-group top-align">
-            <label for="start_update">Update at Startup</label>
+            <label for="start_update">Update at Startup <span class="setting-impact setting-impact--immediate">Applies immediately</span></label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="start_update" name="start_update" {{ if .start_update }}checked{{ end }} class="form-checkbox">
                 <span class="text-secondary text-sm" aria-live="polite">Automatically check and apply updates whenever SDSM launches.</span>
             </div>
         </div>
         <div class="form-group top-align">
-            <label for="detached_servers">Detached Servers</label>
+            <label for="detached_servers">Detached Servers <span class="setting-impact setting-impact--immediate">Applies immediately</span></label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="detached_servers" name="detached_servers" {{ if .detached }}checked{{ end }} class="form-checkbox">
                 <span class="text-secondary text-sm" aria-live="polite">Keep Stationeers servers running if the manager process is closed.</span>
             </div>
         </div>
         <div class="form-group top-align">
-            <label for="tray_enabled">Windows Tray Icon</label>
+            <label for="tray_enabled">Windows Tray Icon <span class="setting-impact setting-impact--restart">Restart required</span></label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="tray_enabled" name="tray_enabled" {{ if .tray_enabled }}checked{{ end }} class="form-checkbox">
                 <span class="text-secondary text-sm" aria-live="polite">Adds a background-friendly tray icon on Windows hosts.</span>
             </div>
         </div>
         <div class="form-group top-align">
-            <label for="tls_enabled">HTTPS (TLS)</label>
+            <label for="tls_enabled">HTTPS (TLS) <span class="setting-impact setting-impact--restart">Restart required</span></label>
             <div class="field-inline items-start gap-2">
                 <input type="checkbox" id="tls_enabled" name="tls_enabled" {{ if .tls_enabled }}checked{{ end }} class="form-checkbox">
                 <span class="text-secondary text-sm" aria-live="polite">Serve the web UI over HTTPS using the certificate assets below (restart required).</span>
@@ -95,7 +113,7 @@
             </div>
         </div>
         <div class="form-group top-align">
-            <label for="tls_cert">TLS Source Paths</label>
+            <label for="tls_cert">TLS Source Paths <span class="setting-impact setting-impact--restart">Restart required</span></label>
             <div class="flex flex-col gap-3">
                 <div class="flex flex-col gap-1">
                     <span class="text-secondary text-xs uppercase tracking-wide">Certificate Source</span>
@@ -106,6 +124,7 @@
                             <span>Select Path</span>
                         </button>
                     </div>
+                    {{with .field_errors}}{{with index . "tls_cert"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
                 </div>
                 <div class="flex flex-col gap-1">
                     <span class="text-secondary text-xs uppercase tracking-wide">Private Key Source</span>
@@ -116,6 +135,7 @@
                             <span>Select Path</span>
                         </button>
                     </div>
+                    {{with .field_errors}}{{with index . "tls_key"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
                 </div>
                 <p class="text-secondary text-xs">Sources are copied into <code>certs/</code> as <code>sdsm.crt</code> / <code>sdsm.key</code>. Files must be valid PEM.</p>
             </div>
@@ -127,8 +147,4 @@
             </button>
         </div>
     </form>
-    <p class="text-secondary text-sm"><strong>Note:</strong> Changes may restart SDSM so updates to TLS and ports can take effect.</p>
-        </div>
-    </details>
-</div>
 {{end}}

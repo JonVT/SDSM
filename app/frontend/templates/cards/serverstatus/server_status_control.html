@@ -82,6 +82,18 @@
                 </div>
             </div>
 
+            {{if eq .role "admin"}}
+            <div class="control-group">
+                <h4 class="control-group-title">Danger Zone</h4>
+                <p class="text-sm text-muted">Delete this server and its files from SDSM. You will need to type the server name to confirm.</p>
+                <div class="btn-group-vertical">
+                    <button type="button" id="btn-delete-server" class="btn btn-danger" title="Delete this server and its files">
+                        <i data-feather="trash-2" class="btn-icon-left"></i> Delete Server
+                    </button>
+                </div>
+            </div>
+            {{end}}
+
             <div class="control-group">
                 <h4 class="control-group-title">World</h4>
                 <div class="btn-group-vertical">

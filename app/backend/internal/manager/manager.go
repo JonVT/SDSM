@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	fs "io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,6 +151,9 @@ type Manager struct {
 	CookieSameSite    string `json:"cookie_samesite"`
 	// UI embedding policy
 	AllowIFrame bool `json:"allow_iframe"`
+	// WSAllowedOrigins extends websocket origin allowlist. Values should be full origins,
+	// e.g. "https://admin.example.com". Same-origin is always allowed by default.
+	WSAllowedOrigins []string `json:"ws_allowed_origins"`
 	// AutoPortForwardManager enables automatic router port forwarding (TCP) for the
 	// manager's own HTTP(S) port via UPnP/NAT-PMP when available. Default is false.
 	AutoPortForwardManager bool `json:"auto_port_forward_manager"`
@@ -240,16 +245,19 @@ type Manager struct {
 var processStartStamp = time.Now().UTC().Format("20060102150405")
 
 type UpdateProgress struct {
-	Key         string    `json:"key"`
-	Component   string    `json:"component"`
-	DisplayName string    `json:"display_name"`
-	Stage       string    `json:"stage"`
-	Percent     int       `json:"percent"`
-	Downloaded  int64     `json:"downloaded"`
-	Total       int64     `json:"total"`
-	Running     bool      `json:"running"`
-	Error       string    `json:"error,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Key            string    `json:"key"`
+	Component      string    `json:"component"`
+	DisplayName    string    `json:"display_name"`
+	Stage          string    `json:"stage"`
+	Percent        int       `json:"percent"`
+	Downloaded     int64     `json:"downloaded"`
+	Total          int64     `json:"total"`
+	Running        bool      `json:"running"`
+	Error          string    `json:"error,omitempty"`
+	ErrorCode      string    `json:"error_code,omitempty"`
+	ErrorSummary   string    `json:"error_summary,omitempty"`
+	Recommendation string    `json:"recommendation,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type UpdateProgressSnapshot struct {
@@ -330,6 +338,7 @@ func NewManagerWithConfig(configPath string) *Manager {
 		CookieForceSecure:          false,
 		CookieSameSite:             "none",
 		AllowIFrame:                false,
+		WSAllowedOrigins:           []string{},
 		WindowsDiscoveryWMIEnabled: true,
 		// Default notification preferences
 		NotifyEnableDeploy:           true,
@@ -455,40 +464,68 @@ func NewManagerWithConfig(configPath string) *Manager {
 	// Do not block startup updates merely because updates are available on first start.
 	// This ensures StartupUpdate works consistently across runs.
 
-	// Perform selective startup updates on every process start (not just first activation)
-	// when enabled and no interactive prompt is needed. Previously gated by !wasActive;
-	// removed to ensure beta/release channels update each launch when behind.
-	if m.StartupUpdate && !m.NeedsUploadPrompt {
-		// Ensure we evaluate against fresh values by clearing short-lived caches first.
-		m.invalidateRocketStationVersionCache(false)
-		m.invalidateRocketStationVersionCache(true)
-		// Also refresh latest build IDs cache prior to evaluation.
-		_ = m.ReleaseLatest()
-		_ = m.BetaLatest()
-		// Prime deployed values as well.
-		_ = m.ReleaseDeployed()
-		_ = m.BetaDeployed()
-
-		// Diagnostic matrix of deployed vs latest at startup to help trace why updates may be skipped.
-		m.safeLog(fmt.Sprintf("Startup update diagnostic: Release deployed=%s latest=%s | Beta deployed=%s latest=%s | BepInEx deployed=%s latest=%s | LaunchPad deployed=%s latest=%s | SCON deployed=%s latest=%s",
-			strings.TrimSpace(m.ReleaseDeployed()), strings.TrimSpace(m.ReleaseLatest()),
-			strings.TrimSpace(m.BetaDeployed()), strings.TrimSpace(m.BetaLatest()),
-			strings.TrimSpace(m.BepInExDeployed()), strings.TrimSpace(m.BepInExLatest()),
-			strings.TrimSpace(m.LaunchPadDeployed()), strings.TrimSpace(m.LaunchPadLatest()),
-			strings.TrimSpace(m.SCONDeployed()), strings.TrimSpace(m.SCONLatest()),
-		))
-		types := m.ComponentsNeedingUpdate()
-		if len(types) == 0 {
-			m.safeLog("Startup update: all components are up-to-date; skipping deployment")
-		} else {
-			m.safeLog(fmt.Sprintf("Startup update: updating out-of-sync components: %v", types))
-			if err := m.DeployTypes(types); err != nil {
-				m.safeLog(fmt.Sprintf("Startup selective deployment failed: %v", err))
-			}
-		}
-	}
+	// Startup updates are intentionally deferred until the web UI/server is up.
+	// main() triggers StartStartupUpdateAsync() after HTTP startup so users can
+	// access the UI while updates run and observe live progress.
 
 	return m
+}
+
+func (m *Manager) prepareStartupUpdateTypes() []DeployType {
+	if m == nil {
+		return nil
+	}
+
+	// Ensure we evaluate against fresh values by clearing short-lived caches first.
+	m.invalidateRocketStationVersionCache(false)
+	m.invalidateRocketStationVersionCache(true)
+	// Also refresh latest build IDs cache prior to evaluation.
+	_ = m.ReleaseLatest()
+	_ = m.BetaLatest()
+	// Prime deployed values as well.
+	_ = m.ReleaseDeployed()
+	_ = m.BetaDeployed()
+
+	// Diagnostic matrix of deployed vs latest at startup to help trace why updates may be skipped.
+	m.safeLog(fmt.Sprintf("Startup update diagnostic: Release deployed=%s latest=%s | Beta deployed=%s latest=%s | BepInEx deployed=%s latest=%s | LaunchPad deployed=%s latest=%s | SCON deployed=%s latest=%s",
+		strings.TrimSpace(m.ReleaseDeployed()), strings.TrimSpace(m.ReleaseLatest()),
+		strings.TrimSpace(m.BetaDeployed()), strings.TrimSpace(m.BetaLatest()),
+		strings.TrimSpace(m.BepInExDeployed()), strings.TrimSpace(m.BepInExLatest()),
+		strings.TrimSpace(m.LaunchPadDeployed()), strings.TrimSpace(m.LaunchPadLatest()),
+		strings.TrimSpace(m.SCONDeployed()), strings.TrimSpace(m.SCONLatest()),
+	))
+
+	return m.ComponentsNeedingUpdate()
+}
+
+// StartStartupUpdateAsync launches startup updates after process initialization.
+// It returns started=true when an async deployment was actually started.
+func (m *Manager) StartStartupUpdateAsync() (started bool, err error) {
+	if m == nil {
+		return false, fmt.Errorf("manager is nil")
+	}
+	if !m.StartupUpdate {
+		m.safeLog("Startup update disabled; skipping startup update")
+		return false, nil
+	}
+	if m.NeedsUploadPrompt {
+		m.safeLog("Startup update skipped: setup prompt required")
+		return false, nil
+	}
+
+	types := m.prepareStartupUpdateTypes()
+	if len(types) == 0 {
+		m.safeLog("Startup update: all components are up-to-date; skipping deployment")
+		return false, nil
+	}
+
+	m.safeLog(fmt.Sprintf("Startup update: updating out-of-sync components: %v", types))
+	if err := m.StartDeployTypesAsync(types); err != nil {
+		m.safeLog(fmt.Sprintf("Startup selective deployment failed to start: %v", err))
+		return false, err
+	}
+
+	return true, nil
 }
 
 // UpdatesAvailable returns true if any managed component appears out-of-date
@@ -678,6 +715,30 @@ func (m *Manager) DeployTypes(types []DeployType) error {
 		return err
 	}
 	defer m.finishDeploy()
+	return m.deployTypesLocked(types)
+}
+
+// StartDeployTypesAsync runs a selective deploy in the background.
+func (m *Manager) StartDeployTypesAsync(types []DeployType) error {
+	if len(types) == 0 {
+		return nil
+	}
+	if err := m.beginDeploy(); err != nil {
+		return err
+	}
+
+	go func() {
+		defer m.finishDeploy()
+		_ = m.deployTypesLocked(types)
+	}()
+
+	return nil
+}
+
+func (m *Manager) deployTypesLocked(types []DeployType) error {
+	if len(types) == 0 {
+		return nil
+	}
 
 	start := time.Now()
 	m.Log.Write(fmt.Sprintf("Selective deployment started (%v)", types))
@@ -735,6 +796,106 @@ func normalizeStage(stage string) string {
 	return trimmed
 }
 
+func summarizeUpdateError(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return "Update failed"
+	}
+	if idx := strings.IndexAny(msg, "\r\n"); idx >= 0 {
+		msg = strings.TrimSpace(msg[:idx])
+	}
+	msg = strings.Join(strings.Fields(msg), " ")
+	const maxLen = 140
+	if len(msg) > maxLen {
+		return strings.TrimSpace(msg[:maxLen-1]) + "…"
+	}
+	return msg
+}
+
+func containsAnyFold(s string, values ...string) bool {
+	for _, v := range values {
+		if strings.Contains(s, strings.ToLower(strings.TrimSpace(v))) {
+			return true
+		}
+	}
+	return false
+}
+
+func classifyUpdateError(errMsg string) (code string, summary string, recommendation string) {
+	raw := strings.TrimSpace(errMsg)
+	if raw == "" {
+		return "update_failed", "Update failed", "Check the update log for details, then retry the component."
+	}
+
+	summary = summarizeUpdateError(raw)
+	lower := strings.ToLower(raw)
+
+	switch {
+	case containsAnyFold(lower,
+		"no space left on device",
+		"not enough space",
+		"disk full"):
+		return "disk_full", summary, "Free disk space on the drive used by SDSM (root_path/bin), then retry the update."
+
+	case containsAnyFold(lower,
+		"permission denied",
+		"operation not permitted",
+		"access is denied"):
+		return "permission_denied", summary, "Verify SDSM can write to root_path and subfolders (bin, release, beta, steamcmd), then retry."
+
+	case containsAnyFold(lower,
+		"invalid steamid",
+		"invalid steam id"):
+		return "invalid_steamid", summary, "Set a valid numeric Steam ID in Manager settings, save, and retry."
+
+	case containsAnyFold(lower,
+		"invalid install dir",
+		"escapes root",
+		"invalid root path",
+		"root path"):
+		return "invalid_path", summary, "Review root_path in Manager settings. It must point to a valid writable directory for this SDSM instance."
+
+	case containsAnyFold(lower,
+		"dial tcp",
+		"i/o timeout",
+		"tls handshake timeout",
+		"temporary failure in name resolution",
+		"no such host",
+		"connection refused",
+		"connection reset",
+		"no route to host",
+		"network is unreachable"):
+		return "network_error", summary, "Check internet, DNS, firewall/proxy settings, then retry. If transient, wait a minute and try again."
+
+	case containsAnyFold(lower,
+		"failed to download",
+		"status 429",
+		"too many requests",
+		"status 403",
+		"forbidden",
+		"bad gateway",
+		"service unavailable"):
+		return "download_failed", summary, "Download failed from an upstream service. Retry shortly; if persistent, check connectivity and remote rate limits."
+
+	case containsAnyFold(lower,
+		"zip",
+		"gzip",
+		"tar",
+		"archive",
+		"unexpected eof"):
+		return "archive_error", summary, "The downloaded archive may be corrupted. Retry the update; if it keeps failing, remove the component folder and run update again."
+
+	case containsAnyFold(lower,
+		"steamcmd executable missing",
+		"executable file not found",
+		"no such file or directory"):
+		return "missing_dependency", summary, "A required executable/file is missing. Run SteamCMD update first and verify root_path contents, then retry."
+
+	default:
+		return "update_failed", summary, "Check the update log for full details, resolve the root cause, then retry this component."
+	}
+}
+
 func (m *Manager) progressBegin(dt DeployType, stage string) {
 	m.progressMu.Lock()
 	defer m.progressMu.Unlock()
@@ -745,6 +906,9 @@ func (m *Manager) progressBegin(dt DeployType, stage string) {
 	entry.Total = 0
 	entry.Running = true
 	entry.Error = ""
+	entry.ErrorCode = ""
+	entry.ErrorSummary = ""
+	entry.Recommendation = ""
 	entry.UpdatedAt = time.Now()
 }
 
@@ -769,6 +933,9 @@ func (m *Manager) progressUpdate(dt DeployType, stage string, downloaded, total 
 	}
 	entry.Running = true
 	entry.Error = ""
+	entry.ErrorCode = ""
+	entry.ErrorSummary = ""
+	entry.Recommendation = ""
 	entry.UpdatedAt = time.Now()
 }
 
@@ -781,8 +948,12 @@ func (m *Manager) progressComplete(dt DeployType, stage string, err error) {
 	}
 	if err != nil {
 		entry.Error = err.Error()
+		entry.ErrorCode, entry.ErrorSummary, entry.Recommendation = classifyUpdateError(entry.Error)
 	} else {
 		entry.Error = ""
+		entry.ErrorCode = ""
+		entry.ErrorSummary = ""
+		entry.Recommendation = ""
 		if entry.Total == 0 {
 			entry.Percent = 100
 		} else if entry.Percent < 100 {
@@ -1132,6 +1303,10 @@ func (m *Manager) load() (bool, error) {
 	if err := json.Unmarshal(data, temp); err != nil {
 		return false, fmt.Errorf("error parsing configuration: %w", err)
 	}
+	validatedOrigins, err := validateLoadConfig(temp, fieldExists)
+	if err != nil {
+		return false, fmt.Errorf("invalid configuration: %w", err)
+	}
 
 	// Copy fields from loaded config
 	m.SteamID = temp.SteamID
@@ -1158,6 +1333,7 @@ func (m *Manager) load() (bool, error) {
 	m.CookieForceSecure = temp.CookieForceSecure
 	m.CookieSameSite = strings.TrimSpace(temp.CookieSameSite)
 	m.AllowIFrame = temp.AllowIFrame
+	m.WSAllowedOrigins = validatedOrigins
 	m.WindowsDiscoveryWMIEnabled = temp.WindowsDiscoveryWMIEnabled
 	// SCON overrides
 	m.SCONRepoOverride = strings.TrimSpace(temp.SCONRepoOverride)
@@ -1301,7 +1477,9 @@ func (m *Manager) managePortForwarding() {
 	// Initial attempt
 	m.refreshManagerPortMapping()
 	ticker := time.NewTicker(5 * time.Minute)
+	heartbeat := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-ticker.C:
@@ -1312,8 +1490,10 @@ func (m *Manager) managePortForwarding() {
 			m.refreshManagerPortMapping()
 		case <-m.pfStop:
 			return
-		default:
-			time.Sleep(2 * time.Second)
+		case <-heartbeat.C:
+			if !m.AutoPortForwardManager {
+				return
+			}
 		}
 	}
 }
@@ -1400,6 +1580,128 @@ func (m *Manager) Save() {
 
 	m.Log.Write("Configuration saved successfully")
 	m.Active = true
+}
+
+func sanitizeOriginList(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	clean := make([]string, 0, len(values))
+	for _, raw := range values {
+		v := strings.TrimSpace(raw)
+		if v == "" {
+			continue
+		}
+		if _, exists := seen[v]; exists {
+			continue
+		}
+		seen[v] = struct{}{}
+		clean = append(clean, v)
+	}
+	if len(clean) == 0 {
+		return []string{}
+	}
+	return clean
+}
+
+func validateLoadConfig(temp *Manager, fieldExists map[string]bool) ([]string, error) {
+	if temp == nil {
+		return nil, fmt.Errorf("empty configuration")
+	}
+
+	if fieldExists["port"] {
+		if temp.Port < 1 || temp.Port > 65535 {
+			return nil, fmt.Errorf("port must be between 1 and 65535")
+		}
+	}
+
+	if fieldExists["cookie_samesite"] {
+		sameSite := strings.ToLower(strings.TrimSpace(temp.CookieSameSite))
+		if sameSite != "" && sameSite != "none" && sameSite != "lax" && sameSite != "strict" && sameSite != "default" {
+			return nil, fmt.Errorf("cookie_samesite must be one of: none, lax, strict, default")
+		}
+	}
+
+	if fieldExists["tls_enabled"] && temp.TLSEnabled {
+		if strings.TrimSpace(temp.TLSCertPath) == "" || strings.TrimSpace(temp.TLSKeyPath) == "" {
+			return nil, fmt.Errorf("tls_enabled=true requires both tls_cert and tls_key")
+		}
+	}
+
+	origins := sanitizeOriginList(temp.WSAllowedOrigins)
+	if !fieldExists["ws_allowed_origins"] {
+		return origins, nil
+	}
+
+	validated := make([]string, 0, len(origins))
+	seen := make(map[string]struct{}, len(origins))
+	for _, raw := range origins {
+		normalized, err := validateAndNormalizeWSOrigin(raw)
+		if err != nil {
+			return nil, fmt.Errorf("ws_allowed_origins contains invalid value %q: %w", raw, err)
+		}
+		if _, exists := seen[normalized]; exists {
+			return nil, fmt.Errorf("ws_allowed_origins contains duplicate value %q", raw)
+		}
+		seen[normalized] = struct{}{}
+		validated = append(validated, normalized)
+	}
+
+	if len(validated) == 0 {
+		return []string{}, nil
+	}
+	return validated, nil
+}
+
+func validateAndNormalizeWSOrigin(origin string) (string, error) {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return "", fmt.Errorf("origin cannot be empty")
+	}
+	if origin == "*" {
+		return "*", nil
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil || u == nil {
+		return "", fmt.Errorf("invalid URL")
+	}
+
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("unsupported scheme %q", u.Scheme)
+	}
+	if u.User != nil {
+		return "", fmt.Errorf("userinfo is not allowed")
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return "", fmt.Errorf("host is required")
+	}
+	if p := strings.TrimSpace(u.Path); p != "" && p != "/" {
+		return "", fmt.Errorf("path is not allowed")
+	}
+	if strings.TrimSpace(u.RawQuery) != "" || strings.TrimSpace(u.Fragment) != "" {
+		return "", fmt.Errorf("query and fragment are not allowed")
+	}
+
+	hostname := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if hostname == "" {
+		return "", fmt.Errorf("host is required")
+	}
+	port := strings.TrimSpace(u.Port())
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	if _, err := net.LookupPort("tcp", port); err != nil {
+		return "", fmt.Errorf("invalid port")
+	}
+
+	return scheme + "://" + hostname + ":" + port, nil
 }
 
 // InstallTLSFromSources copies provided certificate/key sources into a
@@ -2023,9 +2325,6 @@ func (m *Manager) ActiveServerCount() int {
 }
 
 func (m *Manager) Shutdown() {
-	// Allow HTTP response to complete before shutting down
-	time.Sleep(1000 * time.Millisecond)
-
 	m.Log.Write("Shutting down all servers.")
 	if m.DetachedServers {
 		m.Log.Write("Shutdown requested (detached mode disabled for this operation). Stopping all servers.")
@@ -2041,15 +2340,12 @@ func (m *Manager) Shutdown() {
 	m.Active = false
 	m.Log.Write("SDSM is shutting down.")
 	// Exit the application
-	time.Sleep(1000 * time.Millisecond) // Give logs time to flush
 	os.Exit(0)
 }
 
 // If stopServers is false, running servers are left alive; they were started in their own
 // process group and will continue independently.
 func (m *Manager) ExitDetached(stopServers bool) {
-	// Allow HTTP response to complete before exiting
-	time.Sleep(1000 * time.Millisecond)
 	if stopServers {
 		m.Log.Write("Detached shutdown: stopping all servers before exit.")
 		for _, srv := range m.Servers {
@@ -2065,14 +2361,10 @@ func (m *Manager) ExitDetached(stopServers bool) {
 	m.Save()
 	m.Active = false
 	m.Log.Write("SDSM exiting now.")
-	time.Sleep(1000 * time.Millisecond)
 	os.Exit(0)
 }
 
 func (m *Manager) Restart() {
-	// Allow HTTP response to complete before restarting
-	time.Sleep(1000 * time.Millisecond)
-
 	m.Log.Write("Restarting SDSM...")
 	m.Log.Write("Shutting down all servers.")
 	for _, srv := range m.Servers {
@@ -2097,8 +2389,6 @@ func (m *Manager) Restart() {
 
 	truncateLogFile(m.Paths.LogFile())
 	truncateLogFile(m.Paths.UpdateLogFile())
-	// Restart the application
-	time.Sleep(1000 * time.Millisecond) // Give logs time to flush
 
 	// Get the executable path and arguments
 	executable, err := os.Executable()
@@ -3562,12 +3852,12 @@ func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
 
 	manifestPath := filepath.Join(installDir, "steamapps", fmt.Sprintf("appmanifest_%s.acf", steamID))
 	m.safeLog(fmt.Sprintf("Looking for manifest at: %s", manifestPath))
-	
+
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			m.safeLog(fmt.Sprintf("Manifest not found at: %s", manifestPath))
-			
+
 			// List what's actually in the install directory to help diagnose
 			entries, dirErr := os.ReadDir(installDir)
 			if dirErr == nil {

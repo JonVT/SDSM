@@ -89,6 +89,38 @@ func clearLogFile(path string) {
 	_ = file.Close()
 }
 
+func startManagerProgressBroadcastLoop(mgr *manager.Manager, hub *middleware.Hub) {
+	if mgr == nil || hub == nil {
+		return
+	}
+
+	go func() {
+		var lastPayload string
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			snapshot := mgr.ProgressSnapshot()
+			payload := map[string]any{
+				"type":     "manager_progress",
+				"snapshot": snapshot,
+			}
+			if msg, err := json.Marshal(payload); err == nil {
+				if payloadStr := string(msg); payloadStr != lastPayload {
+					lastPayload = payloadStr
+					hub.Broadcast(msg)
+				}
+			}
+
+			if !snapshot.Updating {
+				return
+			}
+
+			<-ticker.C
+		}
+	}()
+}
+
 // managerLogWriter adapts Manager.Log to io.Writer for frameworks like Gin.
 type managerLogWriter struct{ mgr *manager.Manager }
 
@@ -129,12 +161,26 @@ func main() {
 	}
 
 	// Initialize application
+	wsAllowedOrigins := []string{}
+	if mgr != nil {
+		wsAllowedOrigins = mgr.WSAllowedOrigins
+	}
 	app = &App{
 		manager:     mgr,
 		authService: middleware.NewAuthServiceWithSecret(strings.TrimSpace(mgr.JWTSecret)),
-		wsHub:       middleware.NewHub(mgr.Log),
+		wsHub:       middleware.NewHub(mgr.Log, wsAllowedOrigins),
 		rateLimiter: middleware.NewRateLimiter(rate.Every(time.Minute/100), 10),
 		userStore:   manager.NewUserStore(mgr.Paths),
+	}
+	defer app.rateLimiter.Stop()
+	if strings.TrimSpace(mgr.JWTSecret) == "" || strings.TrimSpace(mgr.JWTSecret) == middleware.JWTSecret {
+		logStuff("SECURITY WARNING: jwt_secret is unset or using the default value. Set a strong, unique jwt_secret in sdsm.config before production use.")
+	}
+	for _, origin := range wsAllowedOrigins {
+		if strings.TrimSpace(origin) == "*" {
+			logStuff("SECURITY WARNING: ws_allowed_origins contains '*'; websocket origin validation is fully permissive.")
+			break
+		}
 	}
 
 	// Configure cookie settings from manager config
@@ -266,6 +312,17 @@ func main() {
 		}
 	}
 
+	triggerStartupUpdate := func() {
+		started, err := app.manager.StartStartupUpdateAsync()
+		if err != nil {
+			logStuff(fmt.Sprintf("Startup update failed to start: %v", err))
+			return
+		}
+		if started {
+			startManagerProgressBroadcastLoop(app.manager, app.wsHub)
+		}
+	}
+
 	// Windows tray integration (configurable)
 	// For non-Windows platforms or when tray disabled, use nil channel so select ignores tray exit.
 	var trayDone chan struct{}
@@ -277,6 +334,8 @@ func main() {
 		go startServer() // run server in background
 		// Start manager TCP port forwarding if enabled
 		app.manager.StartManagerPortForwarding()
+		// Run startup updates only after UI/server startup begins.
+		triggerStartupUpdate()
 		go func() { // forward OS signals to tray exit
 			<-quit
 			logStuff("Shutdown signal received")
@@ -290,6 +349,8 @@ func main() {
 		go startServer()
 		// Start manager TCP port forwarding if enabled
 		app.manager.StartManagerPortForwarding()
+		// Run startup updates only after UI/server startup begins.
+		triggerStartupUpdate()
 		// Block on OS signal only (trayDone nil ignored)
 		<-quit
 		logStuff("Shutdown signal received")

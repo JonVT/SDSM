@@ -637,7 +637,8 @@ func (h *ManagerHandlers) buildManagerPagePayload(c *gin.Context) gin.H {
 	activeCount := 0
 	totalPlayers := 0
 	for _, s := range servers {
-		if s.IsRunning() {
+		state := s.LifecycleSnapshot()
+		if state.Running {
 			activeCount++
 		}
 		totalPlayers += s.ClientCount()
@@ -765,10 +766,11 @@ func (h *ManagerHandlers) buildDashboardPayload(c *gin.Context) gin.H {
 		if s == nil {
 			continue
 		}
-		if s.IsRunning() {
+		state := s.LifecycleSnapshot()
+		if state.Running {
 			activeServers++
 		}
-		if !s.IsRunning() || s.Stopping {
+		if !state.Running || state.Stopping {
 			startableServers++
 		}
 		connectedPlayers += s.ClientCount()

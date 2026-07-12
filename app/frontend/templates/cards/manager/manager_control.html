@@ -1,22 +1,55 @@
 {{define "cards/manager_control.html"}}
-<div id="manager-card-control" class="card" data-card-id="manager-control" data-manager-section data-section-title="Manager Control"
+<div id="manager-card-control"
+    class="glass-card manager-control-card"
+    data-card-id="manager-control"
+    data-manager-section
+    data-section-title="Manager Control"
     hx-get="/manager/cards/manager-control"
     hx-trigger="sdsm:card-refresh[event.detail.cardId == 'manager-control'] from:body"
     hx-target="this"
     hx-swap="outerHTML">
-    <div class="card-header">
-        <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
-        <h2 class="card-title">Manager Control</h2>
-    </div>
-    <div class="card-body flex flex-wrap gap-4">
-        <button class="btn btn-danger" hx-post="/api/manager/update" hx-vals='{"shutdown": "1"}' hx-confirm="Are you sure you want to shut down the manager?">
-            <i data-feather="power"></i>
-            <span>Shutdown Manager</span>
-        </button>
-        <button class="btn btn-secondary" hx-post="/api/manager/update" hx-vals='{"restart": "1"}' hx-confirm="Are you sure you want to restart the manager?">
-            <i data-feather="refresh-cw"></i>
-            <span>Restart Manager</span>
-        </button>
-    </div>
+    <details class="card-collapse" data-collapse-id="manager-control" open>
+        <summary class="card-collapse-summary">
+            <div data-card-drag-handle class="card-drag-handle" title="Drag to reorder" aria-label="Drag to reorder"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></div>
+            <div>
+                <h2 class="card-title">Manager Control</h2>
+                <p class="card-subtitle">Restart or shut down the manager safely.</p>
+            </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="card-body flex flex-wrap gap-4">
+                <button class="btn btn-danger"
+                    hx-post="/api/manager/update"
+                    hx-vals='{"shutdown": "1"}'
+                    data-modal-confirm="true"
+                    data-modal-title="Shutdown Manager"
+                    data-modal-message="Are you sure you want to shut down the manager?"
+                    data-modal-confirm-text="Shutdown"
+                    data-modal-cancel-text="Cancel"
+                    data-modal-danger="true"
+                    aria-label="Shut down the SDSM manager"
+                    title="Shut down the SDSM manager">
+                    <i data-feather="power"></i>
+                    <span>Shutdown Manager</span>
+                </button>
+                <button class="btn btn-secondary"
+                    hx-post="/api/manager/update"
+                    hx-vals='{"restart": "1"}'
+                    data-modal-confirm="true"
+                    data-modal-title="Restart Manager"
+                    data-modal-message="Are you sure you want to restart the manager?"
+                    data-modal-confirm-text="Restart"
+                    data-modal-cancel-text="Cancel"
+                    aria-label="Restart the SDSM manager"
+                    title="Restart the SDSM manager">
+                    <i data-feather="refresh-cw"></i>
+                    <span>Restart Manager</span>
+                </button>
+            </div>
+        </div>
+    </details>
 </div>
 {{end}}

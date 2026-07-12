@@ -8,15 +8,22 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       CGO_ENABLED: 0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -25,6 +32,9 @@ jobs:
 
       - name: Print tag
         run: echo "Tag is $GITHUB_REF_NAME"
+
+      - name: Run tests before packaging
+        run: go test ./...
 
       - name: Build and package assets
         shell: bash

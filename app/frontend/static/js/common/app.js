@@ -27,7 +27,8 @@
       username: '',
       page: '',
       buildTime: '',
-      lastStats: null
+      lastStats: null,
+      managerWasUpdating: false
     },
 
     // API helpers
@@ -702,10 +703,152 @@
         }
       },
 
-      updateManagerProgress: function(snapshot) {
-        if (!snapshot || !Array.isArray(snapshot.components)) return;
+      summarizeUpdateError: function(comp) {
+        const raw = (comp && (comp.errorSummary || comp.error || '') ? String(comp.errorSummary || comp.error || '') : '').trim();
+        if (!raw) return 'Update failed';
+        const oneLine = raw.split(/\r?\n/)[0].trim().replace(/\s+/g, ' ');
+        if (oneLine.length <= 120) return oneLine;
+        return oneLine.slice(0, 119).replace(/\s+$/, '') + '…';
+      },
 
-        snapshot.components.forEach(comp => {
+      inferUpdateRecommendation: function(errorText) {
+        const text = String(errorText || '').toLowerCase();
+        if (!text) return '';
+
+        const includesAny = (...values) => values.some((value) => text.includes(String(value || '').toLowerCase()));
+
+        if (includesAny('no space left on device', 'not enough space', 'disk full')) {
+          return 'Free disk space on the SDSM drive, then retry the update.';
+        }
+        if (includesAny('permission denied', 'operation not permitted', 'access is denied')) {
+          return 'Grant write access to the SDSM root path and component folders, then retry.';
+        }
+        if (includesAny('dial tcp', 'i/o timeout', 'tls handshake timeout', 'temporary failure in name resolution', 'no such host', 'connection refused', 'connection reset', 'no route to host')) {
+          return 'Check internet, DNS, firewall/proxy settings, then retry.';
+        }
+        if (includesAny('failed to download', 'too many requests', 'status 429', 'status 403', 'service unavailable')) {
+          return 'Upstream download failed. Retry shortly; if this repeats, check connectivity and remote rate limits.';
+        }
+        if (includesAny('zip', 'gzip', 'tar', 'archive', 'unexpected eof')) {
+          return 'Archive may be corrupted. Retry update; if it repeats, clear component files and retry.';
+        }
+        if (includesAny('executable file not found', 'steamcmd executable missing', 'no such file or directory')) {
+          return 'A required file/executable is missing. Update SteamCMD first, then retry this component.';
+        }
+        if (includesAny('invalid steamid', 'invalid steam id')) {
+          return 'Set a valid numeric Steam ID in Manager settings, save, and retry.';
+        }
+
+        return 'Check Update Log for full details, resolve the root cause, then retry this component.';
+      },
+
+      updateFailureDetails: function(comp) {
+        if (!comp) return { summary: 'Update failed', recommendation: '' };
+        const summary = this.summarizeUpdateError(comp);
+        const recommendation = String(comp.recommendation || '').trim() || this.inferUpdateRecommendation(comp.error || summary);
+        return { summary, recommendation };
+      },
+
+      syncVersionActionState: function(panel, updating) {
+        if (!panel) return;
+
+        let hasOutdated = false;
+
+        panel.querySelectorAll('.versions-row').forEach((row) => {
+          const btn = row.querySelector('.version-action');
+          if (!btn) return;
+
+          const isOutdated = (row.dataset.outdated || '').toLowerCase() === 'true';
+          const label = btn.querySelector('span');
+
+          if (isOutdated) {
+            hasOutdated = true;
+          }
+
+          if (updating) {
+            btn.disabled = true;
+            return;
+          }
+
+          if (isOutdated) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-disabled');
+            btn.removeAttribute('title');
+            if (label) label.textContent = 'Update';
+          } else {
+            btn.disabled = true;
+            btn.setAttribute('aria-disabled', 'true');
+            btn.setAttribute('title', 'Already up to date');
+            if (label) label.textContent = 'Current';
+          }
+        });
+
+        const updateAllBtn = panel.querySelector('.update-all-btn');
+        if (updateAllBtn) {
+          if (updating) {
+            updateAllBtn.disabled = true;
+            return;
+          }
+
+          updateAllBtn.disabled = !hasOutdated;
+          if (hasOutdated) {
+            updateAllBtn.removeAttribute('aria-disabled');
+            updateAllBtn.removeAttribute('title');
+            updateAllBtn.textContent = 'Update All';
+          } else {
+            updateAllBtn.setAttribute('aria-disabled', 'true');
+            updateAllBtn.setAttribute('title', 'All components are up to date');
+            updateAllBtn.textContent = 'All Current';
+          }
+        }
+      },
+
+      updateManagerProgress: function(snapshot) {
+        const panel = document.querySelector('.versions-panel');
+        const updateMessage = document.getElementById('updateMessage');
+        const updateMessageDetails = document.getElementById('updateMessageDetails');
+        const updateMessageError = document.getElementById('updateMessageError');
+        const updateMessageAction = document.getElementById('updateMessageAction');
+        const wasUpdating = !!SDSM.state.managerWasUpdating;
+
+        const resetDetails = () => {
+          if (!updateMessageDetails) return;
+          updateMessageDetails.hidden = true;
+          updateMessageDetails.open = false;
+          if (updateMessageError) updateMessageError.textContent = '';
+          if (updateMessageAction) updateMessageAction.textContent = '';
+        };
+
+        if (!snapshot || !Array.isArray(snapshot.components)) {
+          if (panel) {
+            panel.dataset.versionUpdating = 'false';
+            this.syncVersionActionState(panel, false);
+          }
+          if (updateMessage) {
+            updateMessage.textContent = '';
+            updateMessage.classList.remove('active', 'error');
+          }
+          resetDetails();
+          SDSM.state.managerWasUpdating = false;
+          return;
+        }
+
+        const components = snapshot.components.filter(Boolean);
+        const updating = !!snapshot.updating;
+        if (panel) {
+          panel.dataset.versionUpdating = updating ? 'true' : 'false';
+          this.syncVersionActionState(panel, updating);
+        }
+
+        if (wasUpdating && !updating && typeof htmx !== 'undefined' && document.body) {
+          htmx.trigger(document.body, 'sdsm:refresh-versions');
+        }
+        SDSM.state.managerWasUpdating = updating;
+
+        let activeComponent = null;
+        let failedComponent = null;
+
+        components.forEach(comp => {
           const key = (comp.key || comp.Key || '').toLowerCase();
           if (!key) return;
           const row = document.querySelector(`.versions-row[data-component="${key}"]`);
@@ -718,6 +861,13 @@
           if (progressEl && typeof comp.percent === 'number') {
             const pct = Math.max(0, Math.min(100, comp.percent));
             progressEl.style.width = pct + '%';
+          }
+
+          if (comp.running) {
+            activeComponent = comp;
+          }
+          if (comp.error) {
+            failedComponent = comp;
           }
 
           if (!statusLabel) {
@@ -734,16 +884,66 @@
             }
           };
 
-          if (snapshot.updating && comp.running) {
+          if (updating && comp.running) {
             updateLabel('running', comp.stage || 'Updating...', '');
           } else if (comp.error) {
-            updateLabel('error', 'Error', comp.error);
+            const details = this.updateFailureDetails(comp);
+            const label = `Error: ${details.summary}`;
+            const title = details.recommendation
+              ? `${comp.error || details.summary}\nRecommended action: ${details.recommendation}`
+              : (comp.error || details.summary);
+            updateLabel('error', label, title);
           } else if (isOutdated) {
             updateLabel('outdated', 'Update available', '');
           } else {
             updateLabel('complete', 'Completed', '');
           }
         });
+
+        if (updateMessage) {
+          if (failedComponent) {
+            const details = this.updateFailureDetails(failedComponent);
+            updateMessage.classList.add('active', 'error');
+            const componentName = failedComponent.displayName || failedComponent.component || 'Component';
+            updateMessage.textContent = details.recommendation
+              ? `${componentName} failed: ${details.summary} — Recommended action: ${details.recommendation}`
+              : `${componentName} failed: ${details.summary}`;
+
+            if (updateMessageDetails) {
+              updateMessageDetails.hidden = false;
+              const rawError = String(failedComponent.error || details.summary || '').trim();
+              if (updateMessageError) {
+                updateMessageError.textContent = rawError
+                  ? `Error: ${rawError}`
+                  : `Error: ${details.summary}`;
+              }
+              if (updateMessageAction) {
+                updateMessageAction.textContent = details.recommendation
+                  ? `Recommended action: ${details.recommendation}`
+                  : 'Recommended action: Review Update Log for full context, then retry this component.';
+              }
+            }
+          } else if (updating && activeComponent) {
+            const pct = typeof activeComponent.percent === 'number' ? Math.max(0, Math.min(100, activeComponent.percent)) : null;
+            updateMessage.classList.remove('error');
+            updateMessage.classList.add('active');
+            updateMessage.textContent = pct !== null
+              ? `${activeComponent.displayName || activeComponent.component || 'Updating'} is updating… ${pct}%`
+              : `${activeComponent.displayName || activeComponent.component || 'Updating'} is updating…`;
+            resetDetails();
+          } else if (updating) {
+            updateMessage.classList.remove('error');
+            updateMessage.classList.add('active');
+            updateMessage.textContent = 'Updating components…';
+            resetDetails();
+          } else {
+            updateMessage.textContent = '';
+            updateMessage.classList.remove('active', 'error');
+            resetDetails();
+          }
+        } else {
+          resetDetails();
+        }
       },
 
       updateServerStatus: function(serverId, status) {
@@ -2573,9 +2773,15 @@
           return;
         }
         const baseUrl = card.getAttribute('data-log-base-url') || '';
+        const baseUrlKey = baseUrl ? String(baseUrl).replace(/[^a-zA-Z0-9_-]+/g, '_') : 'default';
+        const cardId = card.id || `log-viewer-${baseUrlKey}`;
+        const panelId = `${cardId}-panel`;
         const state = {
           card,
           baseUrl,
+          storageKey: `sdsm-log-active-${baseUrlKey}`,
+          tabPrefix: `${cardId}-tab`,
+          panelId,
           tabs: card.querySelector('[data-log-tabs]'),
           empty: card.querySelector('[data-log-empty]'),
           view: card.querySelector('[data-log-view]'),
@@ -2593,6 +2799,16 @@
           hadError: false,
           lastSize: 0,
         };
+
+        if (state.view) {
+          if (!state.view.id) {
+            state.view.id = panelId;
+          } else {
+            state.panelId = state.view.id;
+          }
+          state.view.setAttribute('role', 'tabpanel');
+        }
+
         this.instances.set(card, state);
         this.bind(card, state);
         this.fetchList(card, state);
@@ -2605,6 +2821,56 @@
             const tab = event.target.closest('[data-log-file]');
             if (!tab) return;
             const file = tab.dataset.logFile;
+            if (file) {
+              self.activate(card, state, file);
+            }
+          });
+          state.tabs.addEventListener('keydown', (event) => {
+            const current = event.target instanceof Element ? event.target.closest('[data-log-file]') : null;
+            if (!current) return;
+
+            const tabs = Array.from(state.tabs.querySelectorAll('[data-log-file]'));
+            if (!tabs.length) return;
+
+            const currentIndex = tabs.indexOf(current);
+            if (currentIndex < 0) return;
+
+            let nextIndex = -1;
+            switch (event.key) {
+              case 'Enter':
+              case ' ':
+                event.preventDefault();
+                {
+                  const file = current.dataset.logFile;
+                  if (file) {
+                    self.activate(card, state, file);
+                  }
+                }
+                return;
+              case 'ArrowLeft':
+              case 'ArrowUp':
+                nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                break;
+              case 'ArrowRight':
+              case 'ArrowDown':
+                nextIndex = (currentIndex + 1) % tabs.length;
+                break;
+              case 'Home':
+                nextIndex = 0;
+                break;
+              case 'End':
+                nextIndex = tabs.length - 1;
+                break;
+              default:
+                return;
+            }
+
+            event.preventDefault();
+            const nextTab = tabs[nextIndex];
+            if (!nextTab) return;
+            nextTab.focus();
+
+            const file = nextTab.dataset.logFile;
             if (file) {
               self.activate(card, state, file);
             }
@@ -2630,22 +2896,50 @@
               if (window.showToast) window.showToast('Info', 'Select a log file to clear.', 'info');
               return;
             }
-            if (!confirm('Are you sure you want to clear this log?')) return;
-            fetch(`${state.baseUrl}/log/clear`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'HX-Request': 'true' },
-              credentials: 'same-origin',
-              body: JSON.stringify({ name: state.activeLog })
-            })
-            .then((resp) => {
-              if (!resp.ok) throw new Error('Unable to clear log.');
-              state.offset = -1;
-              state.buffer = '';
-              self.fetchList(card, state, { force: true });
-            })
-            .catch((err) => {
-              if (window.showToast) window.showToast('Logs', err.message || 'Unable to clear log.', 'danger');
-            });
+
+            const doClear = () => {
+              fetch(`${state.baseUrl}/log/clear`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'HX-Request': 'true' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ name: state.activeLog })
+              })
+              .then((resp) => {
+                if (!resp.ok) throw new Error('Unable to clear log.');
+                state.offset = -1;
+                state.buffer = '';
+                self.fetchList(card, state, { force: true });
+              })
+              .catch((err) => {
+                if (window.showToast) window.showToast('Logs', err.message || 'Unable to clear log.', 'danger');
+              });
+            };
+
+            const hasConfirmTemplate = !!document.getElementById('tpl-modal-confirm');
+            const canUseModalConfirm = Boolean(window.SDSM && SDSM.modal && typeof SDSM.modal.confirm === 'function' && hasConfirmTemplate);
+
+            if (canUseModalConfirm) {
+              SDSM.modal.confirm({
+                title: 'Clear Log File',
+                body: `Are you sure you want to clear \"${state.activeLog}\"?`,
+                confirmText: 'Clear Log',
+                cancelText: 'Cancel',
+                danger: true,
+              }).then((confirmed) => {
+                if (confirmed) {
+                  doClear();
+                }
+              }).catch(() => {
+                if (window.confirm(`Are you sure you want to clear \"${state.activeLog}\"?`)) {
+                  doClear();
+                }
+              });
+              return;
+            }
+
+            if (window.confirm(`Are you sure you want to clear \"${state.activeLog}\"?`)) {
+              doClear();
+            }
           });
         }
         if (state.view) {
@@ -2749,7 +3043,7 @@
           state.empty.classList.add('hidden');
         }
         const fragment = document.createDocumentFragment();
-        files.forEach((file) => {
+        files.forEach((file, index) => {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'tab';
@@ -2757,11 +3051,61 @@
           btn.dataset.logFile = file;
           btn.setAttribute('role', 'tab');
           btn.setAttribute('aria-selected', 'false');
+          btn.id = `${state.tabPrefix}-${index + 1}`;
+          if (state.panelId) {
+            btn.setAttribute('aria-controls', state.panelId);
+          }
           fragment.appendChild(btn);
         });
         state.tabs.appendChild(fragment);
-        const desired = state.activeLog && files.includes(state.activeLog) ? state.activeLog : files[0];
+        const desired = this.pickDefaultLog(state, files);
         this.activate(card, state, desired, { force: true });
+      },
+
+      pickDefaultLog: function(state, files) {
+        if (!Array.isArray(files) || files.length === 0) {
+          return null;
+        }
+
+        const normalized = files.map((f) => String(f || ''));
+
+        if (state.activeLog && normalized.includes(state.activeLog)) {
+          return state.activeLog;
+        }
+
+        let remembered = '';
+        try {
+          remembered = String(localStorage.getItem(state.storageKey) || '').trim();
+        } catch (_) {
+          remembered = '';
+        }
+        if (remembered && normalized.includes(remembered)) {
+          return remembered;
+        }
+
+        const score = (name) => {
+          const n = String(name || '').toLowerCase();
+          if (!n) return -1;
+          if (n === 'sdsm.log') return 100;
+          if (n.startsWith('sdsm') && n.endsWith('.log')) return 95;
+          if (n.includes('sdsm') && n.endsWith('.log')) return 90;
+          if (n.includes('manager') && n.endsWith('.log')) return 80;
+          if (n.endsWith('.log')) return 70;
+          if (n.includes('update')) return 60;
+          return 10;
+        };
+
+        let best = normalized[0];
+        let bestScore = score(best);
+        for (let i = 1; i < normalized.length; i++) {
+          const candidate = normalized[i];
+          const s = score(candidate);
+          if (s > bestScore) {
+            best = candidate;
+            bestScore = s;
+          }
+        }
+        return best;
       },
 
       activate: function(card, state, logFile, options = {}) {
@@ -2772,6 +3116,11 @@
         state.offset = -1;
         state.buffer = '';
         state.hadError = false;
+        try {
+          localStorage.setItem(state.storageKey, logFile);
+        } catch (_) {
+          // ignore storage errors
+        }
         this.clearTimers(state);
         this.updateTabs(state);
         if (state.view) {
@@ -2784,11 +3133,24 @@
       updateTabs: function(state) {
         if (!state.tabs) return;
         const buttons = state.tabs.querySelectorAll('[data-log-file]');
+        let activeButton = null;
         buttons.forEach((btn) => {
           const isActive = btn.dataset.logFile === state.activeLog;
           btn.classList.toggle('active', isActive);
           btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          btn.setAttribute('tabindex', isActive ? '0' : '-1');
+          if (isActive) {
+            activeButton = btn;
+          }
         });
+
+        if (state.view) {
+          if (activeButton && activeButton.id) {
+            state.view.setAttribute('aria-labelledby', activeButton.id);
+          } else {
+            state.view.removeAttribute('aria-labelledby');
+          }
+        }
       },
 
       pollTail: function(card, state) {
@@ -2937,6 +3299,9 @@
         sections: [],
         activeId: null,
         currentPath: '',
+        scrollTarget: null,
+        scrollHandler: null,
+        scrollRaf: null,
 
         init() {
           this.container = document.querySelector('[data-manager-submenu]');
@@ -2977,6 +3342,7 @@
         },
 
         clear() {
+          this.unbindScrollTracking();
           if (!this.container) {
             return;
           }
@@ -3026,8 +3392,9 @@
             return { id: node.id, title, node };
           });
           this.renderButtons();
+          this.bindScrollTracking();
           if (this.sections[0]) {
-            this.setActive(this.sections[0].id);
+            this.updateActiveFromScroll();
           }
         },
 
@@ -3048,6 +3415,8 @@
             btn.className = 'nav-submenu-item';
             btn.textContent = section.title;
             btn.dataset.sectionId = section.id;
+            btn.setAttribute('role', 'menuitem');
+            btn.setAttribute('aria-current', 'false');
             btn.addEventListener('click', () => this.scrollToSection(section.id));
             section.button = btn;
             fragment.appendChild(btn);
@@ -3082,9 +3451,90 @@
           this.activeId = sectionId;
           this.sections.forEach((section) => {
             if (section.button) {
-              section.button.classList.toggle('is-active', section.id === sectionId);
+              const active = section.id === sectionId;
+              section.button.classList.toggle('is-active', active);
+              section.button.setAttribute('aria-current', active ? 'true' : 'false');
             }
           });
+        },
+
+        getScrollTarget() {
+          const area = this.contentArea || document.getElementById('content-area');
+          if (area && this.prefersContentScroll()) {
+            return area;
+          }
+          return window;
+        },
+
+        bindScrollTracking() {
+          this.unbindScrollTracking();
+          if (!this.sections.length) {
+            return;
+          }
+
+          const target = this.getScrollTarget();
+          this.scrollTarget = target;
+          this.scrollHandler = () => {
+            if (this.scrollRaf) {
+              return;
+            }
+            this.scrollRaf = window.requestAnimationFrame(() => {
+              this.scrollRaf = null;
+              this.updateActiveFromScroll();
+            });
+          };
+
+          target.addEventListener('scroll', this.scrollHandler, { passive: true });
+          window.addEventListener('resize', this.scrollHandler);
+        },
+
+        unbindScrollTracking() {
+          if (this.scrollTarget && this.scrollHandler) {
+            this.scrollTarget.removeEventListener('scroll', this.scrollHandler);
+          }
+          if (this.scrollHandler) {
+            window.removeEventListener('resize', this.scrollHandler);
+          }
+          if (this.scrollRaf) {
+            window.cancelAnimationFrame(this.scrollRaf);
+            this.scrollRaf = null;
+          }
+          this.scrollTarget = null;
+          this.scrollHandler = null;
+        },
+
+        updateActiveFromScroll() {
+          if (!this.sections.length) {
+            return;
+          }
+
+          const target = this.getScrollTarget();
+          const marker = 140;
+          let best = this.sections[0];
+
+          if (target === window) {
+            const scrollY = window.scrollY || window.pageYOffset || 0;
+            this.sections.forEach((section) => {
+              const top = section.node.getBoundingClientRect().top + scrollY;
+              if (top <= scrollY + marker) {
+                best = section;
+              }
+            });
+          } else {
+            const area = target;
+            const areaRect = area.getBoundingClientRect();
+            this.sections.forEach((section) => {
+              const rect = section.node.getBoundingClientRect();
+              const relTop = rect.top - areaRect.top + area.scrollTop;
+              if (relTop <= area.scrollTop + marker) {
+                best = section;
+              }
+            });
+          }
+
+          if (best && best.id !== this.activeId) {
+            this.setActive(best.id);
+          }
         }
       },
 
@@ -3200,6 +3650,8 @@
             btn.className = 'nav-submenu-item';
             btn.textContent = section.title;
             btn.dataset.sectionId = section.id;
+            btn.setAttribute('role', 'menuitem');
+            btn.setAttribute('aria-current', 'false');
             btn.addEventListener('click', () => this.scrollToSection(section.id));
             section.button = btn;
             fragment.appendChild(btn);
@@ -3232,7 +3684,9 @@
           this.activeId = sectionId;
           this.sections.forEach((section) => {
             if (section.button) {
-              section.button.classList.toggle('is-active', section.id === sectionId);
+              const active = section.id === sectionId;
+              section.button.classList.toggle('is-active', active);
+              section.button.setAttribute('aria-current', active ? 'true' : 'false');
             }
           });
         }
@@ -3611,6 +4065,70 @@
         const targetEl = event.target instanceof Element ? event.target : null;
         if (!targetEl) return;
 
+        const modalConfirmTrigger = targetEl.closest('[data-modal-confirm]');
+        if (modalConfirmTrigger) {
+          if (typeof event.button === 'number' && event.button !== 0) return;
+          if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+          if (modalConfirmTrigger.disabled) return;
+
+          // Allow one bypassed click through after confirmation so HTMX can proceed.
+          if (modalConfirmTrigger.dataset.modalConfirmBypass === '1') {
+            delete modalConfirmTrigger.dataset.modalConfirmBypass;
+            return;
+          }
+
+          const message = modalConfirmTrigger.getAttribute('data-modal-message') ||
+            modalConfirmTrigger.getAttribute('data-confirm-message') ||
+            'Are you sure?';
+          const title = modalConfirmTrigger.getAttribute('data-modal-title') || 'Confirm Action';
+          const confirmText = modalConfirmTrigger.getAttribute('data-modal-confirm-text') || 'Confirm';
+          const cancelText = modalConfirmTrigger.getAttribute('data-modal-cancel-text') || 'Cancel';
+          const dangerRaw = (modalConfirmTrigger.getAttribute('data-modal-danger') || '').toLowerCase();
+          const danger = dangerRaw === '1' || dangerRaw === 'true' || dangerRaw === 'yes';
+
+          const continueAction = () => {
+            modalConfirmTrigger.dataset.modalConfirmBypass = '1';
+            if (window.htmx && typeof window.htmx.trigger === 'function') {
+              window.htmx.trigger(modalConfirmTrigger, 'click');
+            } else {
+              modalConfirmTrigger.click();
+            }
+          };
+
+          const nativeFallback = () => {
+            if (window.confirm(message)) {
+              continueAction();
+            }
+          };
+
+          const hasConfirmTemplate = !!document.getElementById('tpl-modal-confirm');
+          const canUseModalConfirm = Boolean(window.SDSM && SDSM.modal && typeof SDSM.modal.confirm === 'function' && hasConfirmTemplate);
+
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (!canUseModalConfirm) {
+            nativeFallback();
+            return;
+          }
+
+          SDSM.modal.confirm({
+            title,
+            body: message,
+            confirmText,
+            cancelText,
+            danger,
+          }).then((confirmed) => {
+            if (confirmed) {
+              continueAction();
+            }
+          }).catch((err) => {
+            console.error('Modal confirmation failed:', err);
+            nativeFallback();
+          });
+          return;
+        }
+
         const pathPickerBtn = targetEl.closest('[data-path-picker]');
         if (pathPickerBtn) {
           if (pathPickerBtn.disabled) return;
@@ -3728,6 +4246,123 @@
             }
           } catch (err) {
             input.focus();
+          }
+        }
+
+        const historyBackBtn = targetEl.closest('[data-action="history-back"]');
+        if (historyBackBtn) {
+          event.preventDefault();
+          if (window.history.length > 1) {
+            window.history.back();
+          } else {
+            window.location.assign('/dashboard');
+          }
+        }
+      });
+
+      document.body.addEventListener('submit', (event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
+        if (!form || form.id !== 'manager-settings-form') {
+          return;
+        }
+
+        const submitter = event.submitter;
+        if (submitter && submitter.name && submitter.name !== 'update_config') {
+          return;
+        }
+
+        const steamIdInput = document.getElementById('steam_id');
+        const rootPathInput = document.getElementById('root_path');
+        const managerWebhookInput = document.getElementById('discord_manager_webhook');
+        const defaultWebhookInput = document.getElementById('discord_default_webhook');
+
+        const inputs = [steamIdInput, rootPathInput, managerWebhookInput, defaultWebhookInput].filter(Boolean);
+        inputs.forEach((input) => {
+          input.setCustomValidity('');
+        });
+
+        const isAbsolutePathLike = (value) => {
+          const v = String(value || '').trim();
+          if (!v) return false;
+          if (v.startsWith('/')) return true;
+          if (/^[a-zA-Z]:[\\/]/.test(v)) return true;
+          if (v.startsWith('\\\\') || v.startsWith('//')) return true;
+          return false;
+        };
+
+        const validateWebhook = (input) => {
+          if (!input) return '';
+          const raw = String(input.value || '').trim();
+          if (!raw) return '';
+          let parsed;
+          try {
+            parsed = new URL(raw);
+          } catch (_) {
+            return 'Webhook URL must be a valid URL.';
+          }
+          const protocol = String(parsed.protocol || '').toLowerCase();
+          if (protocol !== 'https:' && protocol !== 'http:') {
+            return 'Webhook URL must start with http:// or https://';
+          }
+          if (!parsed.host) {
+            return 'Webhook URL must include a host.';
+          }
+          return '';
+        };
+
+        const errors = [];
+
+        if (steamIdInput) {
+          const steamID = String(steamIdInput.value || '').trim();
+          if (!steamID) {
+            const msg = 'Steam ID is required.';
+            steamIdInput.setCustomValidity(msg);
+            errors.push(steamIdInput);
+          } else if (!/^\d{4,12}$/.test(steamID)) {
+            const msg = 'Steam ID must be numeric (4-12 digits).';
+            steamIdInput.setCustomValidity(msg);
+            errors.push(steamIdInput);
+          }
+        }
+
+        if (rootPathInput) {
+          const rootPath = String(rootPathInput.value || '').trim();
+          if (!rootPath) {
+            const msg = 'Root Path is required.';
+            rootPathInput.setCustomValidity(msg);
+            errors.push(rootPathInput);
+          } else if (!isAbsolutePathLike(rootPath)) {
+            const msg = 'Root Path must be an absolute path.';
+            rootPathInput.setCustomValidity(msg);
+            errors.push(rootPathInput);
+          }
+        }
+
+        const managerWebhookError = validateWebhook(managerWebhookInput);
+        if (managerWebhookInput && managerWebhookError) {
+          managerWebhookInput.setCustomValidity(managerWebhookError);
+          errors.push(managerWebhookInput);
+        }
+
+        const defaultWebhookError = validateWebhook(defaultWebhookInput);
+        if (defaultWebhookInput && defaultWebhookError) {
+          defaultWebhookInput.setCustomValidity(defaultWebhookError);
+          errors.push(defaultWebhookInput);
+        }
+
+        if (errors.length > 0) {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const first = errors[0];
+          if (first && typeof first.reportValidity === 'function') {
+            first.reportValidity();
+          }
+          if (first && typeof first.focus === 'function') {
+            first.focus();
+          }
+          if (window.showToast) {
+            window.showToast('Configuration Error', 'Please correct highlighted fields before saving.', 'danger');
           }
         }
       });
@@ -4288,13 +4923,21 @@ function initServerCreationPage(root) {
     tabButtons.forEach((btn) => {
       const isActive = btn?.dataset?.tabTarget === normalized;
       btn.classList.toggle('is-active', Boolean(isActive));
+      btn.setAttribute('role', 'tab');
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
     tabPanels.forEach((panel) => {
       if (!panel || !panel.dataset) return;
       const matches = panel.dataset.tabPanel === normalized;
+      panel.setAttribute('role', 'tabpanel');
       panel.classList.toggle('hidden', !matches);
       panel.setAttribute('aria-hidden', matches ? 'false' : 'true');
+
+      const tab = Array.from(tabButtons).find((btn) => btn?.dataset?.tabTarget === panel.dataset.tabPanel);
+      if (tab && tab.id) {
+        panel.setAttribute('aria-labelledby', tab.id);
+      }
     });
   };
 
@@ -4600,12 +5243,53 @@ function initServerCreationPage(root) {
   }
 
   if (tabButtons.length && tabPanels.length) {
+    tabButtons.forEach((btn, index) => {
+      if (!btn.id) {
+        btn.id = `server-form-tab-${index + 1}`;
+      }
+    });
+
     tabButtons.forEach((btn) => {
       if (!btn) return;
       btn.addEventListener('click', (event) => {
         event.preventDefault();
         const target = btn.dataset?.tabTarget || 'basic';
         showFormTab(target);
+      });
+
+      btn.addEventListener('keydown', (event) => {
+        const tabs = Array.from(tabButtons);
+        const currentIndex = tabs.indexOf(btn);
+        if (currentIndex < 0) return;
+
+        let nextIndex = -1;
+        switch (event.key) {
+          case 'ArrowLeft':
+          case 'ArrowUp':
+            nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            break;
+          case 'ArrowRight':
+          case 'ArrowDown':
+            nextIndex = (currentIndex + 1) % tabs.length;
+            break;
+          case 'Home':
+            nextIndex = 0;
+            break;
+          case 'End':
+            nextIndex = tabs.length - 1;
+            break;
+          default:
+            return;
+        }
+
+        event.preventDefault();
+        const nextTab = tabs[nextIndex];
+        if (!nextTab) return;
+        nextTab.focus();
+        const target = nextTab.dataset?.tabTarget;
+        if (target) {
+          showFormTab(target);
+        }
       });
     });
     showFormTab('basic');
@@ -4875,6 +5559,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
         let activeLogFile = null;
 
+    const applyLogTabSemantics = () => {
+      const tabs = Array.from(logTabs.querySelectorAll('.tab[data-log-file]'));
+      let activeTab = null;
+
+      tabs.forEach((tab, index) => {
+        if (!tab.id) {
+          tab.id = `${logTabs.id}-tab-${index + 1}`;
+        }
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', 'logContent');
+        const isActive = tab.classList.contains('active');
+        tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        tab.setAttribute('tabindex', isActive ? '0' : '-1');
+        if (isActive) {
+          activeTab = tab;
+        }
+      });
+
+      if (logContent) {
+        logContent.setAttribute('role', 'tabpanel');
+        if (activeTab) {
+          logContent.setAttribute('aria-labelledby', activeTab.id);
+        } else {
+          logContent.removeAttribute('aria-labelledby');
+        }
+      }
+    };
+
+    const setActiveLogTab = (tab) => {
+      if (!tab) return;
+      const tabs = Array.from(logTabs.querySelectorAll('.tab[data-log-file]'));
+      tabs.forEach((candidate) => {
+        const isActive = candidate === tab;
+        candidate.classList.toggle('active', isActive);
+        candidate.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        candidate.setAttribute('tabindex', isActive ? '0' : '-1');
+      });
+      if (logContent) {
+        if (tab.id) {
+          logContent.setAttribute('aria-labelledby', tab.id);
+        } else {
+          logContent.removeAttribute('aria-labelledby');
+        }
+      }
+    };
+
         function fetchLogFiles() {
             htmx.ajax('GET', '/api/logs', {
                 target: '#logTabs',
@@ -4883,6 +5613,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (e.detail.xhr.status < 400) {
                     if (logTabs.children.length > 1) { // more than just the empty state
                         logTabsEmpty.classList.add('hidden');
+            applyLogTabSemantics();
                         const firstLog = logTabs.querySelector('.tab');
                         if (firstLog) {
                             firstLog.click();
@@ -4921,14 +5652,57 @@ document.addEventListener('DOMContentLoaded', function () {
             logTabs.addEventListener('click', (e) => {
                 const tab = e.target.closest('.tab');
                 if (tab) {
-                    if (logTabs.querySelector('.active')) {
-                        logTabs.querySelector('.active').classList.remove('active');
-                    }
-                    tab.classList.add('active');
+              setActiveLogTab(tab);
                     const logFile = tab.dataset.logFile;
                     fetchLogContent(logFile);
                 }
             });
+
+          logTabs.addEventListener('keydown', (e) => {
+            const current = e.target.closest('.tab[data-log-file]');
+            if (!current) return;
+            const tabs = Array.from(logTabs.querySelectorAll('.tab[data-log-file]'));
+            if (!tabs.length) return;
+            const index = tabs.indexOf(current);
+            if (index < 0) return;
+
+            let nextIndex = -1;
+            switch (e.key) {
+              case 'Enter':
+              case ' ':
+                e.preventDefault();
+                setActiveLogTab(current);
+                {
+                  const logFile = current.dataset.logFile;
+                  fetchLogContent(logFile);
+                }
+                return;
+              case 'ArrowLeft':
+              case 'ArrowUp':
+                nextIndex = (index - 1 + tabs.length) % tabs.length;
+                break;
+              case 'ArrowRight':
+              case 'ArrowDown':
+                nextIndex = (index + 1) % tabs.length;
+                break;
+              case 'Home':
+                nextIndex = 0;
+                break;
+              case 'End':
+                nextIndex = tabs.length - 1;
+                break;
+              default:
+                return;
+            }
+
+            e.preventDefault();
+            const nextTab = tabs[nextIndex];
+            if (!nextTab) return;
+            nextTab.focus();
+            setActiveLogTab(nextTab);
+            const logFile = nextTab.dataset.logFile;
+            fetchLogContent(logFile);
+          });
         }
 
         if (refreshBtn) {
@@ -4951,11 +5725,42 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
-                if (activeLogFile && confirm(`Are you sure you want to clear the log file "${activeLogFile}"?`)) {
-                    htmx.ajax('POST', `/api/logs/${activeLogFile}/clear`, {}).then(() => {
-                        fetchLogContent(activeLogFile);
-                    });
+            if (!activeLogFile) {
+              return;
+            }
+
+            const clearNow = () => {
+              htmx.ajax('POST', `/api/logs/${activeLogFile}/clear`, {}).then(() => {
+                fetchLogContent(activeLogFile);
+              });
+            };
+
+            const hasConfirmTemplate = !!document.getElementById('tpl-modal-confirm');
+            const canUseModalConfirm = Boolean(window.SDSM && SDSM.modal && typeof SDSM.modal.confirm === 'function' && hasConfirmTemplate);
+            const message = `Are you sure you want to clear the log file "${activeLogFile}"?`;
+
+            if (canUseModalConfirm) {
+              SDSM.modal.confirm({
+                title: 'Clear Log File',
+                body: message,
+                confirmText: 'Clear Log',
+                cancelText: 'Cancel',
+                danger: true,
+              }).then((confirmed) => {
+                if (confirmed) {
+                  clearNow();
                 }
+              }).catch(() => {
+                if (window.confirm(message)) {
+                  clearNow();
+                }
+              });
+              return;
+            }
+
+            if (window.confirm(message)) {
+              clearNow();
+            }
             });
         }
 

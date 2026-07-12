@@ -66,6 +66,8 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 		go func() {
 			var confirmStopAll bool
 			var confirmRestart bool
+			resetStopAllCh := make(chan struct{}, 1)
+			resetRestartCh := make(chan struct{}, 1)
 			for {
 				select {
 				case <-mOpen.ClickedCh:
@@ -93,10 +95,12 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 							app.manager.Log.Write("Tray: Stop All requested - awaiting confirmation")
 						}
 						go func() {
-							time.Sleep(4 * time.Second)
-							if confirmStopAll {
-								confirmStopAll = false
-								mStopAll.SetTitle("Stop All Servers")
+							timer := time.NewTimer(4 * time.Second)
+							defer timer.Stop()
+							<-timer.C
+							select {
+							case resetStopAllCh <- struct{}{}:
+							default:
 							}
 						}()
 						continue
@@ -121,10 +125,12 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 							app.manager.Log.Write("Tray: Restart requested - awaiting confirmation")
 						}
 						go func() {
-							time.Sleep(4 * time.Second)
-							if confirmRestart {
-								confirmRestart = false
-								mRestart.SetTitle("Restart SDSM")
+							timer := time.NewTimer(4 * time.Second)
+							defer timer.Stop()
+							<-timer.C
+							select {
+							case resetRestartCh <- struct{}{}:
+							default:
 							}
 						}()
 						continue
@@ -142,6 +148,16 @@ func startTray(app *App, srv *http.Server, done chan struct{}) {
 						app.manager.Log.Write("Tray: Quit")
 					}
 					systray.Quit()
+				case <-resetStopAllCh:
+					if confirmStopAll {
+						confirmStopAll = false
+						mStopAll.SetTitle("Stop All Servers")
+					}
+				case <-resetRestartCh:
+					if confirmRestart {
+						confirmRestart = false
+						mRestart.SetTitle("Restart SDSM")
+					}
 				}
 			}
 		}()

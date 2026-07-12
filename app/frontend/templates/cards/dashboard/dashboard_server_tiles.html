@@ -59,31 +59,31 @@
     </div>
     <div class="card-toolbar server-tiles-toolbar">
         <div class="server-filter-tabs" role="tablist" aria-label="Server status filters">
-            <button type="button" class="filter-chip is-active" data-filter-value="all" aria-pressed="true">
+            <button type="button" class="filter-chip is-active" data-filter-value="all" role="tab" aria-controls="server-grid" aria-selected="true" tabindex="0">
                 <span>All</span>
                 <span class="filter-count" data-filter-count="all">{{with $filters}}{{index . "all"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="running" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="running" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Running</span>
                 <span class="filter-count" data-filter-count="running">{{with $filters}}{{index . "running"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="starting" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="starting" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Starting</span>
                 <span class="filter-count" data-filter-count="starting">{{with $filters}}{{index . "starting"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="paused" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="paused" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Paused</span>
                 <span class="filter-count" data-filter-count="paused">{{with $filters}}{{index . "paused"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="stopped" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="stopped" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Offline</span>
                 <span class="filter-count" data-filter-count="stopped">{{with $filters}}{{index . "stopped"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="errors" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="errors" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Errors</span>
                 <span class="filter-count" data-filter-count="errors">{{with $filters}}{{index . "errors"}}{{else}}0{{end}}</span>
             </button>
-            <button type="button" class="filter-chip" data-filter-value="storming" aria-pressed="false">
+            <button type="button" class="filter-chip" data-filter-value="storming" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
                 <span>Storm</span>
                 <span class="filter-count" data-filter-count="storming">{{with $filters}}{{index . "storming"}}{{else}}0{{end}}</span>
             </button>

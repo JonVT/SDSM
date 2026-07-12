@@ -3,7 +3,6 @@
 package manager
 
 import (
-	"context"
 	wmi "github.com/StackExchange/wmi"
 	"path/filepath"
 	"regexp"
@@ -45,10 +44,7 @@ func discoverRunningServerPIDs(paths *utils.Paths, wmiEnabled bool, logf func(st
 	// up to 3 attempts with backoff
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
-		// 3s timeout per attempt
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		err := wmi.QueryWithContext(ctx, q, &procs)
-		cancel()
+		err := wmi.Query(q, &procs)
 		if err == nil {
 			lastErr = nil
 			break
@@ -59,7 +55,9 @@ func discoverRunningServerPIDs(paths *utils.Paths, wmiEnabled bool, logf func(st
 		}
 		// Backoff: 250ms, 500ms (skip sleep after last attempt)
 		if attempt < 3 {
-			time.Sleep(time.Duration(250*attempt) * time.Millisecond)
+			timer := time.NewTimer(time.Duration(250*attempt) * time.Millisecond)
+			<-timer.C
+			timer.Stop()
 		}
 	}
 	if lastErr != nil {
@@ -176,4 +174,13 @@ func splitWindowsCmdline(s string) []string {
 		out = append(out, cur.String())
 	}
 	return out
+}
+
+func samePathInsensitive(a, b string) bool {
+	a = filepath.Clean(strings.TrimSpace(a))
+	b = filepath.Clean(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	return strings.EqualFold(a, b)
 }

@@ -10,6 +10,10 @@ permissions:
   contents: read
   security-events: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GO111MODULE: on
 
@@ -17,14 +21,18 @@ jobs:
   lint:
     name: Style & Static Analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
+          cache: true
 
       - name: Cache Go build
         uses: actions/cache@v4
@@ -82,10 +90,13 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - name: Run govulncheck
+      - name: Run govulncheck (SARIF export)
         run: |
           set -euo pipefail
-          $(go env GOPATH)/bin/govulncheck -json ./... > govulncheck.json || true
+          set +e
+          $(go env GOPATH)/bin/govulncheck -json ./... > govulncheck.json
+          gv_status=$?
+          set -e
           # Build converter (guaranteed present in repo)
           go build -o govuln2sarif ./tools/govuln2sarif || true
           if [[ -x ./govuln2sarif ]]; then
@@ -95,7 +106,13 @@ jobs:
           if [[ ! -f govulncheck.sarif ]]; then
             echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck","informationUri":"https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck","rules":[]}},"results":[]}]}'> govulncheck.sarif
           fi
+          echo "govulncheck exit code (JSON run): ${gv_status}" >> $GITHUB_STEP_SUMMARY
           echo "govulncheck JSON converted to SARIF (results may be empty)." >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce govulncheck
+        run: |
+          set -euo pipefail
+          $(go env GOPATH)/bin/govulncheck ./...
 
       - name: Upload govulncheck SARIF
         if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && hashFiles('govulncheck.sarif') != '' }}

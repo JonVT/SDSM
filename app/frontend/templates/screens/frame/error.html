@@ -15,7 +15,7 @@
                 {{end}}
             </p>
             <div class="form-actions justify-center mt-6">
-                <button onclick="history.back()" class="btn btn-secondary">
+                <button type="button" class="btn btn-secondary" data-action="history-back">
                     <i class="icon-arrow-left"></i> Go Back
                 </button>
                 <a href="/dashboard" class="btn btn-primary" hx-get="/api/pages/dashboard" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/dashboard">

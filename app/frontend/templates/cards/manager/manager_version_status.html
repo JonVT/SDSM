@@ -34,7 +34,7 @@
         <div id="version-status-grid"
              class="versions-grid"
              hx-get="/api/manager/versions"
-             hx-trigger="load"
+               hx-trigger="load, sdsm:refresh-versions from:body"
              hx-target="#version-status-grid"
              hx-swap="innerHTML">
             <div class="versions-loading">

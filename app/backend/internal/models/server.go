@@ -251,6 +251,9 @@ type Server struct {
 	PendingSavePurge    bool `json:"pending_save_purge,omitempty"`
 	progressReporter    func(stage string, processed, total int64)
 	restartMu           sync.Mutex
+	restartCancel       chan struct{}
+	stopMu              sync.Mutex
+	lifecycleMu         sync.RWMutex
 	playerHistoryLoaded bool
 	playersLogDirty     bool
 	// pendingPlayerSave holds filenames (e.g., ddmmyy_hhmmss_steamid.save) queued to move
@@ -295,6 +298,117 @@ type Server struct {
 	NotifyColorUpdateFailed    string `json:"notify_color_update_failed"`
 	resourceMu                 sync.RWMutex
 	resourceUsage              *ServerResourceUsage
+}
+
+// ServerLifecycleSnapshot captures a point-in-time view of mutable runtime lifecycle state.
+type ServerLifecycleSnapshot struct {
+	Running      bool
+	Starting     bool
+	Stopping     bool
+	StoppingEnds time.Time
+	Paused       bool
+	Storming     bool
+	ServerStarted *time.Time
+	LastStoppedAt *time.Time
+}
+
+// StoppingETASeconds returns remaining countdown seconds for scheduled shutdown.
+func (ls ServerLifecycleSnapshot) StoppingETASeconds(now time.Time) int {
+	if !ls.Stopping || ls.StoppingEnds.IsZero() {
+		return 0
+	}
+	remaining := int(ls.StoppingEnds.Sub(now).Seconds())
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+// LifecycleSnapshot returns a consistent snapshot of mutable runtime lifecycle fields.
+func (s *Server) LifecycleSnapshot() ServerLifecycleSnapshot {
+	if s == nil {
+		return ServerLifecycleSnapshot{}
+	}
+	s.lifecycleMu.RLock()
+	defer s.lifecycleMu.RUnlock()
+	var startedCopy, stoppedCopy *time.Time
+	if s.ServerStarted != nil {
+		t := *s.ServerStarted
+		startedCopy = &t
+	}
+	if s.LastStoppedAt != nil {
+		t := *s.LastStoppedAt
+		stoppedCopy = &t
+	}
+	return ServerLifecycleSnapshot{
+		Running:       s.Running,
+		Starting:      s.Starting,
+		Stopping:      s.Stopping,
+		StoppingEnds:  s.StoppingEnds,
+		Paused:        s.Paused,
+		Storming:      s.Storming,
+		ServerStarted: startedCopy,
+		LastStoppedAt: stoppedCopy,
+	}
+}
+
+// MarkStarting marks the server as entering startup state.
+func (s *Server) MarkStarting() { s.setStarting(true) }
+
+// SetPaused safely updates paused state.
+func (s *Server) SetPaused(v bool) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Paused = v
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) setStarting(v bool) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Starting = v
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) setStopping(v bool, ends time.Time) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Stopping = v
+	if v {
+		s.StoppingEnds = ends
+	} else {
+		s.StoppingEnds = time.Time{}
+	}
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) setRunning(v bool) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Running = v
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) markStopped(now time.Time) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Running = false
+	s.Stopping = false
+	s.Starting = false
+	s.StoppingEnds = time.Time{}
+	s.ServerStarted = nil
+	s.LastStoppedAt = &now
+	s.lifecycleMu.Unlock()
 }
 
 // PID returns the best-known operating system process ID for the running server.
@@ -1686,6 +1800,8 @@ func (s *Server) IsRunning() bool {
 	if s == nil {
 		return false
 	}
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 
 	if s.Proc != nil {
 		// Proc.ProcessState remains nil while the process is alive. Prefer that signal.
@@ -1905,42 +2021,25 @@ func (s *Server) installBepInEx(gameDir string) error {
 			return fmt.Errorf("server executable not found at %s", executablePath)
 		}
 
-		// Build minimal start command to initialize BepInEx (using default world/settings)
-		// We just need the process to run briefly so BepInEx creates its config structure.
-		cmd := exec.Command(executablePath, "-batchmode", "-nographics", "-quit")
-		cmd.Dir = gameDir
-
 		if s.Logger != nil {
 			s.Logger.Write("Starting server briefly to initialize BepInEx config")
 		}
 
 		// Run with a timeout in case it doesn't quit cleanly (configurable)
-		if err := cmd.Start(); err != nil {
-			return fmt.Errorf("failed to start server for BepInEx init: %w", err)
-		}
-
-		// Wait for the process to exit or kill after a short timeout
-		done := make(chan error, 1)
-		go func() {
-			done <- cmd.Wait()
-		}()
-
 		timeout := time.Duration(s.BepInExInitTimeoutSeconds)
 		if timeout <= 0 {
 			timeout = 10
 		}
-		select {
-		case err := <-done:
-			// Process exited on its own
-			if err != nil && s.Logger != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, executablePath, "-batchmode", "-nographics", "-quit")
+		cmd.Dir = gameDir
+		if err := cmd.Run(); err != nil && s.Logger != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				s.Logger.Write("BepInEx init run timed out and was terminated")
+			} else {
 				s.Logger.Write(fmt.Sprintf("BepInEx init run exited with status: %v", err))
 			}
-		case <-time.After(timeout * time.Second):
-			// Timeout: kill the process
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-			<-done // Wait for Wait() to return
 		}
 
 		// Validate that BepInEx initialized by checking for a known directory
@@ -1972,14 +2071,11 @@ func (s *Server) installBepInEx(gameDir string) error {
 // Stop performs an immediate (blocking) shutdown with any configured delay, without cancellation support.
 // Used by internal restart flows and legacy code paths where a synchronous stop is acceptable.
 func (s *Server) Stop() {
+	s.CancelScheduledRestart()
 	if s == nil || !s.IsRunning() {
 		// Nothing to stop; mark state and return
 		if s != nil {
-			s.Running = false
-			s.Stopping = false
-			s.Starting = false
-			now := time.Now()
-			s.LastStoppedAt = &now
+			s.markStopped(time.Now())
 		}
 		return
 	}
@@ -1994,8 +2090,7 @@ func (s *Server) Stop() {
 		return
 	}
 	// Blocking delayed shutdown (legacy path). Sleeps cannot be canceled.
-	s.Stopping = true
-	s.StoppingEnds = time.Now().Add(delay)
+	s.setStopping(true, time.Now().Add(delay))
 	s.sendShutdownNotices(delay)
 	s.performFinalShutdown()
 }
@@ -2033,10 +2128,15 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 		}
 		return
 	}
-	s.Stopping = true
-	s.StoppingEnds = time.Now().Add(delay)
-	// Create a fresh cancellation channel
+	s.setStopping(true, time.Now().Add(delay))
+	// Create a fresh cancellation channel under lock to avoid close races.
+	s.stopMu.Lock()
+	if s.StoppingCancel != nil {
+		close(s.StoppingCancel)
+	}
 	s.StoppingCancel = make(chan struct{})
+	cancel := s.StoppingCancel
+	s.stopMu.Unlock()
 	s.sendInitialShutdownNotice(delay)
 	if broadcast != nil {
 		broadcast(s)
@@ -2052,6 +2152,9 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 				if srv.Logger != nil {
 					srv.Logger.Write("No players connected; skipping remaining shutdown delay")
 				}
+				// Explicit start requests supersede any pending delayed restart timers.
+				s.CancelScheduledRestart()
+
 				srv.StoppingEnds = time.Now()
 			}
 			remaining := time.Until(srv.StoppingEnds)
@@ -2072,8 +2175,12 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 					srv.Logger.Write("Shutdown canceled before completion")
 				}
 				srv.sendCancellationNotice()
-				srv.Stopping = false
-				srv.StoppingEnds = time.Time{}
+				srv.setStopping(false, time.Time{})
+				srv.stopMu.Lock()
+				if srv.StoppingCancel == cancel {
+					srv.StoppingCancel = nil
+				}
+				srv.stopMu.Unlock()
 				if bc != nil {
 					bc(srv)
 				}
@@ -2083,12 +2190,17 @@ func (s *Server) StopAsync(broadcast func(*Server)) {
 			}
 		}
 		// Final notice + QUIT
+		srv.stopMu.Lock()
+		if srv.StoppingCancel == cancel {
+			srv.StoppingCancel = nil
+		}
+		srv.stopMu.Unlock()
 		srv.sendFinalNotice()
 		srv.performFinalShutdown()
 		if bc != nil {
 			bc(srv)
 		}
-	}(s.StoppingCancel, s, delay, broadcast)
+	}(cancel, s, delay, broadcast)
 }
 
 // CancelStop interrupts a pending asynchronous shutdown (if any). Returns true if cancellation occurred.
@@ -2096,18 +2208,14 @@ func (s *Server) CancelStop() bool {
 	if s == nil || !s.Stopping {
 		return false
 	}
-	if s.StoppingCancel != nil {
-		// Safe close: recover if already closed
-		select {
-		case <-s.StoppingCancel:
-			// already closed
-		default:
-			close(s.StoppingCancel)
-		}
-		s.StoppingCancel = nil
-		return true
+	s.stopMu.Lock()
+	defer s.stopMu.Unlock()
+	if s.StoppingCancel == nil {
+		return false
 	}
-	return false
+	close(s.StoppingCancel)
+	s.StoppingCancel = nil
+	return true
 }
 
 // Helper: send formatted timeframe + initial notice
@@ -2138,11 +2246,17 @@ func (s *Server) sendChat(msg string) {
 func (s *Server) sendShutdownNotices(delay time.Duration) {
 	s.sendInitialShutdownNotice(delay)
 	if delay > 10*time.Second {
-		time.Sleep(delay - 10*time.Second)
+		s.waitUntilStoppedOrTimeout(delay - 10*time.Second)
+		if !s.IsRunning() {
+			return
+		}
 		s.sendTenSecondNotice()
-		time.Sleep(10 * time.Second)
+		s.waitUntilStoppedOrTimeout(10 * time.Second)
 	} else {
-		time.Sleep(delay)
+		s.waitUntilStoppedOrTimeout(delay)
+	}
+	if !s.IsRunning() {
+		return
 	}
 	s.sendFinalNotice()
 }
@@ -2151,43 +2265,38 @@ func (s *Server) sendShutdownNotices(delay time.Duration) {
 func (s *Server) performFinalShutdown() {
 	if s == nil || !s.IsRunning() {
 		if s != nil {
-			s.Running = false
-			s.Stopping = false
-			s.Starting = false
-			s.ServerStarted = nil
-			now := time.Now()
-			s.LastStoppedAt = &now
+			s.markStopped(time.Now())
 		}
 		return
 	}
+	s.CancelScheduledRestart()
 	// Best-effort graceful shutdown via SCON QUIT
 	if err := s.SendCommand("console", "QUIT"); err != nil {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to send QUIT command: %v", err))
 		}
 	}
-	time.Sleep(3 * time.Second)
-	s.Running = false
-	s.Stopping = false
-	s.Starting = false
+	s.waitUntilStoppedOrTimeout(5 * time.Second)
+	if s.IsRunning() {
+		// Force-kill as a last resort if graceful shutdown did not complete.
+		if s.Proc != nil {
+			_ = s.Proc.Process.Kill()
+		} else if s.pid > 0 && IsPidAlive(s.pid) {
+			if p, err := os.FindProcess(s.pid); err == nil && p != nil {
+				_ = p.Kill()
+			}
+		}
+	}
 	now := time.Now()
-	s.ServerStarted = nil
-	s.LastStoppedAt = &now
+	s.markStopped(now)
 	s.markAllClientsDisconnected(now)
 	s.rewritePlayersLog()
 	if s.Proc == nil {
 		s.resetChat()
 	}
-	// Force-kill as a last resort if still alive
-	if s.Proc != nil {
-		_ = s.Proc.Process.Kill()
-	} else if s.pid > 0 && IsPidAlive(s.pid) {
-		if p, err := os.FindProcess(s.pid); err == nil && p != nil {
-			_ = p.Kill()
-		}
-		// Clear tracked pid regardless; liveness will update via IsRunning next check
-		s.pid = 0
-	}
+	s.lifecycleMu.Lock()
+	s.pid = 0
+	s.lifecycleMu.Unlock()
 	// Cleanup PID file in case it exists from a detached start
 	if p := s.safePIDFilePath(); p != "" {
 		_ = os.Remove(p)
@@ -2314,7 +2423,9 @@ func (s *Server) Restart() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Waiting %s before restarting server", delay))
 		}
-		time.Sleep(delay)
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		<-timer.C
 	}
 
 	if s.Logger != nil {
@@ -2322,6 +2433,72 @@ func (s *Server) Restart() {
 	}
 
 	s.Start()
+}
+
+// ScheduleRestartAfter schedules a restart start attempt after delay.
+// Any previously scheduled delayed restart for this server is canceled.
+// The callback runs immediately before Start() when the delay elapses.
+func (s *Server) ScheduleRestartAfter(delay time.Duration, beforeStart func(*Server)) {
+	if s == nil {
+		return
+	}
+
+	s.restartMu.Lock()
+	if s.restartCancel != nil {
+		close(s.restartCancel)
+	}
+	cancel := make(chan struct{})
+	s.restartCancel = cancel
+	s.restartMu.Unlock()
+
+	go func(srv *Server, ch <-chan struct{}, d time.Duration, cb func(*Server)) {
+		if d > 0 {
+			timer := time.NewTimer(d)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ch:
+				return
+			}
+		} else {
+			select {
+			case <-ch:
+				return
+			default:
+			}
+		}
+
+		srv.restartMu.Lock()
+		if srv.restartCancel != ch {
+			srv.restartMu.Unlock()
+			return
+		}
+		srv.restartCancel = nil
+		srv.restartMu.Unlock()
+
+		if srv.IsRunning() || srv.Starting {
+			return
+		}
+		if cb != nil {
+			cb(srv)
+		}
+		srv.Start()
+	}(s, cancel, delay, beforeStart)
+}
+
+// CancelScheduledRestart cancels a pending delayed restart, if any.
+func (s *Server) CancelScheduledRestart() bool {
+	if s == nil {
+		return false
+	}
+	s.restartMu.Lock()
+	defer s.restartMu.Unlock()
+	if s.restartCancel == nil {
+		return false
+	}
+	close(s.restartCancel)
+	s.restartCancel = nil
+	return true
 }
 
 func (s *Server) restartDelayDuration() time.Duration {
@@ -2376,8 +2553,10 @@ func (s *Server) waitForShutdown(timeout time.Duration) {
 }
 
 func (s *Server) simpleShutdownWait() {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
 	for s.Proc != nil && s.Proc.ProcessState == nil {
-		time.Sleep(200 * time.Millisecond)
+		<-ticker.C
 	}
 }
 
@@ -2391,17 +2570,21 @@ func (s *Server) managePortForwarding() {
 	s.refreshPortMapping()
 	// Refresh every 5 minutes to extend lifetime (~10m lifetime requested each time)
 	ticker := time.NewTicker(5 * time.Minute)
+	heartbeat := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
-	for s.Running && s.Proc != nil {
+	defer heartbeat.Stop()
+	for {
+		if !s.IsRunning() {
+			return
+		}
 		select {
 		case <-ticker.C:
-			if !s.Running || s.Proc == nil {
+			if !s.IsRunning() {
 				return
 			}
 			s.refreshPortMapping()
-		default:
-			// Sleep a short interval to avoid busy loop
-			time.Sleep(2 * time.Second)
+		case <-heartbeat.C:
+			// periodic liveness re-check
 		}
 	}
 }
@@ -2425,7 +2608,12 @@ func (s *Server) adaptivePortForward() {
 		}
 		delay = time.Duration(s.PortForwardProbeDelaySeconds) * time.Second
 	}
-	time.Sleep(delay)
+	if s.waitUntilStoppedOrTimeout(delay) {
+		if s.Logger != nil {
+			s.Logger.Write("Port-forward probe canceled: server is no longer running")
+		}
+		return
+	}
 
 	// Probe by attempting an AddOrRefreshMapping with a very short lifetime, then immediately remove it.
 	// If this succeeds, we assume UPnP works in the environment. We don't know whether game already mapped
@@ -2496,6 +2684,8 @@ func (s *Server) Start() {
 	if s.Logger != nil {
 		s.Logger.Write("Start requested")
 	}
+	// Explicit start requests supersede pending delayed restarts.
+	s.CancelScheduledRestart()
 
 	if s.Paths == nil {
 		if s.Logger != nil {
@@ -2504,15 +2694,20 @@ func (s *Server) Start() {
 		return
 	}
 
-	if s.Running {
+	s.lifecycleMu.RLock()
+	running := s.Running
+	s.lifecycleMu.RUnlock()
+	if running {
 		if s.Logger != nil {
 			s.Logger.Write("Start skipped: process is already running")
 		}
 		return
 	}
 
+	s.lifecycleMu.Lock()
 	if s.Proc != nil {
 		if s.Proc.ProcessState == nil {
+			s.lifecycleMu.Unlock()
 			if s.Logger != nil {
 				s.Logger.Write("Start skipped: process is already running")
 			}
@@ -2529,6 +2724,7 @@ func (s *Server) Start() {
 	// Signal the starting state immediately so the UI can reflect it
 	// while deploy/process-launch work proceeds.
 	s.Starting = true
+	s.lifecycleMu.Unlock()
 
 	// Stubbed save purge hook: if core parameters changed previously, we would purge saves here.
 	// For now, just log intent and proceed without deleting anything.
@@ -2555,7 +2751,7 @@ func (s *Server) Start() {
 			if s.Logger != nil {
 				s.Logger.Write(fmt.Sprintf("Deploy before start failed: %v", err))
 			}
-			s.Starting = false
+			s.setStarting(false)
 			return
 		}
 	}
@@ -2654,7 +2850,7 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Unsupported platform: %s. Server start aborted.", runtime.GOOS))
 		}
-		s.Starting = false
+		s.setStarting(false)
 		return
 	}
 	cmd.Dir = s.Paths.ServerGameDir(s.ID)
@@ -2675,13 +2871,14 @@ func (s *Server) Start() {
 		if s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Failed to start server process: %v", err))
 		}
-		s.Starting = false
+		s.setStarting(false)
 		return
 	}
 	if s.Logger != nil {
 		s.Logger.Write("Server process started successfully")
 	}
 
+	s.lifecycleMu.Lock()
 	s.Proc = cmd
 	s.pid = cmd.Process.Pid
 	s.resetChat()
@@ -2689,6 +2886,7 @@ func (s *Server) Start() {
 	s.Thrd = stopChan
 	s.Starting = true
 	s.Running = true
+	s.lifecycleMu.Unlock()
 
 	// If this server is detached, persist the PID so a restarted manager can discover it.
 	if s.Detached {
@@ -2708,18 +2906,24 @@ func (s *Server) Start() {
 		if err := cmd.Wait(); err != nil && s.Logger != nil {
 			s.Logger.Write(fmt.Sprintf("Server process exited with error: %v", err))
 		}
+		stopped := time.Now()
+		s.lifecycleMu.Lock()
 		s.Running = false
 		s.Starting = false
+		s.Stopping = false
+		s.StoppingEnds = time.Time{}
 		s.Proc = nil
 		s.pid = 0
 		s.ServerStarted = nil
-		stopped := time.Now()
 		s.LastStoppedAt = &stopped
+		s.lifecycleMu.Unlock()
 		// stdin fallback removed
 		close(stop)
+		s.lifecycleMu.Lock()
 		if s.Thrd == stop {
 			s.Thrd = nil
 		}
+		s.lifecycleMu.Unlock()
 		tailWG.Wait()
 		s.markAllClientsDisconnected(time.Now())
 		s.rewritePlayersLog()
@@ -2733,7 +2937,9 @@ func (s *Server) Start() {
 		}
 	}(stopChan)
 	now := time.Now()
+	s.lifecycleMu.Lock()
 	s.ServerStarted = &now
+	s.lifecycleMu.Unlock()
 
 	// Attempt automatic port forwarding if requested.
 	if s.AutoPortForward && s.Port > 0 {
@@ -2779,8 +2985,14 @@ func (s *Server) AttachToRunning(pid int) {
 
 	// Monitor external PID; when it exits, update state and clean up pid file
 	go func(srv *Server, p int, stop chan bool) {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
 		for IsPidAlive(p) {
-			time.Sleep(2 * time.Second)
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+			}
 		}
 		srv.Running = false
 		srv.Starting = false
@@ -2824,8 +3036,20 @@ func (s *Server) AttachToRunning(pid int) {
 		if delaySec <= 0 {
 			delaySec = 2
 		}
+		waitRetry := func() bool {
+			t := time.NewTimer(time.Duration(delaySec) * time.Second)
+			defer t.Stop()
+			select {
+			case <-stopChan:
+				return false
+			case <-t.C:
+				return true
+			}
+		}
 		// Initial wait to let attach tailer start
-		time.Sleep(time.Duration(delaySec) * time.Second)
+		if !waitRetry() {
+			return
+		}
 		for i := 0; i < maxTries; i++ {
 			// Early exit if we already have live clients populated
 			if len(srv.LiveClients()) > 0 {
@@ -2833,12 +3057,62 @@ func (s *Server) AttachToRunning(pid int) {
 			}
 			_ = srv.SendCommand("console", "CLIENTS")
 			// Give the server time to respond and logs to be parsed
-			time.Sleep(time.Duration(delaySec) * time.Second)
+			if !waitRetry() {
+				return
+			}
 			if len(srv.LiveClients()) > 0 {
 				return
 			}
 		}
 	}(s)
+}
+
+func (s *Server) waitUntilStoppedOrTimeout(timeout time.Duration) bool {
+	if timeout <= 0 {
+		return !s.IsRunning()
+	}
+	timer := time.NewTimer(timeout)
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer timer.Stop()
+	defer ticker.Stop()
+	for {
+		if !s.IsRunning() {
+			return true
+		}
+		select {
+		case <-ticker.C:
+		case <-timer.C:
+			return !s.IsRunning()
+		}
+	}
+}
+
+func (s *Server) waitForRunningDelay(delay time.Duration) bool {
+	if s == nil {
+		return false
+	}
+	if delay <= 0 {
+		return s.IsRunning()
+	}
+
+	s.lifecycleMu.RLock()
+	stopCh := s.Thrd
+	s.lifecycleMu.RUnlock()
+
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	if stopCh == nil {
+		<-timer.C
+		return s.IsRunning()
+	}
+
+	select {
+	case <-timer.C:
+		return s.IsRunning()
+	case <-stopCh:
+		return false
+	}
 }
 
 func (s *Server) tailServerLog(path string, stop <-chan bool) {

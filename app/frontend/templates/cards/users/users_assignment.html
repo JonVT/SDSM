@@ -43,7 +43,7 @@
                         <div class="tile-actions">
                                 <button type="button"
                                     class="btn btn-secondary btn-sm"
-                                    onclick="SDSM.users.showAssignmentAccessModal(this)"
+                                    data-users-action="assignment-access"
                                     data-username="{{.username}}"
                                     data-assigned-all="{{if .assigned_all}}true{{else}}false{{end}}"
                                     data-assigned="{{.assigned_csv}}"

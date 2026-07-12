@@ -5,136 +5,303 @@
 
     const serverOptions = window.SDSM_SERVER_OPTIONS || [];
 
-    function showAddUserModal() {
-        const modalContent = `
-            <form id="addUserForm" hx-post="/api/users" hx-target="#user-list" hx-swap="beforeend" hx-indicator="#global-htmx-indicator"
-                  hx-on:htmx:after-request="if(event.detail.successful) {
-                      const emptyRow = document.getElementById('user-empty-row');
-                      if (emptyRow) { emptyRow.remove(); }
-                      SDSM.modal.hide();
-                      htmx.process(document.body); // Re-process for new feather icons
-                  }">
-                <div class="form-group">
-                    <label for="add-username" class="form-label">Username</label>
-                    <input type="text" class="form-control" id="add-username" name="username" minlength="3" autocomplete="off" required>
-                </div>
-                <div class="form-group">
-                    <label for="add-password" class="form-label">Password</label>
-                    <input type="password" class="form-control" id="add-password" name="password" minlength="8" autocomplete="new-password" required>
-                    <p class="help-text">Minimum 8 characters.</p>
-                </div>
-                <div class="form-group">
-                    <label for="add-role" class="form-label">Role</label>
-                    <select class="form-select" id="add-role" name="role">
-                        <option value="operator" selected>Operator</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
-            </form>
-        `;
+    function createElement(tag, attrs = {}, text = '') {
+        const node = document.createElement(tag);
+        Object.entries(attrs).forEach(([key, value]) => {
+            if (value === null || typeof value === 'undefined') {
+                return;
+            }
+            if (key === 'className') {
+                node.className = value;
+                return;
+            }
+            if (key === 'dataset' && value && typeof value === 'object') {
+                Object.entries(value).forEach(([dataKey, dataValue]) => {
+                    if (typeof dataValue !== 'undefined') {
+                        node.dataset[dataKey] = `${dataValue}`;
+                    }
+                });
+                return;
+            }
+            if (key === 'checked') {
+                node.checked = !!value;
+                return;
+            }
+            if (key === 'disabled') {
+                node.disabled = !!value;
+                return;
+            }
+            node.setAttribute(key, value);
+        });
+        if (text) {
+            node.textContent = text;
+        }
+        return node;
+    }
 
-        SDSM.modal.show({
+    function addFormGroup(form, labelText, control, helpText) {
+        const group = createElement('div', { className: 'form-group' });
+        if (labelText && control && control.id) {
+            const label = createElement('label', { className: 'form-label', for: control.id }, labelText);
+            group.appendChild(label);
+        }
+        group.appendChild(control);
+        if (helpText) {
+            group.appendChild(createElement('p', { className: 'help-text' }, helpText));
+        }
+        form.appendChild(group);
+    }
+
+    function submitWithHtmx(form, confirmButton) {
+        if (!form || typeof htmx === 'undefined') {
+            return;
+        }
+        if (confirmButton) {
+            confirmButton.disabled = true;
+        }
+        htmx.trigger(form, 'submit');
+    }
+
+    function showAddUserModal() {
+        if (!SDSM.modal || typeof SDSM.modal.info !== 'function') {
+            return;
+        }
+
+        const form = createElement('form', {
+            id: 'addUserForm',
+            'hx-post': '/api/users',
+            'hx-target': '#user-list',
+            'hx-swap': 'beforeend',
+            'hx-indicator': '#global-htmx-indicator'
+        });
+
+        const usernameInput = createElement('input', {
+            type: 'text',
+            className: 'form-control',
+            id: 'add-username',
+            name: 'username',
+            minlength: '3',
+            autocomplete: 'off',
+            required: 'required'
+        });
+        addFormGroup(form, 'Username', usernameInput);
+
+        const passwordInput = createElement('input', {
+            type: 'password',
+            className: 'form-control',
+            id: 'add-password',
+            name: 'password',
+            minlength: '8',
+            autocomplete: 'new-password',
+            required: 'required'
+        });
+        addFormGroup(form, 'Password', passwordInput, 'Minimum 8 characters.');
+
+        const roleSelect = createElement('select', {
+            className: 'form-select',
+            id: 'add-role',
+            name: 'role'
+        });
+        roleSelect.appendChild(createElement('option', { value: 'operator' }, 'Operator'));
+        roleSelect.appendChild(createElement('option', { value: 'admin' }, 'Admin'));
+        roleSelect.value = 'operator';
+        addFormGroup(form, 'Role', roleSelect);
+
+        SDSM.modal.info({
             title: 'Add User',
-            subtitle: 'Create a new login with operator or admin access.',
-            content: modalContent,
-            buttons: [
-                { label: 'Cancel', class: 'btn-secondary', action: 'hide' },
-                { label: 'Create User', class: 'btn-primary', action: () => htmx.submit(document.getElementById('addUserForm')) }
-            ],
-            onShow: () => {
-                htmx.process(document.getElementById('addUserForm'));
+            body: form,
+            buttonText: 'Create User',
+            onRender: ({ close, confirmButton }) => {
+                if (confirmButton) {
+                    confirmButton.classList.remove('btn-primary');
+                    confirmButton.classList.add('btn-primary');
+                    confirmButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        submitWithHtmx(form, confirmButton);
+                    });
+                }
+
+                form.addEventListener('htmx:afterRequest', (event) => {
+                    if (!event.detail?.successful) {
+                        if (confirmButton) {
+                            confirmButton.disabled = false;
+                        }
+                        return;
+                    }
+                    const emptyRow = document.getElementById('user-empty-row');
+                    if (emptyRow) {
+                        emptyRow.remove();
+                    }
+                    close();
+                    if (typeof htmx !== 'undefined') {
+                        htmx.process(document.body);
+                    }
+                });
+
+                if (typeof htmx !== 'undefined') {
+                    htmx.process(form);
+                }
             }
         });
     }
 
     function showResetPasswordModal(username) {
-        const modalContent = `
-            <form id="resetPasswordForm" hx-post="/api/users/${encodeURIComponent(username)}/reset-password" hx-indicator="#global-htmx-indicator"
-                  hx-on:htmx:after-request="if(event.detail.successful) { SDSM.modal.hide(); }">
-                <div class="form-group">
-                    <label for="reset-password" class="form-label">New Password</label>
-                    <input type="password" class="form-control" id="reset-password" name="password" minlength="8" autocomplete="new-password" required>
-                    <p class="help-text">Minimum 8 characters.</p>
-                </div>
-            </form>
-        `;
+        if (!username || !SDSM.modal || typeof SDSM.modal.info !== 'function') {
+            return;
+        }
 
-        SDSM.modal.show({
-            title: 'Reset Password',
-            subtitle: `Update the password for ${username}.`,
-            content: modalContent,
-            buttons: [
-                { label: 'Cancel', class: 'btn-secondary', action: 'hide' },
-                { label: 'Reset Password', class: 'btn-primary', action: () => htmx.submit(document.getElementById('resetPasswordForm')) }
-            ],
-            onShow: () => {
-                htmx.process(document.getElementById('resetPasswordForm'));
+        const form = createElement('form', {
+            id: 'resetPasswordForm',
+            'hx-post': `/api/users/${encodeURIComponent(username)}/reset-password`,
+            'hx-indicator': '#global-htmx-indicator'
+        });
+
+        const passwordInput = createElement('input', {
+            type: 'password',
+            className: 'form-control',
+            id: 'reset-password',
+            name: 'password',
+            minlength: '8',
+            autocomplete: 'new-password',
+            required: 'required'
+        });
+        addFormGroup(form, 'New Password', passwordInput, 'Minimum 8 characters.');
+
+        SDSM.modal.info({
+            title: `Reset Password · ${username}`,
+            body: form,
+            buttonText: 'Reset Password',
+            onRender: ({ close, confirmButton }) => {
+                if (confirmButton) {
+                    confirmButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        submitWithHtmx(form, confirmButton);
+                    });
+                }
+
+                form.addEventListener('htmx:afterRequest', (event) => {
+                    if (!event.detail?.successful) {
+                        if (confirmButton) {
+                            confirmButton.disabled = false;
+                        }
+                        return;
+                    }
+                    close();
+                });
+
+                if (typeof htmx !== 'undefined') {
+                    htmx.process(form);
+                }
             }
         });
     }
 
     function showAccessModal(trigger) {
+        if (!trigger || !SDSM.modal || typeof SDSM.modal.info !== 'function') {
+            return;
+        }
+
         const username = (trigger.getAttribute('data-username') || '').trim();
-        if (!username) return;
+        if (!username) {
+            return;
+        }
 
         const isAssignedAll = trigger.getAttribute('data-assigned-all') === 'true';
         const assignedServers = (trigger.getAttribute('data-assigned') || '').split(',').filter(Boolean);
         const assignedSet = new Set(assignedServers);
 
-        let serverCheckboxesHTML = '';
+        const form = createElement('form', {
+            id: 'accessForm',
+            'hx-post': `/api/users/${encodeURIComponent(username)}/assignments`,
+            'hx-target': `#user-row-${username}`,
+            'hx-swap': 'outerHTML',
+            'hx-indicator': '#global-htmx-indicator'
+        });
+
+        const assignAllInput = createElement('input', {
+            type: 'hidden',
+            name: 'assign_all',
+            id: 'assign-all-input',
+            value: isAssignedAll ? 'true' : 'false'
+        });
+        form.appendChild(assignAllInput);
+
+        const assignAllTile = createElement('label', { className: 'form-group flex-row items-center gap-3 p-3 rounded-md bg-body-tertiary border' });
+        const assignAllToggle = createElement('input', {
+            type: 'checkbox',
+            id: 'assign-all-toggle',
+            className: 'form-switch',
+            checked: isAssignedAll
+        });
+        assignAllTile.appendChild(assignAllToggle);
+        const assignAllTextWrap = createElement('div');
+        assignAllTextWrap.appendChild(createElement('div', { className: 'font-medium' }, 'Full Access'));
+        assignAllTextWrap.appendChild(createElement('p', { className: 'help-text mb-0' }, 'Allow this operator to manage all current and future servers.'));
+        assignAllTile.appendChild(assignAllTextWrap);
+        form.appendChild(assignAllTile);
+
+        const grid = createElement('div', { className: 'grid grid-cols-2 md:grid-cols-3 gap-2 mt-4', id: 'server-checkbox-grid' });
         if (serverOptions.length > 0) {
-            serverCheckboxesHTML = serverOptions.map(server => `
-                <label class="form-group-tile">
-                    <input type="checkbox" name="servers" value="${server.ID}" ${assignedSet.has(String(server.ID)) ? 'checked' : ''}>
-                    <span>${server.Name}</span>
-                </label>
-            `).join('');
+            serverOptions.forEach((server) => {
+                const tile = createElement('label', { className: 'form-group-tile' });
+                const checkbox = createElement('input', {
+                    type: 'checkbox',
+                    name: 'servers',
+                    value: `${server.ID}`,
+                    checked: assignedSet.has(String(server.ID))
+                });
+                tile.appendChild(checkbox);
+                tile.appendChild(createElement('span', {}, server.Name || `Server ${server.ID}`));
+                grid.appendChild(tile);
+            });
         } else {
-            serverCheckboxesHTML = '<p class="text-muted col-span-full">No servers available to assign.</p>';
+            grid.appendChild(createElement('p', { className: 'text-muted col-span-full' }, 'No servers available to assign.'));
         }
+        form.appendChild(grid);
 
-        const modalContent = `
-            <form id="accessForm" hx-post="/api/users/${encodeURIComponent(username)}/assignments" hx-target="#user-row-${username}" hx-swap="outerHTML" hx-indicator="#global-htmx-indicator"
-                  hx-on:htmx:after-request="if(event.detail.successful) { SDSM.modal.hide(); htmx.process(document.body); }">
-                <input type="hidden" name="assign_all" id="assign-all-input" value="${isAssignedAll ? 'true' : 'false'}">
-                <label class="form-group flex-row items-center gap-3 p-3 rounded-md bg-body-tertiary border">
-                    <input type="checkbox" id="assign-all-toggle" class="form-switch" ${isAssignedAll ? 'checked' : ''}>
-                    <div>
-                        <div class="font-medium">Full Access</div>
-                        <p class="help-text mb-0">Allow this operator to manage all current and future servers.</p>
-                    </div>
-                </label>
-                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-4" id="server-checkbox-grid">
-                    ${serverCheckboxesHTML}
-                </div>
-            </form>
-        `;
-
-        SDSM.modal.show({
-            title: 'Manage Access',
-            subtitle: `Choose which servers ${username} can control.`,
-            content: modalContent,
-            size: 'lg',
-            buttons: [
-                { label: 'Cancel', class: 'btn-secondary', action: 'hide' },
-                { label: 'Save Access', class: 'btn-primary', action: () => htmx.submit(document.getElementById('accessForm')) }
-            ],
-            onShow: () => {
-                htmx.process(document.getElementById('accessForm'));
-                const assignAllToggle = document.getElementById('assign-all-toggle');
-                const assignAllInput = document.getElementById('assign-all-input');
-                const serverCheckboxes = document.querySelectorAll('#server-checkbox-grid input[name="servers"]');
+        SDSM.modal.info({
+            title: `Manage Access · ${username}`,
+            body: form,
+            buttonText: 'Save Access',
+            onRender: ({ close, confirmButton }) => {
+                const serverCheckboxes = Array.from(form.querySelectorAll('#server-checkbox-grid input[name="servers"]'));
 
                 const setAssignAllState = (isAll) => {
                     assignAllInput.value = isAll ? 'true' : 'false';
-                    serverCheckboxes.forEach(cb => {
-                        cb.disabled = isAll;
-                        if (isAll) cb.checked = false;
+                    serverCheckboxes.forEach((checkbox) => {
+                        checkbox.disabled = isAll;
+                        if (isAll) {
+                            checkbox.checked = false;
+                        }
                     });
                 };
 
                 setAssignAllState(assignAllToggle.checked);
                 assignAllToggle.addEventListener('change', () => setAssignAllState(assignAllToggle.checked));
+
+                if (confirmButton) {
+                    confirmButton.addEventListener('click', (event) => {
+                        event.preventDefault();
+                        submitWithHtmx(form, confirmButton);
+                    });
+                }
+
+                form.addEventListener('htmx:afterRequest', (event) => {
+                    if (!event.detail?.successful) {
+                        if (confirmButton) {
+                            confirmButton.disabled = false;
+                        }
+                        return;
+                    }
+                    close();
+                    if (typeof htmx !== 'undefined') {
+                        htmx.process(document.body);
+                    }
+                });
+
+                if (typeof htmx !== 'undefined') {
+                    htmx.process(form);
+                }
             }
         });
     }
@@ -147,13 +314,42 @@
         if (!username) {
             return;
         }
-        const assignedAll = trigger.getAttribute('data-assigned-all') || 'false';
-        const assigned = trigger.getAttribute('data-assigned') || '';
         const proxy = document.createElement('div');
         proxy.setAttribute('data-username', username);
-        proxy.setAttribute('data-assigned-all', assignedAll);
-        proxy.setAttribute('data-assigned', assigned);
+        proxy.setAttribute('data-assigned-all', trigger.getAttribute('data-assigned-all') || 'false');
+        proxy.setAttribute('data-assigned', trigger.getAttribute('data-assigned') || '');
         showAccessModal(proxy);
+    }
+
+    if (!document.body.dataset.usersActionBound) {
+        document.body.dataset.usersActionBound = 'true';
+        document.body.addEventListener('click', (event) => {
+            const trigger = event.target.closest('[data-users-action]');
+            if (!trigger) {
+                return;
+            }
+            const action = trigger.getAttribute('data-users-action');
+            if (!action) {
+                return;
+            }
+            event.preventDefault();
+            switch (action) {
+                case 'add-user':
+                    showAddUserModal();
+                    break;
+                case 'reset-password':
+                    showResetPasswordModal(trigger.getAttribute('data-username') || '');
+                    break;
+                case 'access':
+                    showAccessModal(trigger);
+                    break;
+                case 'assignment-access':
+                    showAssignmentAccessModal(trigger);
+                    break;
+                default:
+                    break;
+            }
+        });
     }
 
     window.SDSM.users = {
@@ -162,5 +358,4 @@
         showAccessModal,
         showAssignmentAccessModal
     };
-
 })();
