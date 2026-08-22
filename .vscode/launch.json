@@ -9,7 +9,7 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/cmd/sdsm",
+            "program": "${workspaceFolder}/app/backend/cmd/sdsm",
             //"buildFlags": "-o ${workspaceFolder}/test/",
             "cwd": "${workspaceFolder}/test",
             "args": ["${workspaceFolder}/test/sdsm.config"]

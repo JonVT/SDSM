@@ -1,0 +1,160 @@
+{{ define "user_menu" }}
+{{ $username := printf "%v" .username }}
+{{ $initials := initials $username }}
+{{ $role := .role }}
+{{ $isAdmin := eq $role "admin" }}
+<div class="user-menu" data-user-menu data-role="{{$role}}">
+    <button class="avatar-btn" aria-haspopup="true" aria-expanded="false" title="Account" data-user-menu-trigger>
+        <span class="avatar-ring" aria-hidden="true"></span>
+        <span class="avatar-initials">{{ if $initials }}{{ $initials }}{{ else }}?{{ end }}</span>
+        <span class="sr-only">Open account menu</span>
+        <span class="role-badge {{ if $isAdmin }}admin{{ else }}operator{{ end }}" title="{{ if $isAdmin }}Administrator{{ else }}Operator{{ end }}">{{ if $isAdmin }}A{{ else }}O{{ end }}</span>
+    </button>
+    <div class="user-dropdown dropdown-panel" role="menu">
+        <div class="user-dropdown-header">
+            <div class="avatar-preview" data-avatar-preview>{{ if $initials }}{{ $initials }}{{ else }}?{{ end }}</div>
+            <div class="user-dropdown-meta">
+                <div class="user-name" data-user-name>{{ if $username }}{{ $username }}{{ else }}Unknown User{{ end }}</div>
+                <div class="user-role" data-user-role>{{ if $isAdmin }}Administrator{{ else }}Operator{{ end }}</div>
+            </div>
+        </div>
+        <div class="dropdown-divider" role="none"></div>
+        <a href="/profile" class="dropdown-item" role="menuitem" hx-get="/api/pages/profile" hx-target="#content-area" hx-swap="innerHTML" hx-push-url="/profile">
+            <i data-feather="user"></i>
+            <span>Update Profile</span>
+        </a>
+        <a href="/logout" class="dropdown-item" role="menuitem">
+            <i data-feather="log-out"></i>
+            <span>Logout</span>
+        </a>
+    </div>
+</div>
+<script>
+  (function(){
+    function setupUserMenu(root) {
+        if (!root || root.dataset.bound) return;
+        root.dataset.bound = 'true';
+
+        const trigger = root.querySelector('[data-user-menu-trigger]');
+        const menu = root.querySelector('.user-dropdown');
+        const badge = root.querySelector('.role-badge');
+        const nameLabel = root.querySelector('[data-user-name]');
+        const roleLabel = root.querySelector('[data-user-role]');
+        const avatarPreview = root.querySelector('[data-avatar-preview]');
+        const avatarInitials = root.querySelector('.avatar-initials');
+
+        if (!trigger || !menu) return;
+
+        const computeInitials = (value) => {
+            if (!value) return '?';
+            return value
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(part => part[0].toUpperCase())
+                .join('') || value[0].toUpperCase();
+        };
+
+        const applyRole = (role) => {
+            const normalized = (role || '').toLowerCase() === 'admin' ? 'admin' : 'operator';
+            if (badge) {
+                badge.classList.toggle('admin', normalized === 'admin');
+                badge.classList.toggle('operator', normalized !== 'admin');
+                badge.textContent = normalized === 'admin' ? 'A' : 'O';
+                badge.title = normalized === 'admin' ? 'Administrator' : 'Operator';
+            }
+            if (roleLabel) {
+                roleLabel.textContent = normalized === 'admin' ? 'Administrator' : 'Operator';
+            }
+        };
+
+        const applyName = (value) => {
+            if (value && nameLabel) {
+                nameLabel.textContent = value;
+            }
+            const initials = computeInitials(value);
+            if (avatarPreview) {
+                avatarPreview.textContent = initials;
+            }
+            if (avatarInitials) {
+                avatarInitials.textContent = initials;
+            }
+        };
+
+        const toggleMenu = (show) => {
+            const isOpen = show ?? !menu.classList.contains('active');
+            menu.classList.toggle('active', isOpen);
+            trigger.setAttribute('aria-expanded', isOpen);
+            if (isOpen) {
+                const firstItem = menu.querySelector('.dropdown-item');
+                firstItem?.focus();
+            }
+        };
+
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleMenu();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!root.contains(e.target)) {
+                toggleMenu(false);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && menu.classList.contains('active')) {
+                toggleMenu(false);
+                trigger.focus();
+            }
+        });
+
+        // Basic keyboard navigation
+        const items = Array.from(menu.querySelectorAll('.dropdown-item'));
+        menu.addEventListener('keydown', (e) => {
+            if (!items.length) return;
+            const currentIndex = items.indexOf(document.activeElement);
+
+            let nextIndex = -1;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                nextIndex = (currentIndex + 1) % items.length;
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                nextIndex = (currentIndex - 1 + items.length) % items.length;
+            }
+
+            if (nextIndex !== -1) {
+                items[nextIndex].focus();
+            }
+        });
+
+        // Fetch role for badge
+        fetch('/whoami', { credentials: 'same-origin', cache: 'no-store' })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                if (data.username) {
+                    applyName(data.username);
+                }
+                if (data.role) {
+                    applyRole(data.role);
+                }
+            }).catch(() => {});
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-user-menu]').forEach(setupUserMenu);
+    });
+    document.addEventListener('htmx:load', (event) => {
+        const target = event.detail?.elt || event.target;
+        if (!target) return;
+        if (target.matches && target.matches('[data-user-menu]')) {
+            setupUserMenu(target);
+        }
+        const nested = target.querySelectorAll ? target.querySelectorAll('[data-user-menu]') : [];
+        nested.forEach(setupUserMenu);
+    });
+  })();
+</script>
+{{ end }}

@@ -8,22 +8,31 @@ on:
 
 permissions:
   contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   GO111MODULE: on
 
 jobs:
   lint:
-    name: Go fmt + vet
+    name: Style & Static Analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
+          cache: true
 
       - name: Cache Go build
         uses: actions/cache@v4
@@ -48,3 +57,66 @@ jobs:
 
       - name: Run go vet
         run: go vet ./...
+
+      - name: Verify go.mod is tidy
+        shell: bash
+        run: |
+          set -euo pipefail
+          before=$(git status --porcelain -- go.mod go.sum)
+          go mod tidy
+          after=$(git status --porcelain -- go.mod go.sum)
+          if [[ -n "$after" && -z "$before" ]]; then
+            echo "go.mod/go.sum not tidy. Run 'go mod tidy' and commit changes:" >&2
+            git --no-pager diff -- go.mod go.sum >&2 || true
+            exit 1
+          fi
+
+      - name: Install staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - name: Run staticcheck
+        run: |
+          $(go env GOPATH)/bin/staticcheck -f sarif ./... > staticcheck.sarif
+
+      - name: Upload staticcheck SARIF
+        if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && hashFiles('staticcheck.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: staticcheck.sarif
+          category: staticcheck
+
+      - name: Install govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck (SARIF export)
+        run: |
+          set -euo pipefail
+          set +e
+          $(go env GOPATH)/bin/govulncheck -json ./... > govulncheck.json
+          gv_status=$?
+          set -e
+          # Build converter (guaranteed present in repo)
+          go build -o govuln2sarif ./tools/govuln2sarif || true
+          if [[ -x ./govuln2sarif ]]; then
+            ./govuln2sarif -in govulncheck.json -out govulncheck.sarif || true
+          fi
+          # Ensure SARIF exists even if converter failed
+          if [[ ! -f govulncheck.sarif ]]; then
+            echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"govulncheck","informationUri":"https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck","rules":[]}},"results":[]}]}'> govulncheck.sarif
+          fi
+          echo "govulncheck exit code (JSON run): ${gv_status}" >> $GITHUB_STEP_SUMMARY
+          echo "govulncheck JSON converted to SARIF (results may be empty)." >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce govulncheck
+        run: |
+          set -euo pipefail
+          $(go env GOPATH)/bin/govulncheck ./...
+
+      - name: Upload govulncheck SARIF
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) && hashFiles('govulncheck.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: govulncheck.sarif
+          category: govulncheck

@@ -1,0 +1,71 @@
+{{define "title"}}Initial Setup{{end}}
+
+{{define "setup.html"}}
+<div class="container-slim">
+    <div class="card">
+        <div class="card-header text-center">
+            <div class="setup-icon">🔧</div>
+            <h2>Initial Setup Required</h2>
+            <p class="text-muted">Some required components are missing. Let's get you set up!</p>
+        </div>
+        <div class="card-content">
+
+            <div id="updatesHint" class="alert alert-info {{if not .updatesAvailable}}hidden{{end}}">
+                <strong>Updates available:</strong> New versions detected. You can update components now.
+                <a href="/logs/updates" class="alert-link">View change log</a>
+            </div>
+
+            <div id="errorBox" class="alert alert-danger {{if not .deployErrors}}hidden{{end}}">
+                <h4 class="alert-heading">Installation Issues Detected</h4>
+                <ul id="errorList" class="list-disc pl-5 mb-2">
+                    {{range .deployErrors}}
+                    <li>{{.}}</li>
+                    {{end}}
+                </ul>
+                <p>Review the setup log for details, then try again.</p>
+            </div>
+
+            <div class="form-section" id="install-section">
+                <h3 class="form-section-title">Pending Components:</h3>
+                <ul class="list-group" id="install-list">
+                    {{if or .missingSteamCMD (has .missingComponents "SteamCMD") }}
+                    <li class="list-group-item" data-component="STEAMCMD"><strong>SteamCMD</strong> - Command-line tool for downloading Steam games</li>
+                    {{end}}
+                    {{if or .missingRelease (has .missingComponents "Stationeers Release") }}
+                    <li class="list-group-item" data-component="RELEASE"><strong>Stationeers Dedicated Server</strong> - Game server files (~3GB)</li>
+                    {{end}}
+                    {{if or .missingBeta (has .missingComponents "Stationeers Beta") }}
+                    <li class="list-group-item" data-component="BETA"><strong>Stationeers Dedicated Server (Beta)</strong> - Optional beta channel server files</li>
+                    {{end}}
+                    {{if or .missingBepInEx (has .missingComponents "BepInEx") }}
+                    <li class="list-group-item" data-component="BEPINEX"><strong>BepInEx</strong> - Modding framework for Stationeers</li>
+                    {{end}}
+                    {{if or .missingSCON (has .missingComponents "SCON") }}
+                    <li class="list-group-item" data-component="SCON"><strong>SCON</strong> - Stationeers Console plugin</li>
+                    {{end}}
+                    {{if or .missingLaunchPad (has .missingComponents "Stationeers LaunchPad") }}
+                    <li class="list-group-item" data-component="LAUNCHPAD"><strong>Stationeers LaunchPad</strong> - Management tools for automated server setup</li>
+                    {{end}}
+                </ul>
+            </div>
+
+            <div id="progress" class="progress-container hidden">
+                <div id="progressText" class="progress-text">⏳ Installing components, please wait...</div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-bar-fill"></div>
+                </div>
+                <div id="progressDetails" class="progress-details"></div>
+            </div>
+
+            <div class="form-actions justify-center">
+                <form method="POST" action="/setup/skip" id="skipForm">
+                    <button type="submit" class="btn btn-secondary" id="skipBtn">Skip for Now</button>
+                </form>
+                <button type="button" class="btn btn-primary" id="setupBtn" data-setup-action="start">🚀 Start Setup</button>
+                <button type="button" class="btn btn-primary hidden" id="updateBtn" data-setup-action="update">⬆️ Update Components</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/static/js/screens/setup.js?v={{.buildTime}}" defer></script>
+{{end}}

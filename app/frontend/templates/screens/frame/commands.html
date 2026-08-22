@@ -1,0 +1,52 @@
+{{define "title"}}Console Commands{{end}}
+{{define "page"}}commands{{end}}
+
+{{define "commands.html"}}
+<div class="card" data-page-title="Console Commands">
+    <div class="card-header">
+        <h2>Console Commands</h2>
+        <div class="card-header-actions">
+            <input id="cmd-search" class="form-control" type="text" placeholder="Filter commands..." autocomplete="off">
+        </div>
+    </div>
+    <div class="card-content">
+        <div class="az-bar">
+            {{ range .letters }}
+                <a href="#cmd-{{.}}" class="btn btn-sm btn-ghost">{{.}}</a>
+            {{ end }}
+        </div>
+
+        <p class="text-muted mt-4" id="filter-info">Loaded {{ len .commands }} commands. Click a command name to copy it.</p>
+
+        <div class="table-container mt-4">
+            <table class="table" id="commands-table">
+                <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Usage / Args</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .commands }}
+                    <tr {{ if .Anchor }}id="{{ .Anchor }}"{{ end }} data-name="{{ .Name }}" data-usage="{{ .UsageStr }}" data-desc="{{ .Description }}">
+                        <td class="cmd-name" title="Click to copy command" tabindex="0">
+                            <code>{{ .Name }}</code>
+                        </td>
+                        <td>
+                            {{ if .Usages }}
+                                {{ range .Usages }}<span class="badge">{{ . }}</span>{{ end }}
+                            {{ else }}<span class="text-muted">(none)</span>{{ end }}
+                        </td>
+                        <td>
+                            <div class="description-block">{{ .Description }}</div>
+                            <a href="#" class="desc-toggle hidden">Show more</a>
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}

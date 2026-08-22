@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Simple heuristic check for unused CSS class selectors in ui/static/ui-theme.css
+# Simple heuristic check for unused CSS class selectors in app/frontend/static/css/ui-theme.css
 # Requires: grep, sed, awk
 
-CSS_FILE="$(dirname "$0")/../ui/static/ui-theme.css"
-TEMPLATES_DIR="$(dirname "$0")/../ui/templates"
+CSS_FILE="$(dirname "$0")/../app/frontend/static/css/ui-theme.css"
+TEMPLATES_DIR="$(dirname "$0")/../app/frontend/templates"
 
 if [[ ! -f "$CSS_FILE" ]]; then
   echo "CSS file not found: $CSS_FILE" >&2

@@ -1,0 +1,50 @@
+{{define "user_row.html"}}
+<tr id="user-row-{{.Username}}" data-username="{{.Username}}" data-role="{{.Role}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}">
+    <td class="font-medium">
+        <div class="flex items-center gap-3">
+            <div class="avatar">{{initials .Username}}</div>
+            <div>
+                <div>{{.Username}}</div>
+                <div class="text-sm text-muted">
+                    {{if .CreatedAt.IsZero}}
+                        User account
+                    {{else}}
+                        Joined {{.CreatedAt.Format "Jan 2, 2006"}}
+                    {{end}}
+                </div>
+            </div>
+        </div>
+    </td>
+    <td>
+        <select id="role-{{.Username}}" class="form-select" name="role" hx-patch="/api/users/{{.Username}}/role" hx-trigger="change" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-indicator="#global-htmx-indicator">
+            <option value="operator" {{if eq .Role "operator"}}selected{{end}}>Operator</option>
+            <option value="admin" {{if eq .Role "admin"}}selected{{end}}>Admin</option>
+        </select>
+    </td>
+    <td>
+        <div class="flex flex-col gap-1">
+            <span class="badge badge-{{.AccessState}}">{{.AccessSummary}}</span>
+            {{if and (eq .Role "operator") (not .AssignedAllServers) (not .AccessDetails)}}
+                <span class="text-xs text-muted">No servers assigned</span>
+            {{end}}
+        </div>
+    </td>
+    <td class="text-right">
+        <div class="btn-group">
+            <button type="button" class="btn btn-secondary" data-users-action="reset-password" data-username="{{.Username}}">
+                <i data-feather="key"></i>
+                <span>Password</span>
+            </button>
+            <button type="button" class="btn btn-secondary" data-users-action="access" data-username="{{.Username}}" data-assigned-all="{{if or (eq .Role "admin") .AssignedAllServers}}true{{else}}false{{end}}" data-assigned="{{.AssignedCSV}}" {{if not .CanEditAccess}}disabled title="Admins have access to all servers"{{end}}>
+                <i data-feather="unlock"></i>
+                <span>Access</span>
+            </button>
+            <button type="button" class="btn btn-danger" hx-delete="/api/users/{{.Username}}" hx-target="#user-row-{{.Username}}" hx-swap="outerHTML" hx-confirm="Are you sure you want to delete the user '{{.Username}}'?" hx-indicator="#global-htmx-indicator">
+                <i data-feather="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </div>
+    </td>
+</tr>
+{{end}}
+

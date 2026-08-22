@@ -1,0 +1,202 @@
+<div id="toast-container" class="toast-container" role="region" aria-live="polite" data-duration="5000"></div>
+<div id="global-htmx-indicator" class="global-htmx-indicator" aria-hidden="true">
+    <span class="spinner" aria-hidden="true"></span>
+    <span class="label">Loading…</span>
+ </div>
+
+<script>
+    (function() {
+        const toastIcons = {
+            success: 'check-circle',
+            error: 'x-circle',
+            info: 'info',
+            warning: 'alert-triangle'
+        };
+
+        const toastTypeAliases = {
+            danger: 'error'
+        };
+
+        let toastCounter = 0;
+        let inflight = 0;
+
+        function getGlobalToastDuration() {
+            const container = document.getElementById('toast-container');
+            const raw = container?.dataset?.duration;
+            const val = raw ? parseInt(raw, 10) : NaN;
+            return Number.isFinite(val) && val >= 0 ? val : 5000;
+        }
+
+        function normalizeShowToastArgs(args) {
+            if (args.length === 1 && args[0] && typeof args[0] === 'object') {
+                return args[0];
+            }
+
+            return {
+                title: args[0] == null ? '' : String(args[0]),
+                message: args[1] == null ? '' : String(args[1]),
+                type: args[2] == null ? 'info' : String(args[2]),
+                closable: args[3] !== false
+            };
+        }
+
+        function showToast(...args) {
+            const options = normalizeShowToastArgs(args);
+            const normalizedType = toastTypeAliases[options.type] || options.type || 'info';
+            const title = options.title == null ? '' : String(options.title);
+            const message = options.message == null ? '' : String(options.message);
+            const closable = options.closable !== false;
+
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+
+            const toastId = `toast-${++toastCounter}`;
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast toast-${normalizedType}`;
+            toast.setAttribute('role', 'alert');
+
+            const iconName = toastIcons[normalizedType] || toastIcons.info;
+
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'toast-icon';
+            const icon = document.createElement('i');
+            icon.setAttribute('data-feather', iconName);
+            iconWrap.appendChild(icon);
+
+            const content = document.createElement('div');
+            content.className = 'toast-content';
+
+            if (title) {
+                const titleEl = document.createElement('div');
+                titleEl.className = 'toast-title';
+                titleEl.textContent = title;
+                content.appendChild(titleEl);
+            }
+
+            const messageEl = document.createElement('div');
+            messageEl.className = 'toast-message';
+            messageEl.textContent = message;
+            content.appendChild(messageEl);
+
+            toast.appendChild(iconWrap);
+            toast.appendChild(content);
+
+            if (closable) {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'toast-close';
+                closeBtn.setAttribute('aria-label', 'Close notification');
+                closeBtn.addEventListener('click', () => {
+                    window.closeToast(toastId);
+                });
+
+                const closeIcon = document.createElement('i');
+                closeIcon.setAttribute('data-feather', 'x');
+                closeBtn.appendChild(closeIcon);
+                toast.appendChild(closeBtn);
+            }
+
+            container.appendChild(toast);
+            if (window.feather) {
+                window.feather.replace({ width: '20', height: '20' });
+            }
+
+            const duration = getGlobalToastDuration();
+            if (duration > 0) {
+                setTimeout(() => {
+                    window.closeToast(toastId);
+                }, duration);
+            }
+
+            return toastId;
+        }
+
+        function closeToast(toastId) {
+            const toast = document.getElementById(toastId);
+            if (!toast) return;
+
+            toast.classList.add('toast-exit');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+
+        function showGlobalIndicator() {
+            const el = document.getElementById('global-htmx-indicator');
+            if (el) el.classList.add('active');
+        }
+
+        function hideGlobalIndicator() {
+            const el = document.getElementById('global-htmx-indicator');
+            if (el) el.classList.remove('active');
+        }
+
+        window.showToast = showToast;
+        window.closeToast = closeToast;
+        window.setGlobalToastDuration = function(ms) {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const n = parseInt(ms, 10);
+            if (Number.isFinite(n) && n >= 0) {
+                container.dataset.duration = String(n);
+            }
+        };
+
+        const beginRequest = () => {
+            inflight++;
+            showGlobalIndicator();
+        };
+
+        const endRequest = () => {
+            inflight = Math.max(0, inflight - 1);
+            if (inflight === 0) {
+                hideGlobalIndicator();
+            }
+        };
+
+        document.body.addEventListener('htmx:beforeRequest', beginRequest);
+
+        const handleHtmxResponse = (event) => {
+            const xhr = event.detail?.xhr;
+            if (!xhr || xhr._toastShown) return;
+
+            const toastType = xhr.getResponseHeader('X-Toast-Type');
+            const toastTitle = xhr.getResponseHeader('X-Toast-Title');
+            const toastMessage = xhr.getResponseHeader('X-Toast-Message');
+
+            if (toastMessage) {
+                showToast({
+                    type: toastType || (event.type === 'htmx:responseError' ? 'error' : 'info'),
+                    title: toastTitle || (event.type === 'htmx:responseError' ? 'Request Failed' : ''),
+                    message: toastMessage
+                });
+                xhr._toastShown = true;
+            }
+        };
+        
+        document.body.addEventListener('htmx:afterRequest', handleHtmxResponse);
+        document.body.addEventListener('htmx:responseError', function(event) {
+            handleHtmxResponse(event);
+            const xhr = event.detail?.xhr;
+            if (!xhr?._toastShown) {
+                 showToast({
+                    type: 'error',
+                    title: 'Request Failed',
+                    message: 'An error occurred while processing your request.'
+                });
+            }
+        });
+
+        const settleEvents = ['htmx:afterRequest', 'htmx:responseError', 'htmx:sendError', 'htmx:timeout', 'htmx:abort'];
+        settleEvents.forEach((evt) => {
+            document.body.addEventListener(evt, endRequest);
+        });
+
+        document.body.addEventListener('showToast', (e) => {
+            if (e.detail) {
+                showToast(e.detail);
+            }
+        });
+
+    })();
+</script>

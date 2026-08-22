@@ -8,11 +8,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Added
 
-- _None yet_
+- Card refactor Milestone 5: all server status, manager, dashboard, and users screens now render exclusively through the card registry with HTMX single-card refresh endpoints and per-card JS modules.
+- Create Server presets can now be edited in `sdsm.config` via a new `server_presets` array. The UI consumes these dynamically so operators can tweak defaults without rebuilding.
 
 ### Changed
 
-- _None yet_
+- Port forwarding is now adaptive: SDSM first prefers a mapping created by the game via UPnP (when available), and falls back to creating a NAT-PMP/UPnP mapping itself.
+- Default server port suggestions now walk 27016, 27019, 27022, ... ensuring each new server form picks a port spaced by three unless that slot is already in use.
 
 ### Fixed
 
@@ -20,7 +22,30 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ### Removed
 
-- _None yet_
+- Steam P2P networking option. It is now always disabled at startup and no longer configurable in the UI or API. Legacy `net_mode` parsing has been removed.
+
+## [v0.6.0] - 2025-11-09
+
+- Added:
+  - Readiness probe at `/readyz` for orchestration and startup gating.
+  - Root path redirect logic: `/` now routes users to Login, Dashboard, or Manager based on auth and role.
+  - Centralized role attachment and safety net via `EnsureRoleContext` middleware (auto-promotes user "admin" if no admins exist to prevent lockout), used for both API and UI routes.
+  - CI/Security hardening:
+    - Build/Test/Vet/Govulncheck workflow
+    - CodeQL analysis
+    - Scheduled weekly vulnerability scan
+- Changed:
+  - Enforced API-only mutations: introduced POST guard to block non-API POSTs except an allowlist (`/login`, `/admin/setup`, `/setup/skip`, `/setup/install`, `/setup/update`, `/shutdown`, `/update`, `/api/*`).
+  - Converted legacy HTML form submissions to JS `fetch` calls against `/api` endpoints throughout the UI.
+    - Neutralized forms in Users, New Server, Player actions, Chat, Startup Parameters, and Profile pages (action removed or set to `#`, `data-api-only` flags added).
+  - Consolidated Gin access/error logs to dedicated GIN.log file alongside existing operational logs.
+  - Cleaned up duplicated CORS header assignment; now a single `Access-Control-Allow-Methods` includes PATCH.
+- Removed:
+  - Deprecated HTML POST handlers and routes; UI now exclusively hits `/api` for state changes.
+  - Stale "Legacy" references and comments in client-side scripts to reduce confusion.
+- Fixed:
+  - Root 404 by adding the explicit redirect logic mentioned above.
+  - Minor stability and clarity improvements across middleware and templates.
 
 ## [v0.5.0] - 2025-11-09
 
@@ -66,6 +91,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - CI:
   - New lint workflow (gofmt check + go vet).
 
-[Unreleased]: https://github.com/JonVT/SDSM/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/JonVT/SDSM/compare/v0.6.0...HEAD
+[v0.6.0]: https://github.com/JonVT/SDSM/releases/tag/v0.6.0
 [v0.5.0]: https://github.com/JonVT/SDSM/releases/tag/v0.5.0
 [v0.4.0]: https://github.com/JonVT/SDSM/releases/tag/v0.4.0

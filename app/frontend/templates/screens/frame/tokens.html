@@ -1,0 +1,72 @@
+{{define "title"}}Chat Token Reference{{end}}
+{{define "page"}}tokens{{end}}
+
+{{define "tokens.html"}}
+<div class="card" data-page-title="Chat Token Reference">
+    <div class="card-header">
+        <h2>Chat Token Reference</h2>
+    </div>
+    <div class="card-content">
+        <p class="text-muted mb-4">Use these tokens in Chat and the Welcome Message. They are replaced automatically before sending to the server.</p>
+
+        <h3 class="section-title">Available Tokens</h3>
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Token</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>[ServerName]</code></td>
+                        <td>The server name</td>
+                    </tr>
+                    <tr>
+                        <td><code>[WorldName]</code></td>
+                        <td>The world name</td>
+                    </tr>
+                    <tr>
+                        <td><code>[WorldID]</code></td>
+                        <td>The world ID</td>
+                    </tr>
+                    <tr>
+                        <td><code>[StartLocation]</code></td>
+                        <td>Start location</td>
+                    </tr>
+                    <tr>
+                        <td><code>[StartCondition]</code></td>
+                        <td>Start condition</td>
+                    </tr>
+                    <tr>
+                        <td><code>[Date]</code></td>
+                        <td>Current date (YYYY-MM-DD)</td>
+                    </tr>
+                    <tr>
+                        <td><code>[Time]</code></td>
+                        <td>Current time (HH:MM:SS)</td>
+                    </tr>
+                    <tr>
+                        <td><code>[LastPlayer]</code></td>
+                        <td>Name of the last player to connect</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="section-title mt-6">Examples</h3>
+        <div class="code-block">
+            <pre><code>
+Example 1: Welcome Message
+"Welcome to [ServerName]! World: [WorldName]."
+
+Example 2: Chat
+"/say Hello [LastPlayer], you joined at [Time] on [Date]."
+            </code></pre>
+        </div>
+
+        <p class="text-muted mt-6">Tokens are case-insensitive and work anywhere messages are sent via the UI (Chat and Welcome Message).</p>
+    </div>
+</div>
+{{end}}
