@@ -32,7 +32,7 @@ func validBaseConfig() map[string]any {
 		"servers":                        []any{},
 		"server_presets":                 []any{},
 		"startup_update":                 true,
-		"paths":                          map[string]any{"root_path": "/tmp/sdsm"},
+		"paths":                          map[string]any{"root_path": filepath.Join(os.TempDir(), "sdsm")},
 		"tls_enabled":                    false,
 		"tls_cert":                       "",
 		"tls_key":                        "",

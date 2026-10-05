@@ -175,6 +175,53 @@ func (s *Steam) UpdateSteamCMD() error {
 	return nil
 }
 
+func normalizeRootedPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if runtime.GOOS == "windows" {
+		if filepath.VolumeName(value) == "" && strings.HasPrefix(value, `\`) {
+			if cwd, err := os.Getwd(); err == nil {
+				volume := filepath.VolumeName(cwd)
+				if volume != "" {
+					value = volume + value
+				}
+			}
+		}
+	}
+	value = filepath.Clean(value)
+	if !filepath.IsAbs(value) {
+		if abs, err := filepath.Abs(value); err == nil {
+			value = abs
+		}
+	}
+	if resolved, err := filepath.EvalSymlinks(value); err == nil && resolved != "" {
+		value = resolved
+	}
+	return filepath.Clean(value)
+}
+
+func isWithinRoot(root, candidate string) bool {
+	root = normalizeRootedPath(root)
+	candidate = normalizeRootedPath(candidate)
+	if root == "" || candidate == "" {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		root = strings.ToLower(root)
+		candidate = strings.ToLower(candidate)
+	}
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return false
+	}
+	return true
+}
+
 // UpdateGame installs or updates the Stationeers dedicated server (beta optional).
 func (s *Steam) UpdateGame(beta bool) error {
 	var dir string
@@ -185,12 +232,9 @@ func (s *Steam) UpdateGame(beta bool) error {
 	}
 	// Defensive: ensure the chosen install directory is within the configured root path and
 	// produce a sanitized absolute path for SteamCMD (+force_install_dir) usage.
-	root := filepath.Clean(s.Paths.RootPath)
-	cleanDir := filepath.Clean(dir)
-	if absDir, err := filepath.Abs(cleanDir); err == nil {
-		cleanDir = absDir
-	}
-	if rel, err := filepath.Rel(root, cleanDir); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	root := normalizeRootedPath(s.Paths.RootPath)
+	cleanDir := normalizeRootedPath(dir)
+	if !isWithinRoot(root, cleanDir) {
 		return fmt.Errorf("invalid install dir escapes root: %s", dir)
 	}
 	// Prevent control characters/newlines in path passed to SteamCMD

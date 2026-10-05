@@ -2,7 +2,7 @@
 # Simple build script for SDSM
 # - Injects version metadata via -ldflags
 # - Supports cross-compiling with GOOS/GOARCH
-# - Outputs binaries to ./
+# - Outputs binaries to ./dist
 
 set -euo pipefail
 
@@ -25,7 +25,8 @@ if [[ "$GOOS" == "windows" ]]; then
   EXT=".exe"
 fi
 ARTIFACT="sdsm${EXT}" #-${GOOS}-${GOARCH}${EXT}"
-OUT_PATH="./${ARTIFACT}"
+mkdir -p "./dist"
+OUT_PATH="./dist/${ARTIFACT}"
 
 # Git-derived metadata (best effort; falls back to sensible dev defaults)
 VERSION="0.0.1"

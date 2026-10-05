@@ -310,6 +310,18 @@ func (dt DeployType) displayName() string {
 	return string(dt)
 }
 
+func defaultRootPath() string {
+	if exe, err := os.Executable(); err == nil {
+		if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil && resolved != "" {
+			exe = resolved
+		}
+		if execDir := filepath.Dir(exe); execDir != "" && execDir != "." {
+			return execDir
+		}
+	}
+	return filepath.Join(os.TempDir(), "sdsm")
+}
+
 func NewManager() *Manager { return NewManagerWithConfig("") }
 
 // NewManagerWithConfig creates a Manager loading configuration from the provided path.
@@ -403,18 +415,10 @@ func NewManagerWithConfig(configPath string) *Manager {
 		}
 	}
 
-	// Initialize paths based on the executable directory until the config is loaded
-	// This avoids creating logs in the current working directory.
-	if exe, err := os.Executable(); err == nil {
-		if resolved, rerr := filepath.EvalSymlinks(exe); rerr == nil && resolved != "" {
-			exe = resolved
-		}
-		execDir := filepath.Dir(exe)
-		m.Paths = utils.NewPaths(execDir)
-	} else {
-		// Fallback to a safe temp location if executable path cannot be determined
-		m.Paths = utils.NewPaths("/tmp/sdsm")
-	}
+	// Initialize paths based on the executable directory until the config is loaded.
+	// Keep this OS-aware so Windows defaults do not accidentally resolve to a
+	// Linux-only temporary directory.
+	m.Paths = utils.NewPaths(defaultRootPath())
 
 	// Prepare logging early so load() can report issues
 	m.startLogs()
@@ -1242,6 +1246,9 @@ func (m *Manager) bootstrapDefaultConfig(configPath, rootPath string) error {
 	}
 	if strings.TrimSpace(rootPath) == "" {
 		return fmt.Errorf("root path cannot be empty")
+	}
+	if filepath.IsAbs(rootPath) == false {
+		rootPath = filepath.Clean(filepath.Join(filepath.Dir(configPath), rootPath))
 	}
 
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
@@ -3619,7 +3626,7 @@ func (m *Manager) LaunchPadDeployed() string {
 
 func (m *Manager) fetchLaunchPadDeployedVersion() (string, error) {
 	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
+		m.Paths = utils.NewPaths(defaultRootPath())
 	}
 
 	if version := m.readPersistedLaunchPadVersion(); version != "" {
@@ -3785,7 +3792,7 @@ func (m *Manager) CheckMissingComponents() {
 
 func (m *Manager) fetchSteamCmdVersion() (string, error) {
 	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
+		m.Paths = utils.NewPaths(defaultRootPath())
 	}
 
 	steamCmdFile := "steamcmd.sh"
@@ -3817,7 +3824,7 @@ func (m *Manager) fetchSteamCmdVersion() (string, error) {
 
 func (m *Manager) fetchRocketStationBuildID(beta bool) (string, error) {
 	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
+		m.Paths = utils.NewPaths(defaultRootPath())
 	}
 
 	installDir := m.Paths.ReleaseDir()
@@ -4016,7 +4023,7 @@ func (m *Manager) readPersistedLaunchPadVersion() string {
 
 func (m *Manager) fetchBepInExVersion() (string, error) {
 	if m.Paths == nil {
-		m.Paths = utils.NewPaths("/tmp/sdsm")
+		m.Paths = utils.NewPaths(defaultRootPath())
 	}
 
 	if version := m.readPersistedBepInExVersion(); version != "" {

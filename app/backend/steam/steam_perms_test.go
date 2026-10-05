@@ -3,8 +3,28 @@ package steam
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+func TestIsWithinRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "root")
+	child := filepath.Join(root, "bin", "release")
+	if err := os.MkdirAll(child, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !isWithinRoot(root, child) {
+		t.Fatal("expected child path to be within root")
+	}
+	if isWithinRoot(root, filepath.Join(t.TempDir(), "outside")) {
+		t.Fatal("expected outside path to be rejected")
+	}
+	if runtime.GOOS == "windows" {
+		if !isWithinRoot(root, filepath.Join(root, "..", filepath.Base(root), "bin", "release")) {
+			t.Fatal("expected normalized relative path to remain within root")
+		}
+	}
+}
 
 func TestResetSteamAppState(t *testing.T) {
 	dir := t.TempDir()

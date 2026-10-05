@@ -2,7 +2,7 @@
 # Simple build script for SDSM
 # - Injects version metadata via -ldflags
 # - Supports cross-compiling with GOOS/GOARCH
-# - Outputs binaries to ./
+# - Outputs binaries to ./dist
 
 $ErrorActionPreference = "Stop"
 
@@ -20,7 +20,8 @@ if ($GOOS -eq "windows") {
     $EXT = ".exe"
 }
 $ARTIFACT = "sdsm$EXT"
-$OUT_PATH = Join-Path "." $ARTIFACT
+New-Item -ItemType Directory -Force -Path (Join-Path $REPO_ROOT "dist") | Out-Null
+$OUT_PATH = Join-Path (Join-Path $REPO_ROOT "dist") $ARTIFACT
 
 # Git-derived metadata (best effort; falls back to sensible dev defaults)
 $VERSION = "0.0.1"
