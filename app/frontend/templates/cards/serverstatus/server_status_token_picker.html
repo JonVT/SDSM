@@ -1,0 +1,33 @@
+{{define "cards/server_status_token_picker.html"}}
+<details class="token-picker" data-token-picker data-token-target="{{.target}}">
+    <summary class="token-picker-summary"><i data-feather="plus-circle" aria-hidden="true"></i> Insert token</summary>
+    <div class="token-picker-body">
+        <div class="token-group-title">Player &amp; server <span class="text-muted">— replaced when the message is sent</span></div>
+        <div class="token-list">
+            <button type="button" class="token-chip" data-token="{player}" title="The connecting player's name"><code>{player}</code><span>Connecting player</span></button>
+            <button type="button" class="token-chip" data-token="{lastplayer}" title="Name of the last player to connect"><code>{lastplayer}</code><span>Last player to connect</span></button>
+            <button type="button" class="token-chip" data-token="{server}" title="Server name"><code>{server}</code><span>Server name</span></button>
+            <button type="button" class="token-chip" data-token="{world}" title="World ID"><code>{world}</code><span>World</span></button>
+            <button type="button" class="token-chip" data-token="{player_count}" title="Players currently online"><code>{player_count}</code><span>Players online</span></button>
+            <button type="button" class="token-chip" data-token="{max_players}" title="Maximum players"><code>{max_players}</code><span>Max players</span></button>
+            <button type="button" class="token-chip" data-token="{port}" title="Game port"><code>{port}</code><span>Game port</span></button>
+            <button type="button" class="token-chip" data-token="{difficulty}" title="Difficulty"><code>{difficulty}</code><span>Difficulty</span></button>
+            <button type="button" class="token-chip" data-token="{language}" title="Server language"><code>{language}</code><span>Language</span></button>
+            <button type="button" class="token-chip" data-token="{beta}" title="beta or release"><code>{beta}</code><span>Branch</span></button>
+            <button type="button" class="token-chip" data-token="{time}" title="Current time (HH:MM)"><code>{time}</code><span>Time</span></button>
+            <button type="button" class="token-chip" data-token="{date}" title="Current date (YYYY-MM-DD)"><code>{date}</code><span>Date</span></button>
+        </div>
+        <div class="token-group-title">Bracket tokens <span class="text-muted">— case-insensitive</span></div>
+        <div class="token-list">
+            <button type="button" class="token-chip" data-token="[ServerName]" title="The server name"><code>[ServerName]</code><span>Server name</span></button>
+            <button type="button" class="token-chip" data-token="[WorldName]" title="The world name"><code>[WorldName]</code><span>World name</span></button>
+            <button type="button" class="token-chip" data-token="[WorldID]" title="The world ID"><code>[WorldID]</code><span>World ID</span></button>
+            <button type="button" class="token-chip" data-token="[StartLocation]" title="Start location"><code>[StartLocation]</code><span>Start location</span></button>
+            <button type="button" class="token-chip" data-token="[StartCondition]" title="Start condition"><code>[StartCondition]</code><span>Start condition</span></button>
+            <button type="button" class="token-chip" data-token="[Date]" title="Current date (YYYY-MM-DD)"><code>[Date]</code><span>Date</span></button>
+            <button type="button" class="token-chip" data-token="[Time]" title="Current time (HH:MM:SS)"><code>[Time]</code><span>Time</span></button>
+            <button type="button" class="token-chip" data-token="[LastPlayer]" title="Last player to connect"><code>[LastPlayer]</code><span>Last player</span></button>
+        </div>
+    </div>
+</details>
+{{end}}

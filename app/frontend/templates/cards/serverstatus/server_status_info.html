@@ -172,176 +172,92 @@
             </span>
         </summary>
         <div class="card-collapse-body">
-            <div class="server-info-header">
-        <div class="server-identity">
-            <div class="server-title-row">
-                <div class="server-name-block">
-                    <div class="server-meta-row">
-                        <div class="id-chip">
-                            <span class="meta-label">Server ID</span>
-                            <div class="id-value">
-                                #{{$server.ID}}
-                                <button type="button" class="manager-copy-btn"
-                                    data-copy-scope="server-info"
-                                    data-copy-value="{{$server.ID}}"
-                                    aria-label="Copy server ID">
-                                    <i data-feather="copy"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="connection-chip">
-                            <span class="meta-label">Game Port</span>
-                            <div class="connection-value">
-                                <code>{{$gamePort}}</code>
-                                {{if ne $gamePort "Not set"}}
-                                <button type="button" class="manager-copy-btn"
-                                    data-copy-scope="server-info"
-                                    data-copy-value="{{$gamePort}}"
-                                    aria-label="Copy game port">
-                                    <i data-feather="copy"></i>
-                                </button>
-                                {{end}}
-                            </div>
-                            <div class="connection-meta">
-                                <span>{{if $server.PortForwardActive}}Mapping active{{else}}No mapping{{end}}</span>
-                                {{if $externalPort}}
-                                <span>External: {{$externalPort}}</span>
-                                {{end}}
-                            </div>
-                        </div>
-                    </div>
+            <div class="info-strip">
+                <div class="info-chip">
+                    <span class="meta-label">ID</span>
+                    <span class="info-chip-value">#{{$server.ID}}</span>
+                    <button type="button" class="manager-copy-btn" data-copy-scope="server-info" data-copy-value="{{$server.ID}}" aria-label="Copy server ID">
+                        <i data-feather="copy"></i>
+                    </button>
+                </div>
+                <div class="info-chip" title="{{if $server.PortForwardActive}}Mapping active{{else}}No mapping{{end}}{{if $externalPort}}, external {{$externalPort}}{{end}}">
+                    <span class="meta-label">Game Port</span>
+                    <code class="info-chip-value">{{$gamePort}}</code>
+                    {{if ne $gamePort "Not set"}}
+                    <button type="button" class="manager-copy-btn" data-copy-scope="server-info" data-copy-value="{{$gamePort}}" aria-label="Copy game port">
+                        <i data-feather="copy"></i>
+                    </button>
+                    {{end}}
+                    <span class="info-chip-note">{{if $server.PortForwardActive}}mapped{{if $externalPort}} → {{$externalPort}}{{end}}{{else}}unmapped{{end}}</span>
+                </div>
+                <div class="info-chip" title="Remote console endpoint">
+                    <span class="meta-label">SCON</span>
+                    <span class="info-chip-value">{{$sconPort}}</span>
+                </div>
+                <div class="info-chip" title="{{$playerHint}}">
+                    <span class="meta-label">Players</span>
+                    <span class="info-chip-value">{{$playerCount}} / {{$playerCap}}</span>
+                </div>
+                <div class="info-chip" title="Configured via world settings">
+                    <span class="meta-label">Difficulty</span>
+                    <span class="info-chip-value">{{if $server.Difficulty}}{{$server.Difficulty}}{{else}}Normal{{end}}</span>
                 </div>
                 {{if .language_options}}
-                <div class="language-select compact">
-                    <label for="server-language-select" class="form-label">Language</label>
-                    <div class="language-select-control">
-                        <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
-                            {{range .language_options}}
-                            <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
-                            {{end}}
-                        </select>
-                        <span class="language-status" id="server-language-status" role="status" aria-live="polite"></span>
-                    </div>
+                <div class="info-chip language-select compact">
+                    <label for="server-language-select" class="meta-label">Language</label>
+                    <select id="server-language-select" class="form-control form-control-sm" aria-label="Select server language">
+                        {{range .language_options}}
+                        <option value="{{.}}" {{if eq $.server.Language .}}selected{{end}}>{{.}}</option>
+                        {{end}}
+                    </select>
+                    <span class="language-status" id="server-language-status" role="status" aria-live="polite"></span>
                 </div>
                 {{end}}
             </div>
-        </div>
-    </div>
-    <div class="card-body server-info-body">
-        <div class="server-detail-grid">
-            <section class="detail-card">
-                <header class="detail-card-header">
-                    <i data-feather="globe"></i>
-                    <div>
-                        <p class="detail-label">World</p>
-                        <h3 class="detail-title">{{$worldName}}</h3>
-                    </div>
-                </header>
-                {{if $worldDescription}}
-                <p class="detail-description">{{$worldDescription}}</p>
-                {{end}}
-                <dl class="detail-meta">
-                    <div>
-                        <dt>File</dt>
-                        <dd>{{if $server.World}}{{$server.World}}{{else}}Not set{{end}}</dd>
-                    </div>
-                    <div>
-                        <dt>Branch</dt>
-                        <dd>{{if $server.Beta}}Beta Build{{else}}Release Build{{end}}</dd>
-                    </div>
-                    <div>
-                        <dt>Language</dt>
-                        <dd>{{$languageLabel}}</dd>
-                    </div>
-                </dl>
-            </section>
-            <section class="detail-card">
-                <header class="detail-card-header">
-                    <i data-feather="map-pin"></i>
-                    <div>
-                        <p class="detail-label">Start Setup</p>
-                        <h3 class="detail-title">{{$startLocationName}}</h3>
-                    </div>
-                </header>
-                {{if $startLocationDesc}}<p class="detail-description">{{$startLocationDesc}}</p>{{end}}
-                <dl class="detail-meta">
-                    <div>
-                        <dt>Condition</dt>
-                        <dd>{{$startConditionName}}</dd>
-                    </div>
-                    {{if $startConditionDesc}}
-                    <div>
-                        <dt>Condition Detail</dt>
-                        <dd>{{$startConditionDesc}}</dd>
-                    </div>
-                    {{end}}
-                    <div>
-                        <dt>Auto Save</dt>
-                        <dd>{{if $server.AutoSave}}Enabled{{else}}Disabled{{end}}</dd>
-                    </div>
-                </dl>
-            </section>
-            <section class="detail-card">
-                <header class="detail-card-header">
-                    <i data-feather="settings"></i>
-                    <div>
-                        <p class="detail-label">Automation & Access</p>
-                        <h3 class="detail-title">Runbook</h3>
-                    </div>
-                </header>
-                <div class="automation-chip-row">
-                    <span class="automation-chip {{if $server.AutoStart}}is-enabled{{else}}is-disabled{{end}}">Auto Start</span>
-                    <span class="automation-chip {{if $server.AutoUpdate}}is-enabled{{else}}is-disabled{{end}}">Auto Update</span>
-                    <span class="automation-chip {{if $server.AutoPause}}is-enabled{{else}}is-disabled{{end}}">Auto Pause</span>
-                    <span class="automation-chip {{if $server.AutoPortForward}}is-enabled{{else}}is-disabled{{end}}">Port Forward</span>
-                    <span class="automation-chip {{if $server.UseGameUPnP}}is-enabled{{else}}is-disabled{{end}}">Game UPnP</span>
-                    <span class="automation-chip {{if $server.UseSteamP2P}}is-enabled{{else}}is-disabled{{end}}">Steam P2P</span>
-                </div>
-                <dl class="detail-meta compact">
-                    <div>
-                        <dt>Visibility</dt>
-                        <dd>{{$visibility}}</dd>
-                    </div>
-                    <div>
-                        <dt>Password</dt>
-                        <dd>{{$passwordState}}</dd>
-                    </div>
-                    <div>
-                        <dt>Shutdown Delay</dt>
-                        <dd>{{if gt $server.ShutdownDelaySeconds 0}}{{$server.ShutdownDelaySeconds}}s{{else}}None{{end}}</dd>
-                    </div>
-                </dl>
-            </section>
-        </div>
 
-        <div class="server-info-stats">
-            <div class="info-stat">
-                <div class="info-label">Difficulty</div>
-                <div class="info-value">{{if $server.Difficulty}}{{$server.Difficulty}}{{else}}Normal{{end}}</div>
-                <p class="info-hint">Configured via world settings.</p>
+            <div class="info-panels">
+                <section class="info-panel" title="{{$worldDescription}}">
+                    <i data-feather="globe" aria-hidden="true"></i>
+                    <div class="info-panel-text">
+                        <div class="info-panel-title">{{$worldName}}</div>
+                        <div class="info-panel-meta">{{if $server.World}}{{$server.World}}{{else}}No world file{{end}} · {{if $server.Beta}}Beta{{else}}Release{{end}} · {{$languageLabel}}</div>
+                    </div>
+                </section>
+                <section class="info-panel" title="{{$startLocationDesc}}{{if $startConditionDesc}} — {{$startConditionDesc}}{{end}}">
+                    <i data-feather="map-pin" aria-hidden="true"></i>
+                    <div class="info-panel-text">
+                        <div class="info-panel-title">{{$startLocationName}}</div>
+                        <div class="info-panel-meta">{{$startConditionName}} · Auto save {{if $server.AutoSave}}on{{else}}off{{end}}</div>
+                    </div>
+                </section>
+                <section class="info-panel info-panel-wide">
+                    <i data-feather="settings" aria-hidden="true"></i>
+                    <div class="info-panel-text">
+                        <div class="automation-chip-row">
+                            <span class="automation-chip {{if $server.AutoStart}}is-enabled{{else}}is-disabled{{end}}">Auto Start</span>
+                            <span class="automation-chip {{if $server.AutoUpdate}}is-enabled{{else}}is-disabled{{end}}">Auto Update</span>
+                            <span class="automation-chip {{if $server.AutoPause}}is-enabled{{else}}is-disabled{{end}}">Auto Pause</span>
+                            <span class="automation-chip {{if $server.AutoPortForward}}is-enabled{{else}}is-disabled{{end}}">Port Forward</span>
+                            <span class="automation-chip {{if $server.UseGameUPnP}}is-enabled{{else}}is-disabled{{end}}">Game UPnP</span>
+                            <span class="automation-chip {{if $server.UseSteamP2P}}is-enabled{{else}}is-disabled{{end}}">Steam P2P</span>
+                        </div>
+                        <div class="info-panel-meta">{{$visibility}} · Password {{if $server.Password}}on{{else}}off{{end}} · Shutdown delay {{if gt $server.ShutdownDelaySeconds 0}}{{$server.ShutdownDelaySeconds}}s{{else}}none{{end}}</div>
+                    </div>
+                </section>
             </div>
-            <div class="info-stat">
-                <div class="info-label">Players</div>
-                <div class="info-value">{{$playerCount}} / {{$playerCap}}</div>
-                <p class="info-hint">{{$playerHint}}</p>
-            </div>
-            <div class="info-stat">
-                <div class="info-label">SCON Port</div>
-                <div class="info-value">{{$sconPort}}</div>
-                <p class="info-hint">Remote console endpoint.</p>
-            </div>
-            <div class="info-stat">
-                <div class="info-label">Port Mapping</div>
-                <div class="info-value">{{if $server.PortForwardActive}}Active{{else}}Idle{{end}}</div>
-                <p class="info-hint">{{if $externalPort}}External {{$externalPort}}{{else}}Awaiting gateway{{end}}</p>
-            </div>
-        </div>
-    </div>
-        <div class="server-info-controls">
+
             {{if or (eq .role "admin") (eq .role "operator")}}
-            {{template "cards/server_status_control_body.html" .}}
+            <details class="info-controls-collapse">
+                <summary class="info-controls-summary">
+                    <i data-feather="sliders" aria-hidden="true"></i>
+                    <span>Server controls</span>
+                    <span class="collapse-chevron" aria-hidden="true"><i data-feather="chevron-down"></i></span>
+                </summary>
+                <div class="server-info-controls">
+                    {{template "cards/server_status_control_body.html" .}}
+                </div>
+            </details>
             {{end}}
-        </div>
         </div>
     </details>
 </div>

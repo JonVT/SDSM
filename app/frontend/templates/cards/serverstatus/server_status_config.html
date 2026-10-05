@@ -194,10 +194,12 @@
                     <div class="form-group">
                         <label class="form-label" for="config-welcome-msg">Welcome Message</label>
                         <input type="text" id="config-welcome-msg" name="welcome_message" class="form-control" value="{{.server.WelcomeMessage}}" placeholder="Supports tokens like [ServerName]">
+                        {{template "cards/server_status_token_picker.html" (dict "target" "config-welcome-msg")}}
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="config-welcome-back">Welcome Back Message</label>
                         <input type="text" id="config-welcome-back" name="welcome_back_message" class="form-control" value="{{.server.WelcomeBackMessage}}">
+                        {{template "cards/server_status_token_picker.html" (dict "target" "config-welcome-back")}}
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="config-welcome-delay">Welcome Delay (sec)</label>

@@ -45,6 +45,9 @@
             <button class="tab" id="tab-history" role="tab" aria-selected="false" aria-controls="players-history-panel">
                 History <span class="badge" id="history-count">{{len $historyClients}}</span>
             </button>
+            <button class="tab" id="tab-timeline" role="tab" aria-selected="false" aria-controls="players-timeline-panel">
+                Timeline
+            </button>
             {{if eq .role "admin"}}
             <button class="tab" id="tab-banned" role="tab" aria-selected="false" aria-controls="players-banned-panel">
                 Banned <span class="badge" id="banned-count">{{len $bannedEntries}}</span>
@@ -179,6 +182,39 @@
                 <h3 class="empty-state-title">No Player History</h3>
                 <p class="empty-state-description">History is populated once the server captures player log data.</p>
             </div>
+        </div>
+
+        <div id="players-timeline-panel" role="tabpanel" aria-labelledby="tab-timeline" class="hidden">
+            {{with .timeline}}
+            {{if .HasData}}
+            <div class="player-timeline" aria-label="Player connections over time">
+                <div class="timeline-row timeline-axis-row">
+                    <div class="timeline-name"></div>
+                    <div class="timeline-track timeline-axis">
+                        {{range .Ticks}}<span class="timeline-tick-label{{if .DayStart}} is-day{{end}}" style="left: {{.Left}}%">{{.Label}}</span>{{end}}
+                    </div>
+                </div>
+                {{$nowLeft := .NowLeft}}
+                {{$ticks := .Ticks}}
+                {{range .Rows}}
+                <div class="timeline-row">
+                    <div class="timeline-name{{if .Online}} is-online{{end}}" title="{{if .SteamID}}Steam: {{.SteamID}}{{end}}">{{.Name}}</div>
+                    <div class="timeline-track">
+                        {{range $ticks}}<span class="timeline-grid{{if .DayStart}} is-day{{end}}" style="left: {{.Left}}%"></span>{{end}}
+                        {{range .Bars}}<span class="timeline-bar{{if .Live}} is-live{{end}}{{if .Admin}} is-admin{{end}}" style="left: {{.Left}}%; width: {{.Width}}%" title="{{.Tooltip}}"></span>{{end}}
+                        <span class="timeline-now" style="left: {{$nowLeft}}%"></span>
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{else}}
+            <div class="empty-state">
+                <i data-feather="bar-chart-2"></i>
+                <h3 class="empty-state-title">No Recent Sessions</h3>
+                <p class="empty-state-description">Connections from the last 72 hours will be charted here.</p>
+            </div>
+            {{end}}
+            {{end}}
         </div>
 
         {{if eq .role "admin"}}

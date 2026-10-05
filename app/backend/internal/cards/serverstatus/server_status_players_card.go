@@ -2,6 +2,7 @@ package serverstatus
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -103,6 +104,9 @@ func (serverStatusPlayersCard) FetchData(req *cards.Request) (gin.H, error) {
 	if _, ok := data["banned_ids"]; !ok {
 		data["banned_ids"] = []string{}
 	}
+
+	history, _ := data["historyClients"].([]*models.Client)
+	data["timeline"] = BuildPlayerTimeline(history, time.Now())
 
 	return data, nil
 }
