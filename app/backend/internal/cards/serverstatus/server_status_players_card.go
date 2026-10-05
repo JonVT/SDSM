@@ -2,6 +2,7 @@ package serverstatus
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -106,7 +107,22 @@ func (serverStatusPlayersCard) FetchData(req *cards.Request) (gin.H, error) {
 	}
 
 	history, _ := data["historyClients"].([]*models.Client)
-	data["timeline"] = BuildPlayerTimeline(history, time.Now())
+	data["timeline"] = BuildPlayerTimelineRange(history, time.Now(), timelineRangeFromRequest(req))
 
 	return data, nil
+}
+
+// timelineRangeFromRequest reads optional tl_start/tl_end unix-second query params.
+func timelineRangeFromRequest(req *cards.Request) TimelineRange {
+	if req == nil || req.Context == nil {
+		return TimelineRange{}
+	}
+	parse := func(key string) time.Time {
+		v, err := strconv.ParseInt(req.Context.Query(key), 10, 64)
+		if err != nil || v <= 0 {
+			return time.Time{}
+		}
+		return time.Unix(v, 0)
+	}
+	return TimelineRange{Start: parse("tl_start"), End: parse("tl_end")}
 }

@@ -11,14 +11,20 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - Card refactor Milestone 5: all server status, manager, dashboard, and users screens now render exclusively through the card registry with HTMX single-card refresh endpoints and per-card JS modules.
 - Create Server presets can now be edited in `sdsm.config` via a new `server_presets` array. The UI consumes these dynamically so operators can tweak defaults without rebuilding.
 
+- Players card: new Timeline tab charting when each player was connected, with a clickable header to choose preset or custom date/time ranges.
+- "Insert token" popup for the Welcome Message, Welcome Back Message (Configuration card and Create Server form), and player chat input.
+
 ### Changed
+
+- Server Info and Server Control cards are merged into one compact card; the name, power buttons, and status pills remain visible when collapsed, and the layout uses a much smaller vertical footprint.
+- Manager Software Versions card now uses a compact responsive layout so action buttons are never clipped.
 
 - Port forwarding is now adaptive: SDSM first prefers a mapping created by the game via UPnP (when available), and falls back to creating a NAT-PMP/UPnP mapping itself.
 - Default server port suggestions now walk 27016, 27019, 27022, ... ensuring each new server form picks a port spaced by three unless that slot is already in use.
 
 ### Fixed
 
-- _None yet_
+- SteamCMD updates that failed with exit status 8 now repair file permissions and, if needed, reset stale app manifest/staging state and retry once.
 
 ### Removed
 

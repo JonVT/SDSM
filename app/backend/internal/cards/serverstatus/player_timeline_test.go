@@ -36,3 +36,23 @@ func TestBuildPlayerTimeline(t *testing.T) {
 		t.Fatal("expected no data")
 	}
 }
+
+func TestBuildPlayerTimelineRange(t *testing.T) {
+	now := time.Date(2026, 10, 4, 18, 30, 0, 0, time.UTC)
+	d := now.Add(-9 * time.Hour)
+	clients := []*models.Client{
+		{SteamID: "1", Name: "a", ConnectDatetime: now.Add(-10 * time.Hour), DisconnectDatetime: &d},
+		{SteamID: "2", Name: "b", ConnectDatetime: now.Add(-1 * time.Hour)},
+	}
+	rng := TimelineRange{Start: now.Add(-12 * time.Hour), End: now.Add(-6 * time.Hour)}
+	tl := BuildPlayerTimelineRange(clients, now, rng)
+	if !tl.Custom || len(tl.Rows) != 1 || tl.Rows[0].Name != "a" {
+		t.Fatalf("unexpected custom timeline: %+v", tl)
+	}
+	if tl.NowLeft != -1 {
+		t.Fatalf("now marker should be hidden outside the window, got %v", tl.NowLeft)
+	}
+	if tl.StartUnix != rng.Start.Unix() || tl.EndUnix != rng.End.Unix() {
+		t.Fatalf("window not echoed back")
+	}
+}

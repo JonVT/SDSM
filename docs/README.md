@@ -109,27 +109,26 @@ SDSM is a Go (Gin) web application that wraps everything you need to operate Sta
 - **Manager** - Comprehensive control of the manager app including cards for:
 	- Manager Control: Information regarding the current up-time of the app as well as buttons to Shutdown and Restart SDSM
 	- Configuration: All of the configuration items and parameters for the operation of the manager functions of SDSM
-	- Software Versions: Deployed vs. latest versions of the software managed my SDSM along with buttons to update individual componenets are all with real-time progress display of any updating component to keep you informed of progress and status.
+	- Software Versions: Deployed vs. latest versions of the software managed my SDSM along laid out as compact rows (stacked in narrow panes so action buttons are never cut off), with buttons to update individual components and real-time progress display of any updating component to keep you informed of progress and status.
 	- Discord Integration: Define if and how you want to send manager and server events to Discord including which events to send, what mmessage to send for each event, and the color of the event message. Each message can be enhanced using substitution tokens.  The server events configured here can be overriden by individual servers.
 	- Logs: Display manager level logs with a tab for each log. Manager logs are in the <root>/logs directory.
 - **Users** - Management of users allowed to log in to SDSM.  SDSM has two level of users:
 	- Administrator: Allowed to add/change/remove users and perform all functions within SDSM
 	- Operator: Allowed to manage Stationeers servers.  Administrators can limit which servers operators are allowed ro manage.
 - **Per-server control** – The frame menu presents navigation to each configured server.  Server pages include cards for:
-	- Server Control - Information and functions to manipulate running servers including:
-		- Buttons to Start/Stop, Restart, Save/Save As the server
-		- Started date/time and duration and Last saved date/time
-		- a display of the last line from the server output log with a button to navigate to the logs card to see the full log
-		- Udate server files including the rocketstation_DedicatedServer, StationeersLaunchPad, and SCON
-		- Delete the server (admin only function)
-		- Rename the server (admin only function)
-		- Send various commands to the server including start/stop storms, cleanup players, and a game console to send other arbitrary commands via the SCON mod
+	- Server Info (with controls) - A single card combining server information and operation:
+		- The collapsed card still shows the server name (with rename for admins), the Start/Pause/Stop/Restart buttons, and status pills (state, uptime, storm)
+		- Compact info strip: server ID, game port, SCON port, players, difficulty, and language
+		- World, start location, and a runbook of automation settings
+		- Last line of the server output log with a button to jump to the full logs
+		- Expandable controls: Save/Save As, update server files (rocketstation_DedicatedServer, StationeersLaunchPad, SCON), delete (admin only), storm start/stop, cleanup players, and a game console for arbitrary commands via SCON
 	- Players - Various views of player on this server including:
-		- Live - Players currently connected including the date/time and durration of connection.  Each player can be kicked or banned.
+		- Live - Players currently connected including the date/time and duration of connection.  Each player can be kicked or banned.
 		- History - List of all players who have ever connected to this server with sub-list of connect/disconnect date/time and duration. Each player can be banned or unbanned if already banned.
+		- Timeline - A chart with one row per player and horizontal bars showing when each was connected, so you can see who was online at the same time. Click the timeline header to pick a preset (6h to 14d) or a custom date/time range; the choice is remembered per browser.
 		- Banned - List of all players banned from this server.  Each player can be unbanned.
-	- Chat - A live stream of all chats in the current session as well as controlls to send a chat message via the SCON mod.  Chat messages support substitution tokens.
-	- Configuration - All of the configuration items and parameters for the definition and operation of this particular server.  Certain changes to configuration may require a restart of the server to take affect.
+	- Chat - A live stream of all chats in the current session as well as controlls to send a chat message via the SCON mod.  Chat messages support substitution tokens, and an "Insert token" popup lists the available tokens and inserts them at the cursor.
+	- Configuration - All of the configuration items and parameters for the definition and operation of this particular server.  Certain changes to configuration may require a restart of the server to take affect. The Welcome Message and Welcome Back Message fields (here and on the Create Server form) have the same "Insert token" popup.
 	- Discord Integration: Define if and how you want override configuration of defaults configured on the Manager screen.
 	- Saves - Comprehensive view and control of saves organized by the type of save including:
 		- Auto - All auto-saves from the game as stored in the <root>/<Server#>/saves/<servername>/autosave directory
@@ -168,7 +167,7 @@ SDSM listens on port `5000` by default. Visit `http://localhost:5000/login`.
 
 - Dashboard: overview of servers, players, and deployments.
 - Setup: shows live download/install progress parsed from `logs/updates.log`.
-- Server pages: start/stop/restart/pause/save, live chat and player lists, historical sessions.
+- Server pages: start/stop/restart/pause/save, live chat, player lists, historical sessions, and a player timeline.
 - Health: check SCON connectivity via `GET /api/servers/:id/scon/health` if chat/commands fail.
 
 ## Configuration
