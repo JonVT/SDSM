@@ -2,8 +2,9 @@
 
 .PHONY: build lint lint-css test fmt fmt-check
 
+# Usage: make build [BUMP=major|minor|patch]
 build:
-	bash tools/build.sh
+	bash tools/build.sh $(if $(BUMP),--bump $(BUMP),)
 
 # Aggregated lint target (expand as more linters are added)
 lint: lint-css

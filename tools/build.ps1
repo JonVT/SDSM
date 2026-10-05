@@ -4,12 +4,38 @@
 # - Supports cross-compiling with GOOS/GOARCH
 # - Outputs binaries to ./dist
 
+# Usage: tools/build.ps1 [-Bump major|minor|patch]
+#   -Bump PART   Increment that part of the version in ./VERSION before building
+#                (major resets minor/patch; minor resets patch).
+param(
+    [ValidateSet("major", "minor", "patch")]
+    [string]$Bump = ""
+)
+
 $ErrorActionPreference = "Stop"
 
 # Resolve repo root (script lives in ./tools)
 $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 $REPO_ROOT = (Resolve-Path (Join-Path $SCRIPT_DIR "..")).Path
 Set-Location $REPO_ROOT
+
+$VERSION_FILE = Join-Path $REPO_ROOT "VERSION"
+if ($Bump) {
+    $current = if (Test-Path $VERSION_FILE) { (Get-Content $VERSION_FILE -Raw).Trim().TrimStart("v") } else { "" }
+    if ($current -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
+        Write-Error "$VERSION_FILE must contain MAJOR.MINOR.PATCH (found '$current')"
+        exit 2
+    }
+    $maj = [int]$Matches[1]; $min = [int]$Matches[2]; $pat = [int]$Matches[3]
+    switch ($Bump) {
+        "major" { $maj++; $min = 0; $pat = 0 }
+        "minor" { $min++; $pat = 0 }
+        "patch" { $pat++ }
+    }
+    $next = "$maj.$min.$pat"
+    Set-Content -Path $VERSION_FILE -Value $next -NoNewline:$false
+    Write-Host "Version bumped: $current -> $next"
+}
 
 # Go target platform (override by setting environment variables before running)
 $GOOS = if ($env:GOOS) { $env:GOOS } else { go env GOOS }
@@ -68,6 +94,11 @@ if ($gitAvailable) {
     } catch {
         # Assume clean if check fails
     }
+}
+
+# The VERSION file is the source of truth when present.
+if ((Test-Path $VERSION_FILE) -and (Get-Content $VERSION_FILE -Raw).Trim()) {
+    $VERSION = "v" + (Get-Content $VERSION_FILE -Raw).Trim().TrimStart("v")
 }
 
 # ldflags wiring to sdsm/app/backend/internal/version
