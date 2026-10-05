@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,6 +32,8 @@ var (
 	// Example lines (variants observed):
 	//   file: [No such world name: 'Europa3'. Valid worlds: Europa3, Lunar, Mars2, ...
 	// Be lenient about quotes, trailing bracket, and any trailing characters on the line.
+	// Example line: "09:29:52: Start Server Failed. Attempt 3 of 3."
+	startServerFailedRegex = regexp.MustCompile(`(?i)Start Server Failed\.\s*Attempt\s+(\d+)\s+of\s+(\d+)`)
 
 	logLineHandlers = []logLineHandler{
 		// Begin CLIENTS scan block
@@ -219,6 +222,7 @@ var (
 						}(s, msg, ctx, delay)
 					}
 				}
+				s.reportLifecycleEvent("players")
 			},
 		},
 		{
@@ -232,6 +236,7 @@ var (
 				steamID := strings.TrimSpace(matches[3])
 				name := strings.TrimSpace(matches[2])
 				t := s.parseTime(line)
+				changed := false
 				for _, client := range s.Clients {
 					if client.DisconnectDatetime != nil {
 						continue
@@ -239,8 +244,12 @@ var (
 					if client.SteamID == steamID || strings.EqualFold(client.Name, name) {
 						client.DisconnectDatetime = &t
 						s.rewritePlayersLog()
+						changed = true
 						break
 					}
+				}
+				if changed {
+					s.reportLifecycleEvent("players")
 				}
 			},
 		},
@@ -324,6 +333,7 @@ var (
 				// Always accept chat messages from "Server" without checking online clients
 				if strings.EqualFold(name, "Server") {
 					s.addChatMessage(name, t, message)
+					s.reportLifecycleEvent("chat")
 					return
 				}
 
@@ -333,6 +343,7 @@ var (
 					}
 					if strings.EqualFold(client.Name, name) {
 						s.addChatMessage(client.Name, t, message)
+						s.reportLifecycleEvent("chat")
 						return
 					}
 				}
@@ -347,7 +358,13 @@ var (
 				return nil
 			},
 			handle: func(s *Server, _ string, _ []string) {
-				s.Paused = true
+				if s == nil {
+					return
+				}
+				if !s.LifecycleSnapshot().Paused {
+					s.SetPaused(true)
+					s.reportLifecycleEvent("paused")
+				}
 			},
 		},
 		{
@@ -359,7 +376,13 @@ var (
 				return nil
 			},
 			handle: func(s *Server, _ string, _ []string) {
-				s.Paused = false
+				if s == nil {
+					return
+				}
+				if s.LifecycleSnapshot().Paused {
+					s.SetPaused(false)
+					s.reportLifecycleEvent("resumed")
+				}
 			},
 		},
 		// Weather event start/stop
@@ -390,14 +413,21 @@ var (
 		{
 			match: func(line string) []string {
 				lower := strings.ToLower(line)
-				if strings.Contains(lower, "started server") || strings.Contains(lower, "rocketnet succesfully hosted") || strings.Contains(lower, "registered with session") {
+				if strings.Contains(lower, "raknet successfully hosted with address") ||
+					strings.Contains(lower, "rocketnet succesfully hosted with address") ||
+					strings.Contains(lower, "rocketnet successfully hosted with address") {
 					return []string{}
 				}
 				return nil
 			},
 			handle: func(s *Server, _ string, _ []string) {
-				s.Starting = false
-				s.Running = true
+				if s == nil {
+					return
+				}
+				s.setReady(true)
+				s.setStarting(false)
+				s.setRunning(true)
+				s.reportLifecycleEvent("started")
 			},
 		},
 		// Fatal startup error: invalid world name
@@ -443,6 +473,46 @@ var (
 				if s.Running || s.Starting {
 					s.Stop()
 				}
+			},
+		},
+		// Fatal startup error: process exhausted its start retries and never came up.
+		{
+			match: func(line string) []string {
+				if !strings.Contains(line, "Start Server Failed") {
+					return nil
+				}
+				if m := startServerFailedRegex.FindStringSubmatch(line); m != nil {
+					return m
+				}
+				// Fall back to a synthetic non-empty slice so unexpected formatting still triggers.
+				return []string{"start server failed"}
+			},
+			handle: func(s *Server, _ string, matches []string) {
+				if s == nil {
+					return
+				}
+				var attempt, total int
+				if len(matches) >= 3 {
+					attempt, _ = strconv.Atoi(matches[1])
+					total, _ = strconv.Atoi(matches[2])
+				}
+				// Only treat the final retry as a definitive failure; earlier attempts just retry.
+				if total > 0 && attempt < total {
+					return
+				}
+				msg := "Server failed to start. Check the server log for details."
+				if total > 0 {
+					msg = fmt.Sprintf("Server failed to start after %d attempt(s). Check the server log for details.", total)
+				}
+				now := time.Now()
+				s.LastError = msg
+				s.LastErrorAt = &now
+				if s.Logger != nil {
+					s.Logger.Write("Startup error: " + msg)
+				}
+				s.setStarting(false)
+				s.setRunning(false)
+				s.reportLifecycleEvent("start_failed")
 			},
 		},
 	}

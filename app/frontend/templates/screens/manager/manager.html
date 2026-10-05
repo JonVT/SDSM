@@ -3,6 +3,22 @@
 
 {{define "manager.html"}}
 <div data-page-title="Manager Settings" data-manager-root class="manager-content" data-card-sortable="manager">
+    <div class="manager-savebar hidden" data-manager-savebar role="status" aria-live="polite" aria-atomic="true">
+        <div class="manager-savebar-summary">
+            <strong>Unsaved changes</strong>
+            <span class="text-secondary" data-manager-savebar-text>No pending changes.</span>
+        </div>
+        <div class="manager-savebar-actions">
+            <button type="submit" class="btn btn-primary" form="manager-settings-form" name="update_config" value="1" data-manager-save disabled>
+                <i data-feather="save"></i>
+                <span>Save all changes</span>
+            </button>
+            <button type="button" class="btn btn-ghost" data-manager-discard disabled>
+                <span>Discard</span>
+            </button>
+        </div>
+    </div>
+
     {{- $pageData := . -}}
     {{- $cardSlots := .cardSlots -}}
     {{- if not $cardSlots -}}

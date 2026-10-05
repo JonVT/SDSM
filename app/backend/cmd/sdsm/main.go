@@ -509,7 +509,14 @@ func setupRouter() *gin.Engine {
 			_ = f.Close()
 		}
 	}
-	r.StaticFS("/static", http.FS(staticFS))
+	staticGroup := r.Group("/static")
+	staticGroup.Use(func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+		c.Header("Pragma", "no-cache")
+		c.Header("Expires", "0")
+		c.Next()
+	})
+	staticGroup.StaticFS("/", http.FS(staticFS))
 	// Serve icon from embedded FS
 	r.GET("/sdsm.png", func(c *gin.Context) {
 		c.FileFromFS("sdsm.png", http.FS(staticFS))
@@ -646,6 +653,7 @@ func setupRouter() *gin.Engine {
 		api.GET("/servers/:server_id/log/download", managerHandlers.APIServerLogDownload)
 		api.GET("/servers/:server_id/world/saves", managerHandlers.APIServerWorldSaves)
 		api.GET("/servers/:server_id/world/download", managerHandlers.APIServerWorldDownload)
+		api.POST("/servers/:server_id/world/upload", managerHandlers.APIServerWorldUpload)
 		api.POST("/servers/:server_id/log/clear", managerHandlers.APIServerLogClear)
 		api.POST("/servers/:server_id/start", managerHandlers.APIServerStart)
 		api.POST("/servers/:server_id/stop", managerHandlers.APIServerStop)

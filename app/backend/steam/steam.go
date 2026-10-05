@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"fmt"
 	"io"
 	"net/http"
@@ -227,8 +228,33 @@ func (s *Steam) UpdateGame(beta bool) error {
 	if perr != nil {
 		return perr
 	}
+	if err := ensureWritableTree(cleanDir); err != nil {
+		s.Logger.Write(fmt.Sprintf("Warning: could not fix permissions on %s: %v", cleanDir, err))
+	}
 	// Log command with sanitized path (arguments already validated)
 	s.Logger.Write(fmt.Sprintf("Executing command: %s %s", execPath, strings.Join(steamCmd, " ")))
+	err := s.runSteamCmd(execPath, steamCmd)
+	if isSteamCmdStateError(err) {
+		// Exit status 8 with a stale app manifest/staging state is not recoverable by retrying as-is.
+		s.Logger.Write("SteamCMD reported a stale app state; resetting manifest and staging data, then retrying once")
+		if rerr := resetSteamAppState(cleanDir, s.SteamID); rerr != nil {
+			s.Logger.Write(fmt.Sprintf("Failed to reset SteamCMD app state: %v", rerr))
+		} else {
+			_ = ensureWritableTree(cleanDir)
+			err = s.runSteamCmd(execPath, steamCmd)
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Write("rocketstation_DedicatedServer updated successfully")
+	s.reportProgress("Completed", 0, 0)
+	return nil
+}
+
+// runSteamCmd executes steamcmd, streaming output to the logger and reporting download progress.
+func (s *Steam) runSteamCmd(execPath string, steamCmd []string) error {
 	cmd := exec.Command(execPath, steamCmd...)
 
 	// Create pipes to capture and parse output while logging
@@ -279,10 +305,64 @@ func (s *Steam) UpdateGame(beta bool) error {
 		s.Logger.Write(fmt.Sprintf("SteamCMD error: %v", err))
 		return err
 	}
-
-	s.Logger.Write("rocketstation_DedicatedServer updated successfully")
-	s.reportProgress("Completed", 0, 0)
 	return nil
+}
+
+func isSteamCmdStateError(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 8
+}
+
+// resetSteamAppState removes the app manifest and staging folders that steamcmd keeps in the install dir.
+func resetSteamAppState(installDir, appID string) error {
+	steamApps := filepath.Join(installDir, "steamapps")
+	targets := []string{
+		filepath.Join(steamApps, "appmanifest_"+appID+".acf"),
+		filepath.Join(steamApps, "downloading", appID),
+		filepath.Join(steamApps, "temp", appID),
+	}
+	for _, t := range targets {
+		if err := os.RemoveAll(t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ensureWritableTree guarantees the current user can read, write and traverse the install tree.
+func ensureWritableTree(root string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, os.ErrPermission) {
+				_ = os.Chmod(filepath.Dir(path), 0o755)
+			}
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		info, ierr := d.Info()
+		if ierr != nil {
+			return nil
+		}
+		mode := info.Mode().Perm()
+		want := mode | 0o600
+		if d.IsDir() {
+			want = mode | 0o700
+		}
+		if want != mode {
+			if cerr := os.Chmod(path, want); cerr != nil && !errors.Is(cerr, os.ErrNotExist) {
+				return cerr
+			}
+		}
+		return nil
+	})
 }
 
 // UpdateBepInEx downloads and deploys BepInEx, recording its version when available.

@@ -77,8 +77,13 @@
 
 <div class="card server-card"
      data-server-id="{{$server.ID}}"
-     data-target-url="/server/{{$server.ID}}">
-    <div class="server-card-top">
+     data-target-url="/server/{{$server.ID}}"
+     data-last-error="{{$server.LastError}}">
+        <div class="server-card-top"
+            data-server-nav-hit="true"
+            role="link"
+            tabindex="0"
+            aria-label="Open {{$server.Name}} server details. Status {{$statusLabel}}. {{$server.ClientCount}} of {{$server.MaxClients}} players connected.">
         {{if eq $role "admin"}}
         <div class="server-select-control" data-stop-navigation="true">
             <label class="server-select-checkbox">
@@ -87,7 +92,7 @@
                        value="{{$server.ID}}"
                        data-server-select
                        data-server-name="{{$server.Name}}"
-                       aria-label="Select {{$server.Name}}"
+                      aria-label="Select {{$server.Name}}. Current status {{$statusLabel}}"
                        tabindex="-1">
                 <span class="server-select-indicator" aria-hidden="true"></span>
             </label>
@@ -152,6 +157,7 @@
             <div class="alert-actions">
                 <button type="button"
                         class="btn btn-sm btn-warning"
+                    data-server-action="restart"
                         data-restart-server="{{$server.ID}}"
                         data-server-name="{{$server.Name}}"
                         data-stop-navigation="true">
@@ -171,7 +177,7 @@
             <div class="info-label">World</div>
             <div class="info-value world" data-world-value>{{if $server.World}}{{$server.World}}{{else}}Unknown{{end}}</div>
         </div>
-        <div class="server-info-grid">
+        <div class="server-info-grid server-primary-grid">
             <div class="info-item">
                 <div class="info-label">Players</div>
                 <div class="info-value" data-player-count>{{$server.ClientCount}} / {{$server.MaxClients}}</div>
@@ -180,17 +186,17 @@
                 <div class="info-label">Port</div>
                 <div class="info-value" data-port-value>{{if gt $server.Port 0}}{{$server.Port}}{{else}}—{{end}}</div>
             </div>
-            <div class="info-item">
-                <div class="info-label">Password</div>
-                <div class="info-value">{{if $server.Password}}Enabled{{else}}Disabled{{end}}</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">Storm</div>
-                <div class="info-value">{{if $server.Storming}}Active{{else}}Clear{{end}}</div>
-            </div>
-            <div class="info-item">
-                <div class="info-label">Auto Save</div>
-                <div class="info-value">{{if $server.AutoSave}}Enabled{{else}}Disabled{{end}}</div>
+        </div>
+
+        <div class="server-config-row" aria-label="Server configuration summary">
+            <div class="info-label">Config</div>
+            <div class="config-summary-chips">
+                <span class="config-chip {{if $server.Password}}is-on{{else}}is-off{{end}}">
+                    Password {{if $server.Password}}On{{else}}Off{{end}}
+                </span>
+                <span class="config-chip {{if $server.AutoSave}}is-on{{else}}is-off{{end}}">
+                    Auto Save {{if $server.AutoSave}}On{{else}}Off{{end}}
+                </span>
             </div>
         </div>
 
@@ -224,6 +230,7 @@
         <div class="btn-group">
             {{if $isRunning}}
                 <button class="btn btn-sm btn-danger"
+                    data-server-action="stop"
                         hx-post="/api/servers/{{$server.ID}}/stop"
                         hx-confirm="Are you sure you want to stop this server?"
                         hx-target="closest .server-card"
@@ -232,6 +239,7 @@
                 </button>
             {{else}}
                 <button class="btn btn-sm btn-success"
+                    data-server-action="start"
                         hx-post="/api/servers/{{$server.ID}}/start"
                         hx-target="closest .server-card"
                         hx-swap="outerHTML">

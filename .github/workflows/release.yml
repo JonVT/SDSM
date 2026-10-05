@@ -51,13 +51,15 @@ jobs:
           for t in "${TARGETS[@]}"; do
             read -r GOOS GOARCH <<<"$t"
             echo "\n==> Building ${GOOS}/${GOARCH}"
-            GOOS="$GOOS" GOARCH="$GOARCH" ./build.sh
-            SRC="dist/sdsm"  # build.sh outputs this filename for all targets
-            test -f "$SRC"
+            GOOS="$GOOS" GOARCH="$GOARCH" bash ./tools/build.sh
             if [[ "$GOOS" == "windows" ]]; then
+              SRC="sdsm.exe"
+              test -f "$SRC"
               # Windows: raw executable named SDSM.exe (no zip)
               cp "$SRC" "release/SDSM.exe"
             else
+              SRC="sdsm"
+              test -f "$SRC"
               # Linux: binary named SDSM, zipped as SDSM.zip
               cp "$SRC" "release/SDSM"
               (cd release && zip -q -9 SDSM.zip SDSM && rm -f SDSM)
@@ -82,6 +84,6 @@ jobs:
             release/SDSM.zip
             release/SDSM.exe
             release/SHA256SUMS.txt
-            CHANGELOG.md
+            docs/CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

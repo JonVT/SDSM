@@ -47,7 +47,34 @@ func NewManagerHandlers(mgr *manager.Manager, us *manager.UserStore) *ManagerHan
 
 // NewManagerHandlersWithHub constructs handlers with an attached websocket hub for realtime updates.
 func NewManagerHandlersWithHub(mgr *manager.Manager, us *manager.UserStore, hub *middleware.Hub) *ManagerHandlers {
-	return &ManagerHandlers{manager: mgr, userStore: us, hub: hub}
+	h := &ManagerHandlers{manager: mgr, userStore: us, hub: hub}
+	h.bindServerLifecycleEventReporters()
+	return h
+}
+
+func (h *ManagerHandlers) bindServerLifecycleEventReporters() {
+	if h == nil || h.manager == nil {
+		return
+	}
+	for _, srv := range h.manager.Servers {
+		h.bindServerLifecycleEventReporter(srv)
+	}
+}
+
+func (h *ManagerHandlers) bindServerLifecycleEventReporter(s *models.Server) {
+	if h == nil || s == nil {
+		return
+	}
+	s.SetLifecycleEventReporter(func(srv *models.Server, event string) {
+		if h == nil || h.hub == nil || srv == nil {
+			return
+		}
+		if event == "chat" {
+			h.broadcastServerChat(srv)
+			return
+		}
+		h.BroadcastStatusAndStats(srv)
+	})
 }
 
 // APIManagerLogsList returns a JSON array of available *.log files in the manager's logs directory.

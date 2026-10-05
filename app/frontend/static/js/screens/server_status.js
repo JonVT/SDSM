@@ -144,6 +144,8 @@ function initServerStatusDashboard() {
 
     const runtimeState = {
         lastKnownRunning: serverContent.dataset.serverRunning === 'true',
+        // Seed from the server-rendered error banner so we only toast on *new* failures, not on page load.
+        lastKnownError: (document.getElementById('server-error-text')?.textContent || '').trim(),
     };
 
     const SERVER_INFO_CARD_ID = 'server-status-info';
@@ -160,6 +162,13 @@ function initServerStatusDashboard() {
     const isAdminUser = userRole === 'admin';
 
     let statusRefreshTimer;
+    let realtimeStatusRefreshTimer = null;
+    let realtimeStatusRefreshInFlight = false;
+    const parseCount = (value) => {
+        const parsed = Number.parseInt(value, 10);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+    let lastKnownLivePlayerCount = null;
 
     function triggerCardRefresh(cardId) {
         if (!cardId) {
@@ -478,6 +487,7 @@ function initServerStatusDashboard() {
     const livePlayersTable = document.getElementById('live-players-table');
     const livePlayersEmpty = document.getElementById('live-players-empty');
     const liveCount = document.getElementById('live-count');
+    lastKnownLivePlayerCount = parseCount(liveCount?.textContent);
 
     async function refreshWorldDownloadOptions() {
             if (!worldDownloadSelect) {
@@ -647,6 +657,21 @@ function initServerStatusDashboard() {
         }
     }
 
+    function scheduleRealtimeStatusRefresh() {
+        if (realtimeStatusRefreshInFlight || realtimeStatusRefreshTimer) {
+            return;
+        }
+        realtimeStatusRefreshTimer = setTimeout(async () => {
+            realtimeStatusRefreshTimer = null;
+            realtimeStatusRefreshInFlight = true;
+            try {
+                await fetchLatestStatus();
+            } finally {
+                realtimeStatusRefreshInFlight = false;
+            }
+        }, 150);
+    }
+
     function handleWebSocketMessage(data) {
         if (!data || !data.type) {
             return;
@@ -702,18 +727,43 @@ function initServerStatusDashboard() {
     }
 
     function updateServerStatus(status) {
+        const lifecycle = (window.SDSM && window.SDSM.ui && typeof window.SDSM.ui.normalizeServerLifecycleStatus === 'function')
+            ? window.SDSM.ui.normalizeServerLifecycleStatus(status || {})
+            : (() => {
+                const normalized = {
+                    ...(status || {}),
+                    running: !!(status && status.running),
+                    paused: !!(status && status.paused),
+                    starting: !!(status && status.starting),
+                    stopping: !!(status && status.stopping),
+                    storming: !!(status && status.storming),
+                };
+                return normalized;
+            })();
+
+        const incomingLiveCount = parseCount(lifecycle.playerCount);
+        if (incomingLiveCount !== null) {
+            if (lastKnownLivePlayerCount === null) {
+                lastKnownLivePlayerCount = incomingLiveCount;
+            } else if (incomingLiveCount !== lastKnownLivePlayerCount) {
+                lastKnownLivePlayerCount = incomingLiveCount;
+                scheduleRealtimeStatusRefresh();
+            }
+        }
+
         refreshConfigDomRefs();
-        serverContent.dataset.serverRunning = status.running ? 'true' : 'false';
-        serverContent.dataset.serverPaused = status.paused ? 'true' : 'false';
-        serverContent.dataset.serverStarting = status.starting ? 'true' : 'false';
-        serverContent.dataset.serverStopping = status.stopping ? 'true' : 'false';
-        if (typeof status.storming !== 'undefined') {
-            serverContent.dataset.serverStorming = status.storming ? 'true' : 'false';
-            updateStormDisplay(status.storming);
+        serverContent.dataset.serverRunning = lifecycle.running ? 'true' : 'false';
+        serverContent.dataset.serverPaused = lifecycle.paused ? 'true' : 'false';
+        serverContent.dataset.serverStarting = lifecycle.starting ? 'true' : 'false';
+        serverContent.dataset.serverStopping = lifecycle.stopping ? 'true' : 'false';
+        if (typeof lifecycle.storming !== 'undefined') {
+            serverContent.dataset.serverStorming = lifecycle.storming ? 'true' : 'false';
+            updateStormDisplay(lifecycle.storming);
         }
 
         if (window.SDSMServerStatusView && typeof window.SDSMServerStatusView.applyStatus === 'function') {
             window.SDSMServerStatusView.applyStatus({
+                serverId,
                 state: runtimeState,
                 elements: screenElements,
                 updateStormDisplay,
@@ -723,12 +773,12 @@ function initServerStatusDashboard() {
                 refreshWorldDownloadOptions,
                 startUptimeTicker,
                 stopUptimeTicker,
-            }, status);
+            }, lifecycle);
             return;
         }
 
-        if (typeof status.storming !== 'undefined') {
-            updateStormDisplay(status.storming);
+        if (typeof lifecycle.storming !== 'undefined') {
+            updateStormDisplay(lifecycle.storming);
         }
     }
 
@@ -759,15 +809,21 @@ function initServerStatusDashboard() {
             return;
         }
         if (detail.status) {
-            updateServerStatus({
-                running: !!detail.status.running,
-                paused: !!detail.status.paused,
-                starting: !!detail.status.starting,
-                stopping: !!detail.status.stopping,
-                storming: typeof detail.status.storming !== 'undefined' ? !!detail.status.storming : serverContent.dataset.serverStorming === 'true',
-                lastError: detail.status.lastError || ''
-            });
+            // Preserve full status payload (including playerCount) so realtime
+            // join/leave websocket updates can trigger immediate live-list refresh.
+            updateServerStatus(detail.status);
         }
+    });
+
+    on(document, 'sdsm:ws-message', (event) => {
+        const detail = event.detail || {};
+        if (!detail || !detail.type) {
+            return;
+        }
+        if (detail.serverId && String(detail.serverId) !== String(serverId)) {
+            return;
+        }
+        handleWebSocketMessage(detail);
     });
 
     function hydrateStatusDetails(data) {
@@ -793,13 +849,17 @@ function initServerStatusDashboard() {
     async function fetchLatestStatus() {
         try {
             const data = await serverRequest('/status', { method: 'GET' });
-            const payload = {
+            const rawPayload = {
                 running: !!data.running,
                 paused: !!data.paused,
                 starting: !!data.starting,
+                ready: !!data.ready,
                 stopping: !!data.stopping,
                 storming: !!data.storming
             };
+            const payload = (window.SDSM && window.SDSM.ui && typeof window.SDSM.ui.normalizeServerLifecycleStatus === 'function')
+                ? window.SDSM.ui.normalizeServerLifecycleStatus(rawPayload)
+                : rawPayload;
             serverContent.dataset.serverRunning = payload.running ? 'true' : 'false';
             serverContent.dataset.serverPaused = payload.paused ? 'true' : 'false';
             serverContent.dataset.serverStarting = payload.starting ? 'true' : 'false';
@@ -988,9 +1048,11 @@ function initServerStatusDashboard() {
         if (!players) {
             return;
         }
-        updatePlayerTable(livePlayersTable, livePlayersEmpty, players.live, renderLivePlayerRow);
+        const livePlayers = Array.isArray(players.live) ? players.live : [];
+        lastKnownLivePlayerCount = livePlayers.length;
+        updatePlayerTable(livePlayersTable, livePlayersEmpty, livePlayers, renderLivePlayerRow);
         if (liveCount) {
-            liveCount.textContent = players.live ? players.live.length : 0;
+            liveCount.textContent = livePlayers.length;
         }
 
         latestHistoryEntries = Array.isArray(players.history) ? players.history : [];
@@ -2226,6 +2288,34 @@ function initServerStatusDashboard() {
     }
 
     const hasServerStatusActionsModule = !!(window.SDSMServerStatusActions && typeof window.SDSMServerStatusActions.bind === 'function');
+    const signalServerStatusDegradedMode = () => {
+        const message = 'Server status actions module failed to load. Running in degraded compatibility mode.';
+        try {
+            console.error('[SDSM] ' + message);
+        } catch (_) {}
+
+        if (serverContent && serverContent.dataset) {
+            serverContent.dataset.degradedMode = 'true';
+        }
+
+        try {
+            document.dispatchEvent(new CustomEvent('sdsm:degraded-mode', {
+                detail: {
+                    screen: 'server-status',
+                    feature: 'actions-module',
+                    message,
+                },
+            }));
+        } catch (_) {}
+
+        // Notify admins once per page load; avoid noisy repeats during card swaps.
+        const shouldToast = isAdminUser && !(window.__sdsmServerStatusDegradedWarned === true);
+        if (shouldToast && window.showToast) {
+            window.__sdsmServerStatusDegradedWarned = true;
+            window.showToast('Degraded Mode', message, 'warning');
+        }
+    };
+
     if (hasServerStatusActionsModule) {
         window.SDSMServerStatusActions.bind({
             on,
@@ -2243,6 +2333,7 @@ function initServerStatusDashboard() {
             getCurrentSavesFilter: () => currentSavesFilter,
             handleActionError,
             buildWorldDownloadUrl,
+            refreshWorldDownloadOptions,
             buildQuery,
             resolveSteamIdFromElement,
             copyTextToClipboard,
@@ -2250,6 +2341,8 @@ function initServerStatusDashboard() {
             elements: screenElements,
         });
     } else {
+        signalServerStatusDegradedMode();
+
         on(document, 'click', async (event) => {
             const copyBtn = event.target.closest('[data-copy-value][data-copy-scope="server-info"]');
             if (copyBtn) {
@@ -2275,6 +2368,84 @@ function initServerStatusDashboard() {
         });
 
         on(document.body, 'click', (e) => {
+            const deleteServerBtn = e.target.closest('#btn-delete-server');
+            if (deleteServerBtn) {
+                const isRunning = serverContent && serverContent.dataset.serverRunning === 'true';
+                const normalizedName = String(serverContent?.dataset?.serverName || serverName || '').trim() || 'this server';
+                const intro = isRunning
+                    ? `Delete server "${normalizedName}"? The server will be stopped, removed from SDSM, and its files will be deleted.`
+                    : `Delete server "${normalizedName}"? This will remove it from SDSM and delete its files.`;
+                const hint = `${intro} This cannot be undone.`;
+
+                const requestTypedName = () => {
+                    const hasPromptTemplate = !!document.getElementById('tpl-modal-prompt');
+                    const canUseModalPrompt = Boolean(window.SDSM && SDSM.modal && typeof SDSM.modal.prompt === 'function' && hasPromptTemplate);
+                    if (canUseModalPrompt) {
+                        return SDSM.modal.prompt({
+                            title: 'Delete Server',
+                            label: `Type "${normalizedName}" to confirm deletion`,
+                            placeholder: normalizedName,
+                            defaultValue: '',
+                            confirmText: 'Delete Server',
+                            cancelText: 'Cancel',
+                            hint,
+                            danger: true,
+                            validate: (value) => {
+                                if (!value) {
+                                    return 'Enter the server name to confirm deletion.';
+                                }
+                                if (value.trim() !== normalizedName) {
+                                    return `Enter "${normalizedName}" exactly to confirm.`;
+                                }
+                                return true;
+                            }
+                        });
+                    }
+                    return Promise.resolve(window.prompt(
+                        `${hint}\n\nTo confirm, type the server name exactly as shown:\n${normalizedName}`,
+                        ''
+                    ));
+                };
+
+                requestTypedName()
+                    .then((typedName) => {
+                        if (typedName === null) {
+                            return;
+                        }
+                        if (typedName.trim() !== normalizedName) {
+                            const mismatchMessage = `Deletion cancelled. Enter "${normalizedName}" exactly to confirm.`;
+                            if (window.showToast) {
+                                window.showToast('Delete Cancelled', mismatchMessage, 'warning');
+                            }
+                            return;
+                        }
+
+                        const original = deleteServerBtn.innerHTML;
+                        deleteServerBtn.disabled = true;
+                        deleteServerBtn.innerHTML = '<i data-feather="loader" class="btn-icon-left"></i> Deleting…';
+                        if (window.feather && typeof window.feather.replace === 'function') {
+                            window.feather.replace();
+                        }
+
+                        return serverRequest('/delete', { method: 'POST' })
+                            .then(() => {
+                                window.location.assign('/dashboard');
+                            })
+                            .catch((err) => {
+                                deleteServerBtn.disabled = false;
+                                deleteServerBtn.innerHTML = original;
+                                if (window.feather && typeof window.feather.replace === 'function') {
+                                    window.feather.replace();
+                                }
+                                handleActionError('Delete Server', err);
+                            });
+                    })
+                    .catch((err) => {
+                        handleActionError('Delete Server', err);
+                    });
+                return;
+            }
+
             const kickBtn = e.target.closest('.btn-kick');
             if (kickBtn) {
                 const guid = resolveSteamIdFromElement(kickBtn);
@@ -2688,6 +2859,10 @@ function initServerStatusDashboard() {
         if (statusRefreshTimer) {
             clearInterval(statusRefreshTimer);
             statusRefreshTimer = null;
+        }
+        if (realtimeStatusRefreshTimer) {
+            clearTimeout(realtimeStatusRefreshTimer);
+            realtimeStatusRefreshTimer = null;
         }
         if (uptimeTimerId) {
             clearInterval(uptimeTimerId);

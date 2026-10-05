@@ -15,7 +15,8 @@
                 data-default-world="{{ index .form "world" }}"
                 data-default-start-location="{{ index .form "start_location" }}"
                 data-default-start-condition="{{ index .form "start_condition" }}"
-                data-default-beta="{{ index .form "beta" }}">
+                data-default-beta="{{ index .form "beta" }}"
+                data-ui-build-time="{{.buildTime}}">
 
                 <div class="server-form-intro">
                     <div>
@@ -60,6 +61,18 @@
                                 <div class="form-group">
                                     <label class="form-label">World File Name (Server Name)</label>
                                     <div id="detectedName" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Start Location</label>
+                                    <div id="detectedStartLocation" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Start Condition</label>
+                                    <div id="detectedStartCondition" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Difficulty</label>
+                                    <div id="detectedDifficulty" class="form-control-static"></div>
                                 </div>
                             </div>
                         </div>
@@ -220,6 +233,11 @@
                                 <input type="text" id="password" name="password" class="form-control" value="{{ index .form "password" }}" placeholder="Leave empty for no password">
                             </div>
                             <div class="form-group">
+                                <label class="form-label" for="auth_secret">Auth Secret</label>
+                                <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
+                                <p class="form-hint">Only required for private/whitelisted setups that enforce Steam auth.</p>
+                            </div>
+                            <div class="form-group">
                                 <div class="toggle-label">
                                     <span>Server Visible in list</span>
                                 </div>
@@ -281,10 +299,6 @@
                                         <button type="button" class="info-pill" data-tooltip="Time to wait for BepInEx plugins to finish booting before considering startup failed.">i</button>
                                     </div>
                                     <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" min="5" max="120">
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label" for="auth_secret">Auth Secret</label>
-                                    <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" for="max_auto_saves">Max Auto Saves</label>

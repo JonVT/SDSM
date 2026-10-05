@@ -121,20 +121,7 @@
     hx-swap="outerHTML">
     <details class="card-collapse" data-collapse-id="server-status-info" open>
         <summary class="card-collapse-summary">
-            <div class="card-header-text">
-                <h2 class="card-title">Server Info</h2>
-                <p class="card-subtitle">Identity, world, and configuration at a glance.</p>
-            </div>
-            <span class="collapse-chevron" data-collapse-icon>
-                <i data-feather="chevron-down" aria-hidden="true"></i>
-            </span>
-        </summary>
-        <div class="card-collapse-body">
-            <div class="server-info-header">
-        <div class="server-identity">
-            <div class="server-title-row">
-                <div class="server-name-block">
-                    <div class="server-name-line">
+            <div class="card-header-text summary-server-identity">
                         <div class="server-name-group">
                             <div class="server-name-chip">
                                 {{if $server.Beta}}
@@ -142,13 +129,30 @@
                                 {{else}}
                                 <span class="server-version-icon icon-release" title="Release build" aria-label="Release build">R</span>
                                 {{end}}
-                                <h1 class="card-title" id="server-name-display">{{$server.Name}}</h1>
+                                <h2 class="card-title" id="server-name-display">{{$server.Name}}</h2>
                             </div>
                             <button type="button" id="btn-rename-server" class="btn btn-ghost btn-icon btn-rename-inline" title="Rename server">
                                 <i data-feather="edit-2"></i>
                                 <span class="sr-only">Rename server</span>
                             </button>
                         </div>
+            </div>
+            {{if or (eq .role "admin") (eq .role "operator")}}
+<div class="btn-group summary-power-controls" role="group" aria-label="Server power controls">
+            <button type="button" id="btn-start" class="btn btn-success" title="Start the server" {{if or .server.Running .server.Starting}}disabled{{end}}>
+                <i data-feather="play"></i>
+            </button>
+            <button type="button" id="btn-pause" class="btn btn-secondary" title="{{if .server.Paused}}Resume the server{{else}}Pause the server{{end}}" {{if or (not .server.Running) .server.Stopping}}disabled{{end}}>
+                <i data-feather="{{if .server.Paused}}play{{else}}pause{{end}}"></i>
+            </button>
+            <button type="button" id="btn-stop" class="btn btn-danger" title="Stop the server" {{if or (not .server.Running) .server.Stopping}}disabled{{end}}>
+                <i data-feather="square"></i>
+            </button>
+            <button type="button" id="btn-restart" class="btn btn-warning" title="Restart the server" {{if or (not .server.Running) .server.Stopping}}disabled{{end}}>
+                <i data-feather="rotate-cw"></i>
+            </button>
+        </div>
+            {{end}}
                         <div class="server-status-stack">
                             <span class="status-pill {{$statusClass}}" data-server-state-pill>{{$statusLabel}}</span>
                             {{if $uptimeSource}}
@@ -163,7 +167,15 @@
                                 {{if $server.Storming}}Storming{{else}}Calm{{end}}
                             </span>
                         </div>
-                    </div>
+            <span class="collapse-chevron" data-collapse-icon>
+                <i data-feather="chevron-down" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div class="card-collapse-body">
+            <div class="server-info-header">
+        <div class="server-identity">
+            <div class="server-title-row">
+                <div class="server-name-block">
                     <div class="server-meta-row">
                         <div class="id-chip">
                             <span class="meta-label">Server ID</span>
@@ -325,6 +337,11 @@
             </div>
         </div>
     </div>
+        <div class="server-info-controls">
+            {{if or (eq .role "admin") (eq .role "operator")}}
+            {{template "cards/server_status_control_body.html" .}}
+            {{end}}
+        </div>
         </div>
     </details>
 </div>

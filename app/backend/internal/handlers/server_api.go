@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,6 +62,7 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 			"maxPlayers":  s.MaxClients,
 			"running":     state.Running,
 			"starting":    state.Starting,
+			"ready":       state.Ready,
 			"stopping":    state.Stopping,
 			"stopping_eta": func() int {
 				return state.StoppingETASeconds(time.Now())
@@ -88,6 +90,35 @@ func (h *ManagerHandlers) broadcastServerStatus(s *models.Server) {
 			"portForwardExternalPort": s.PortForwardExternalPort,
 			"portForwardLastError":    s.PortForwardLastError,
 			"portForwardSource":       s.PortForwardSource,
+		},
+	}
+	if msg, err := json.Marshal(payload); err == nil {
+		h.hub.Broadcast(msg)
+	}
+}
+
+func (h *ManagerHandlers) broadcastServerChat(s *models.Server) {
+	if h == nil || h.hub == nil || s == nil {
+		return
+	}
+	if len(s.Chat) == 0 {
+		return
+	}
+	last := s.Chat[len(s.Chat)-1]
+	if last == nil {
+		return
+	}
+	timestamp := ""
+	if !last.Datetime.IsZero() {
+		timestamp = last.Datetime.Format(time.RFC3339)
+	}
+	payload := map[string]any{
+		"type":     "chat",
+		"serverId": s.ID,
+		"payload": map[string]any{
+			"player":  last.Name,
+			"message": last.Message,
+			"time":    timestamp,
 		},
 	}
 	if msg, err := json.Marshal(payload); err == nil {
@@ -264,6 +295,7 @@ func (h *ManagerHandlers) APIServerStatus(c *gin.Context) {
 		"name":     s.Name,
 		"running":  state.Running,
 		"starting": state.Starting,
+		"ready":    state.Ready,
 		"stopping": state.Stopping,
 		"stopping_eta": func() int {
 			return state.StoppingETASeconds(time.Now())
@@ -1747,6 +1779,7 @@ func (h *ManagerHandlers) APIServersCreate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create server"})
 		return
 	}
+	h.bindServerLifecycleEventReporter(newServer)
 	if err := newServer.Deploy(); err != nil {
 		h.manager.Log.Write(fmt.Sprintf("Initial deploy failed for %s (ID:%d): %v", newServer.Name, newServer.ID, err))
 	} else {
@@ -1784,6 +1817,10 @@ type settingsXML struct {
 	GamePort              *int     `xml:"GamePort"`
 	ServerPassword        *string  `xml:"ServerPassword"`
 	ServerAuthSecret      *string  `xml:"ServerAuthSecret"`
+	StartLocation         *string  `xml:"StartLocation"`
+	StartCondition        *string  `xml:"StartCondition"`
+	Difficulty            *string  `xml:"Difficulty"`
+	DifficultySetting     *string  `xml:"DifficultySetting"`
 }
 
 func parseSettingsFromSaveZip(path string) (*settingsXML, error) {
@@ -1818,10 +1855,507 @@ func parseSettingsFromSaveZip(path string) (*settingsXML, error) {
 
 // worldMetaXML represents key fields from world_meta.xml used for prefill.
 type worldMetaXML struct {
-	XMLName       xml.Name `xml:"WorldMetaData"`
-	WorldName     string   `xml:"WorldName"`
-	WorldFileName string   `xml:"WorldFileName"`
-	GameVersion   string   `xml:"GameVersion"`
+	XMLName                xml.Name `xml:"WorldMetaData"`
+	WorldName              string   `xml:"WorldName"`
+	WorldFileName          string   `xml:"WorldFileName"`
+	GameVersion            string   `xml:"GameVersion"`
+	StartLocation          string   `xml:"StartLocation"`
+	StartLocationID        string   `xml:"StartLocationId"`
+	StartLocationName      string   `xml:"StartLocationName"`
+	StartCondition         string   `xml:"StartCondition"`
+	StartConditionID       string   `xml:"StartConditionId"`
+	StartConditionName     string   `xml:"StartConditionName"`
+	Difficulty             string   `xml:"Difficulty"`
+	DifficultyName         string   `xml:"DifficultyName"`
+	DifficultySetting      string   `xml:"DifficultySetting"`
+	DifficultySettingName  string   `xml:"DifficultySettingName"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if v := strings.TrimSpace(value); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func normalizeXMLKey(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(value))
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+func parseLooseXMLFieldsFromSaveZip(path string, targetFileName string) (map[string]string, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	var entry *zip.File
+	target := strings.ToLower(strings.TrimSpace(targetFileName))
+	for _, f := range zr.File {
+		name := strings.ToLower(filepath.Base(f.Name))
+		if name == target {
+			entry = f
+			break
+		}
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("%s not found in save", targetFileName)
+	}
+
+	rc, err := entry.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	dec := xml.NewDecoder(rc)
+	out := make(map[string]string)
+	var stack []string
+
+	for {
+		tok, tokErr := dec.Token()
+		if tokErr == io.EOF {
+			break
+		}
+		if tokErr != nil {
+			return nil, tokErr
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := normalizeXMLKey(t.Name.Local)
+			stack = append(stack, name)
+			if name != "" {
+				for _, attr := range t.Attr {
+					attrName := normalizeXMLKey(attr.Name.Local)
+					if attrName == "" {
+						continue
+					}
+					fullKey := name + "@" + attrName
+					if _, exists := out[fullKey]; !exists {
+						if v := strings.TrimSpace(attr.Value); v != "" {
+							out[fullKey] = v
+						}
+					}
+				}
+			}
+		case xml.CharData:
+			if len(stack) == 0 {
+				continue
+			}
+			text := strings.TrimSpace(string(t))
+			if text == "" {
+				continue
+			}
+			key := stack[len(stack)-1]
+			if key == "" {
+				continue
+			}
+			if _, exists := out[key]; !exists {
+				out[key] = text
+			}
+		case xml.EndElement:
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+
+	return out, nil
+}
+
+func parseLooseXMLFieldsFromReader(r io.Reader) (map[string]string, error) {
+	dec := xml.NewDecoder(r)
+	out := make(map[string]string)
+	var stack []string
+
+	for {
+		tok, tokErr := dec.Token()
+		if tokErr == io.EOF {
+			break
+		}
+		if tokErr != nil {
+			return nil, tokErr
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := normalizeXMLKey(t.Name.Local)
+			stack = append(stack, name)
+			if name != "" {
+				for _, attr := range t.Attr {
+					attrName := normalizeXMLKey(attr.Name.Local)
+					if attrName == "" {
+						continue
+					}
+					fullKey := name + "@" + attrName
+					if _, exists := out[fullKey]; !exists {
+						if v := strings.TrimSpace(attr.Value); v != "" {
+							out[fullKey] = v
+						}
+					}
+				}
+			}
+		case xml.CharData:
+			if len(stack) == 0 {
+				continue
+			}
+			text := strings.TrimSpace(string(t))
+			if text == "" {
+				continue
+			}
+			key := stack[len(stack)-1]
+			if key == "" {
+				continue
+			}
+			if _, exists := out[key]; !exists {
+				out[key] = text
+			}
+		case xml.EndElement:
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+
+	return out, nil
+}
+
+func parseLooseXMLFieldsFromAllXMLInSaveZip(path string) (map[string]string, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	merged := make(map[string]string)
+	parsedAny := false
+
+	for _, f := range zr.File {
+		name := strings.ToLower(strings.TrimSpace(f.Name))
+		if !strings.HasSuffix(name, ".xml") {
+			continue
+		}
+
+		rc, openErr := f.Open()
+		if openErr != nil {
+			continue
+		}
+		fields, parseErr := parseLooseXMLFieldsFromReader(rc)
+		_ = rc.Close()
+		if parseErr != nil || len(fields) == 0 {
+			continue
+		}
+		parsedAny = true
+
+		fileBase := normalizeXMLKey(filepath.Base(f.Name))
+		for k, v := range fields {
+			if strings.TrimSpace(v) == "" {
+				continue
+			}
+			if _, exists := merged[k]; !exists {
+				merged[k] = v
+			}
+			if fileBase != "" {
+				scopedKey := fileBase + ":" + k
+				if _, exists := merged[scopedKey]; !exists {
+					merged[scopedKey] = v
+				}
+			}
+		}
+	}
+
+	if !parsedAny {
+		return nil, fmt.Errorf("no parsable XML files found in save")
+	}
+	return merged, nil
+}
+
+func firstLooseXMLValue(fields map[string]string, aliases ...string) string {
+	if len(fields) == 0 {
+		return ""
+	}
+	for _, alias := range aliases {
+		key := normalizeXMLKey(alias)
+		if key == "" {
+			continue
+		}
+		if v := strings.TrimSpace(fields[key]); v != "" {
+			return v
+		}
+	}
+	for _, alias := range aliases {
+		key := normalizeXMLKey(alias)
+		if key == "" {
+			continue
+		}
+		attrKey := key + "@value"
+		if v := strings.TrimSpace(fields[attrKey]); v != "" {
+			return v
+		}
+	}
+	for _, alias := range aliases {
+		key := normalizeXMLKey(alias)
+		if key == "" {
+			continue
+		}
+		for fieldKey, value := range fields {
+			if strings.HasPrefix(fieldKey, key+"@") {
+				if v := strings.TrimSpace(value); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func looseXMLValueByTokens(fields map[string]string, requiredTokens ...string) string {
+	if len(fields) == 0 || len(requiredTokens) == 0 {
+		return ""
+	}
+	normalizedTokens := make([]string, 0, len(requiredTokens))
+	for _, tok := range requiredTokens {
+		n := normalizeXMLKey(tok)
+		if n != "" {
+			normalizedTokens = append(normalizedTokens, n)
+		}
+	}
+	if len(normalizedTokens) == 0 {
+		return ""
+	}
+	for key, value := range fields {
+		k := normalizeXMLKey(strings.SplitN(key, "@", 2)[0])
+		if k == "" {
+			continue
+		}
+		all := true
+		for _, tok := range normalizedTokens {
+			if !strings.Contains(k, tok) {
+				all = false
+				break
+			}
+		}
+		if all {
+			if v := strings.TrimSpace(value); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+type worldDataLaunchParams struct {
+	StartLocation string
+	StartCondition string
+	Difficulty string
+}
+
+func parseWorldDataLaunchParamsFromSaveZip(path string) (*worldDataLaunchParams, error) {
+	zr, err := zip.OpenReader(path)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+
+	var entry *zip.File
+	for _, f := range zr.File {
+		name := strings.ToLower(filepath.Base(f.Name))
+		if name == "world.xml" {
+			entry = f
+			break
+		}
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("world.xml not found in save")
+	}
+
+	rc, err := entry.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	params := &worldDataLaunchParams{}
+	dec := xml.NewDecoder(rc)
+	var stack []string
+	allThingsDepth := 0
+	thingSaveDataDepth := 0
+	currentTarget := ""
+	bestDepthByTarget := map[string]int{
+		"start_location":  1 << 30,
+		"start_condition": 1 << 30,
+		"difficulty":      1 << 30,
+	}
+
+	lastIndexOf := func(items []string, needle string) int {
+		for i := len(items) - 1; i >= 0; i-- {
+			if items[i] == needle {
+				return i
+			}
+		}
+		return -1
+	}
+
+	setTargetValue := func(target string, value string, depthFromWorldData int) {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			return
+		}
+		if depthFromWorldData < 0 {
+			return
+		}
+		bestDepth, known := bestDepthByTarget[target]
+		if !known {
+			return
+		}
+		if depthFromWorldData > bestDepth {
+			return
+		}
+		switch target {
+		case "start_location":
+			if params.StartLocation == "" || depthFromWorldData < bestDepthByTarget[target] {
+				params.StartLocation = v
+				bestDepthByTarget[target] = depthFromWorldData
+			}
+		case "start_condition":
+			if params.StartCondition == "" || depthFromWorldData < bestDepthByTarget[target] {
+				params.StartCondition = v
+				bestDepthByTarget[target] = depthFromWorldData
+			}
+		case "difficulty":
+			if params.Difficulty == "" || depthFromWorldData < bestDepthByTarget[target] {
+				params.Difficulty = v
+				bestDepthByTarget[target] = depthFromWorldData
+			}
+		}
+	}
+
+	targetForElement := func(name string) string {
+		switch name {
+		case "startlocation":
+			return "start_location"
+		case "startcondition", "startscenario":
+			return "start_condition"
+		case "difficulty", "difficultysetting":
+			return "difficulty"
+		default:
+			return ""
+		}
+	}
+
+	readLaunchParamAttr := func(attrs []xml.Attr) string {
+		for _, attr := range attrs {
+			attrName := normalizeXMLKey(attr.Name.Local)
+			if attrName == "id" || attrName == "value" || attrName == "name" {
+				if v := strings.TrimSpace(attr.Value); v != "" {
+					return v
+				}
+			}
+		}
+		for _, attr := range attrs {
+			if normalizeXMLKey(attr.Name.Local) == "value" {
+				if v := strings.TrimSpace(attr.Value); v != "" {
+					return v
+				}
+			}
+		}
+		return ""
+	}
+
+	for {
+		tok, tokErr := dec.Token()
+		if tokErr == io.EOF {
+			break
+		}
+		if tokErr != nil {
+			return nil, tokErr
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := normalizeXMLKey(t.Name.Local)
+			stack = append(stack, name)
+
+			if name == "allthings" {
+				allThingsDepth++
+			}
+			if name == "thingsavedata" {
+				thingSaveDataDepth++
+			}
+
+			inThingScope := allThingsDepth > 0 || thingSaveDataDepth > 0
+			worldDataIdx := lastIndexOf(stack, "worlddata")
+			inWorldDataScope := worldDataIdx >= 0
+			if inThingScope || !inWorldDataScope {
+				continue
+			}
+			depthFromWorldData := len(stack) - worldDataIdx - 1
+
+			if target := targetForElement(name); target != "" {
+				currentTarget = target
+				if v := readLaunchParamAttr(t.Attr); v != "" {
+					setTargetValue(target, v, depthFromWorldData)
+				}
+			}
+			if currentTarget != "" && name == "value" {
+				if v := readLaunchParamAttr(t.Attr); v != "" {
+					setTargetValue(currentTarget, v, depthFromWorldData-1)
+				}
+			}
+
+		case xml.CharData:
+			if len(stack) == 0 {
+				continue
+			}
+			inThingScope := allThingsDepth > 0 || thingSaveDataDepth > 0
+			worldDataIdx := lastIndexOf(stack, "worlddata")
+			inWorldDataScope := worldDataIdx >= 0
+			if inThingScope || !inWorldDataScope {
+				continue
+			}
+			depthFromWorldData := len(stack) - worldDataIdx - 1
+			text := strings.TrimSpace(string(t))
+			if text == "" {
+				continue
+			}
+			if currentTarget != "" {
+				setTargetValue(currentTarget, text, depthFromWorldData)
+			}
+
+		case xml.EndElement:
+			name := normalizeXMLKey(t.Name.Local)
+			if target := targetForElement(name); target != "" && currentTarget == target {
+				currentTarget = ""
+			}
+			if name == "thingsavedata" && thingSaveDataDepth > 0 {
+				thingSaveDataDepth--
+			}
+			if name == "allthings" && allThingsDepth > 0 {
+				allThingsDepth--
+			}
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+
+	if params.StartLocation == "" && params.StartCondition == "" && params.Difficulty == "" {
+		return nil, fmt.Errorf("world.xml launch params not found")
+	}
+	return params, nil
 }
 
 func parseWorldMetaFromSaveZip(path string) (*worldMetaXML, error) {
@@ -1922,11 +2456,75 @@ func (h *ManagerHandlers) APIServersAnalyzeSave(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "world_meta.xml not found in save"})
 		return
 	}
-	// Best-effort parse of settings.xml for defaults
+	// Best-effort parse of world metadata for defaults
 	resp := gin.H{
 		"world":           strings.TrimSpace(meta.WorldName),
 		"world_file_name": strings.TrimSpace(meta.WorldFileName),
 	}
+	if worldDataParams, err := parseWorldDataLaunchParamsFromSaveZip(tmp); err == nil && worldDataParams != nil {
+		if v := strings.TrimSpace(worldDataParams.StartLocation); v != "" {
+			resp["start_location"] = v
+		}
+		if v := strings.TrimSpace(worldDataParams.StartCondition); v != "" {
+			resp["start_condition"] = v
+		}
+		if v := strings.TrimSpace(worldDataParams.Difficulty); v != "" {
+			resp["difficulty"] = v
+		}
+	}
+	if v := firstNonEmpty(meta.StartLocation, meta.StartLocationID, meta.StartLocationName); v != "" {
+		if _, exists := resp["start_location"]; !exists {
+			resp["start_location"] = v
+		}
+	}
+	if v := firstNonEmpty(meta.StartCondition, meta.StartConditionID, meta.StartConditionName); v != "" {
+		if _, exists := resp["start_condition"]; !exists {
+			resp["start_condition"] = v
+		}
+	}
+	if v := firstNonEmpty(meta.Difficulty, meta.DifficultySetting, meta.DifficultyName, meta.DifficultySettingName); v != "" {
+		if _, exists := resp["difficulty"]; !exists {
+			resp["difficulty"] = v
+		}
+	}
+	if looseMeta, err := parseLooseXMLFieldsFromSaveZip(tmp, "world_meta.xml"); err == nil && len(looseMeta) > 0 {
+		if _, exists := resp["start_location"]; !exists {
+			if v := firstLooseXMLValue(looseMeta,
+				"StartLocation", "StartLocationId", "StartLocationName",
+				"Location", "SpawnLocation", "SpawnPoint", "StartLoc",
+			); v != "" {
+				resp["start_location"] = v
+			} else if v := looseXMLValueByTokens(looseMeta, "start", "location"); v != "" {
+				resp["start_location"] = v
+			} else if v := looseXMLValueByTokens(looseMeta, "spawn", "location"); v != "" {
+				resp["start_location"] = v
+			}
+		}
+		if _, exists := resp["start_condition"]; !exists {
+			if v := firstLooseXMLValue(looseMeta,
+				"StartCondition", "StartConditionId", "StartConditionName",
+				"Condition", "StartScenario", "Scenario",
+			); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(looseMeta, "start", "condition"); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(looseMeta, "scenario"); v != "" {
+				resp["start_condition"] = v
+			}
+		}
+		if _, exists := resp["difficulty"]; !exists {
+			if v := firstLooseXMLValue(looseMeta,
+				"Difficulty", "DifficultySetting", "DifficultyName", "DifficultySettingName",
+				"GameDifficulty", "DifficultyId", "DifficultyLevel",
+			); v != "" {
+				resp["difficulty"] = v
+			} else if v := looseXMLValueByTokens(looseMeta, "difficulty"); v != "" {
+				resp["difficulty"] = v
+			}
+		}
+	}
+
+	// Best-effort parse of settings.xml for defaults
 	if settings, perr := parseSettingsFromSaveZip(tmp); perr == nil && settings != nil {
 		if settings.GamePort != nil && *settings.GamePort > 0 {
 			resp["port"] = *settings.GamePort
@@ -1956,6 +2554,109 @@ func (h *ManagerHandlers) APIServersAnalyzeSave(c *gin.Context) {
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			resp["disconnect_timeout"] = *settings.DisconnectTimeout
 		}
+		if _, exists := resp["start_location"]; !exists && settings.StartLocation != nil {
+			if v := strings.TrimSpace(*settings.StartLocation); v != "" {
+				resp["start_location"] = v
+			}
+		}
+		if _, exists := resp["start_condition"]; !exists && settings.StartCondition != nil {
+			if v := strings.TrimSpace(*settings.StartCondition); v != "" {
+				resp["start_condition"] = v
+			}
+		}
+		if _, exists := resp["difficulty"]; !exists {
+			if settings.Difficulty != nil {
+				if v := strings.TrimSpace(*settings.Difficulty); v != "" {
+					resp["difficulty"] = v
+				}
+			}
+			if _, stillMissing := resp["difficulty"]; stillMissing && settings.DifficultySetting != nil {
+				if v := strings.TrimSpace(*settings.DifficultySetting); v != "" {
+					resp["difficulty"] = v
+				}
+			}
+		}
+	}
+	if looseSettings, err := parseLooseXMLFieldsFromSaveZip(tmp, "settings.xml"); err == nil && len(looseSettings) > 0 {
+		if _, exists := resp["start_location"]; !exists {
+			if v := firstLooseXMLValue(looseSettings,
+				"StartLocation", "StartLocationId", "StartLocationName", "SpawnLocation", "StartLoc",
+			); v != "" {
+				resp["start_location"] = v
+			} else if v := looseXMLValueByTokens(looseSettings, "start", "location"); v != "" {
+				resp["start_location"] = v
+			}
+		}
+		if _, exists := resp["start_condition"]; !exists {
+			if v := firstLooseXMLValue(looseSettings,
+				"StartCondition", "StartConditionId", "StartConditionName", "StartScenario", "Scenario",
+			); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(looseSettings, "start", "condition"); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(looseSettings, "scenario"); v != "" {
+				resp["start_condition"] = v
+			}
+		}
+		if _, exists := resp["difficulty"]; !exists {
+			if v := firstLooseXMLValue(looseSettings,
+				"Difficulty", "DifficultySetting", "DifficultyName", "DifficultySettingName", "GameDifficulty", "DifficultyId",
+			); v != "" {
+				resp["difficulty"] = v
+			} else if v := looseXMLValueByTokens(looseSettings, "difficulty"); v != "" {
+				resp["difficulty"] = v
+			}
+		}
+	}
+	var allXMLFields map[string]string
+	allXMLLoaded := false
+	loadAllXMLFields := func() map[string]string {
+		if allXMLLoaded {
+			return allXMLFields
+		}
+		allXMLLoaded = true
+		if fields, err := parseLooseXMLFieldsFromAllXMLInSaveZip(tmp); err == nil && len(fields) > 0 {
+			allXMLFields = fields
+		}
+		return allXMLFields
+	}
+
+	if _, locExists := resp["start_location"]; !locExists {
+		if allXML := loadAllXMLFields(); len(allXML) > 0 {
+			if v := firstLooseXMLValue(allXML,
+				"StartLocation", "StartLocationId", "StartLocationName", "SpawnLocation", "StartLoc",
+			); v != "" {
+				resp["start_location"] = v
+			} else if v := looseXMLValueByTokens(allXML, "start", "location"); v != "" {
+				resp["start_location"] = v
+			} else if v := looseXMLValueByTokens(allXML, "spawn", "location"); v != "" {
+				resp["start_location"] = v
+			}
+		}
+	}
+	if _, condExists := resp["start_condition"]; !condExists {
+		if allXML := loadAllXMLFields(); len(allXML) > 0 {
+			if v := firstLooseXMLValue(allXML,
+				"StartCondition", "StartConditionId", "StartConditionName", "StartScenario", "Scenario",
+			); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(allXML, "start", "condition"); v != "" {
+				resp["start_condition"] = v
+			} else if v := looseXMLValueByTokens(allXML, "scenario"); v != "" {
+				resp["start_condition"] = v
+			}
+		}
+	}
+	if _, diffExists := resp["difficulty"]; !diffExists {
+		if allXML := loadAllXMLFields(); len(allXML) > 0 {
+			if v := firstLooseXMLValue(allXML,
+				"Difficulty", "DifficultySetting", "DifficultyName", "DifficultySettingName", "GameDifficulty", "DifficultyId",
+			); v != "" {
+				resp["difficulty"] = v
+			} else if v := looseXMLValueByTokens(allXML, "difficulty"); v != "" {
+				resp["difficulty"] = v
+			}
+		}
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -1980,8 +2681,8 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	// Non-modifiable (derived) fields
 	name := ""
 	world := ""
-	startLocation := ""
-	startCondition := ""
+	startLocation := middleware.SanitizeString(c.PostForm("start_location"))
+	startCondition := middleware.SanitizeString(c.PostForm("start_condition"))
 	beta := strings.TrimSpace(c.PostForm("beta")) == "true"
 	password := c.PostForm("password")
 	authSecret := c.PostForm("auth_secret")
@@ -2078,6 +2779,53 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 	} else if wf := strings.TrimSpace(meta.WorldFileName); wf != "" {
 		name = middleware.SanitizeString(wf)
 	}
+	worldDataParams, _ := parseWorldDataLaunchParamsFromSaveZip(tmp)
+	if startLocation == "" {
+		startLocation = middleware.SanitizeString(firstNonEmpty(func() string {
+			if worldDataParams != nil {
+				return worldDataParams.StartLocation
+			}
+			return ""
+		}(), meta.StartLocation, meta.StartLocationID, meta.StartLocationName))
+	}
+	if startCondition == "" {
+		startCondition = middleware.SanitizeString(firstNonEmpty(func() string {
+			if worldDataParams != nil {
+				return worldDataParams.StartCondition
+			}
+			return ""
+		}(), meta.StartCondition, meta.StartConditionID, meta.StartConditionName))
+	}
+	if difficulty == "" {
+		difficulty = middleware.SanitizeString(firstNonEmpty(func() string {
+			if worldDataParams != nil {
+				return worldDataParams.Difficulty
+			}
+			return ""
+		}(), meta.Difficulty, meta.DifficultySetting, meta.DifficultyName, meta.DifficultySettingName))
+	}
+	if (startLocation == "" || startCondition == "" || difficulty == "") {
+		if looseMeta, err := parseLooseXMLFieldsFromSaveZip(tmp, "world_meta.xml"); err == nil && len(looseMeta) > 0 {
+			if startLocation == "" {
+				startLocation = middleware.SanitizeString(firstLooseXMLValue(looseMeta,
+					"StartLocation", "StartLocationId", "StartLocationName",
+					"Location", "SpawnLocation", "SpawnPoint", "StartLoc",
+				))
+			}
+			if startCondition == "" {
+				startCondition = middleware.SanitizeString(firstLooseXMLValue(looseMeta,
+					"StartCondition", "StartConditionId", "StartConditionName",
+					"Condition", "StartScenario", "Scenario",
+				))
+			}
+			if difficulty == "" {
+				difficulty = middleware.SanitizeString(firstLooseXMLValue(looseMeta,
+					"Difficulty", "DifficultySetting", "DifficultyName", "DifficultySettingName",
+					"GameDifficulty", "DifficultyId", "DifficultyLevel",
+				))
+			}
+		}
+	}
 
 	// Secondary: parse settings.xml from zip (best effort) for ancillary settings only.
 	if settings, perr := parseSettingsFromSaveZip(tmp); perr == nil && settings != nil {
@@ -2094,6 +2842,39 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		// Ignore UseSteamP2P from settings
 		if settings.DisconnectTimeout != nil && *settings.DisconnectTimeout > 0 {
 			disconnectTimeout = *settings.DisconnectTimeout
+		}
+		if startLocation == "" && settings.StartLocation != nil {
+			startLocation = middleware.SanitizeString(*settings.StartLocation)
+		}
+		if startCondition == "" && settings.StartCondition != nil {
+			startCondition = middleware.SanitizeString(*settings.StartCondition)
+		}
+		if difficulty == "" {
+			if settings.Difficulty != nil {
+				difficulty = middleware.SanitizeString(*settings.Difficulty)
+			}
+			if difficulty == "" && settings.DifficultySetting != nil {
+				difficulty = middleware.SanitizeString(*settings.DifficultySetting)
+			}
+		}
+	}
+	if (startLocation == "" || startCondition == "" || difficulty == "") {
+		if looseSettings, err := parseLooseXMLFieldsFromSaveZip(tmp, "settings.xml"); err == nil && len(looseSettings) > 0 {
+			if startLocation == "" {
+				startLocation = middleware.SanitizeString(firstLooseXMLValue(looseSettings,
+					"StartLocation", "StartLocationId", "StartLocationName", "SpawnLocation", "StartLoc",
+				))
+			}
+			if startCondition == "" {
+				startCondition = middleware.SanitizeString(firstLooseXMLValue(looseSettings,
+					"StartCondition", "StartConditionId", "StartConditionName", "StartScenario", "Scenario",
+				))
+			}
+			if difficulty == "" {
+				difficulty = middleware.SanitizeString(firstLooseXMLValue(looseSettings,
+					"Difficulty", "DifficultySetting", "DifficultyName", "DifficultySettingName", "GameDifficulty", "DifficultyId",
+				))
+			}
 		}
 	}
 
@@ -2219,41 +3000,58 @@ func (h *ManagerHandlers) APIServersCreateFromSave(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create server"})
 		return
 	}
+	h.bindServerLifecycleEventReporter(newServer)
 
-	// Ensure directory exists and move the .save into saves/<ServerName>/
-	var savesDir string
-	if newServer.Paths != nil {
-		savesDir = newServer.Paths.ServerSavesDir(newServer.ID)
-	} else if h.manager.Paths != nil {
-		savesDir = h.manager.Paths.ServerSavesDir(newServer.ID)
-	}
-	if strings.TrimSpace(savesDir) != "" {
-		targetDir := filepath.Join(savesDir, newServer.Name)
-		_ = os.MkdirAll(targetDir, 0o755)
+	// Ensure the uploaded .save is copied into the server world-save directory so
+	// it becomes the initial world archive available to the new server.
+	worldDir, worldDirErr := h.serverWorldSavesDirUploadTarget(newServer)
+	if worldDirErr != nil {
+		if h.manager != nil && h.manager.Log != nil {
+			h.manager.Log.Write(fmt.Sprintf("Failed to resolve world save directory for %s (ID:%d): %v", newServer.Name, newServer.ID, worldDirErr))
+		}
+		_ = os.Remove(tmp)
+	} else {
 		safeBase := middleware.SanitizeFilename(file.Filename)
 		if !strings.HasSuffix(strings.ToLower(safeBase), ".save") {
 			safeBase = safeBase + ".save"
 		}
-		target := filepath.Join(targetDir, filepath.Base(safeBase))
+		target := filepath.Join(worldDir, filepath.Base(safeBase))
 		// If target exists, append timestamp to avoid overwrite
 		if _, err := os.Stat(target); err == nil {
 			ts := time.Now().Format("20060102-150405")
 			nameOnly := strings.TrimSuffix(filepath.Base(safeBase), ".save")
-			target = filepath.Join(targetDir, fmt.Sprintf("%s-%s.save", nameOnly, ts))
+			target = filepath.Join(worldDir, fmt.Sprintf("%s-%s.save", nameOnly, ts))
 		}
-		if err := os.Rename(tmp, target); err != nil {
-			// Fallback to copy then remove temp
-			if in, e1 := os.Open(tmp); e1 == nil {
-				if out, e2 := os.Create(target); e2 == nil {
-					_, _ = io.Copy(out, in)
-					out.Close()
-				}
-				in.Close()
+
+		src, openErr := os.Open(tmp)
+		if openErr != nil {
+			if h.manager != nil && h.manager.Log != nil {
+				h.manager.Log.Write(fmt.Sprintf("Failed to open temp uploaded save %s for %s (ID:%d): %v", tmp, newServer.Name, newServer.ID, openErr))
 			}
 			_ = os.Remove(tmp)
+		} else {
+			dst, createErr := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+			if createErr != nil {
+				if h.manager != nil && h.manager.Log != nil {
+					h.manager.Log.Write(fmt.Sprintf("Failed to create initial world save %s for %s (ID:%d): %v", target, newServer.Name, newServer.ID, createErr))
+				}
+				_ = src.Close()
+				_ = os.Remove(tmp)
+			} else {
+				_, copyErr := io.Copy(dst, src)
+				closeDstErr := dst.Close()
+				closeSrcErr := src.Close()
+				_ = os.Remove(tmp)
+				if copyErr != nil || closeDstErr != nil || closeSrcErr != nil {
+					_ = os.Remove(target)
+					if h.manager != nil && h.manager.Log != nil {
+						h.manager.Log.Write(fmt.Sprintf("Failed to copy initial world save to %s for %s (ID:%d): copy=%v closeDst=%v closeSrc=%v", target, newServer.Name, newServer.ID, copyErr, closeDstErr, closeSrcErr))
+					}
+				} else if h.manager != nil && h.manager.Log != nil {
+					h.manager.Log.Write(fmt.Sprintf("Copied initial world save for %s (ID:%d) to %s", newServer.Name, newServer.ID, target))
+				}
+			}
 		}
-	} else {
-		_ = os.Remove(tmp)
 	}
 
 	// Best-effort initial deploy
@@ -2884,6 +3682,160 @@ func (h *ManagerHandlers) APIServerWorldSaves(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"files": response})
 }
 
+// APIServerWorldUpload uploads a .save world archive into saves/<ServerName>/ for an existing server.
+// RBAC: admins or assigned operators may upload.
+func (h *ManagerHandlers) APIServerWorldUpload(c *gin.Context) {
+	serverID, err := strconv.Atoi(c.Param("server_id"))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+
+	role := c.GetString("role")
+	if role != "admin" {
+		if val, ok := c.Get("username"); ok {
+			if user, ok2 := val.(string); ok2 {
+				if h.userStore == nil || !h.userStore.CanAccess(user, serverID) {
+					c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+					return
+				}
+			}
+		}
+	}
+
+	s := h.manager.ServerByID(serverID)
+	if s == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Server not found"})
+		return
+	}
+	if s.IsRunning() {
+		c.JSON(http.StatusConflict, gin.H{"error": "stop the server before uploading a world save"})
+		return
+	}
+
+	fh, err := c.FormFile("save_file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "save_file (.save) is required"})
+		return
+	}
+
+	overwriteValue := strings.ToLower(strings.TrimSpace(c.Query("overwrite")))
+	if overwriteValue == "" {
+		overwriteValue = strings.ToLower(strings.TrimSpace(c.PostForm("overwrite")))
+	}
+	overwrite := overwriteValue == "1" || overwriteValue == "true" || overwriteValue == "yes" || overwriteValue == "on"
+
+	name := filepath.Base(strings.TrimSpace(fh.Filename))
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".save") {
+		name += ".save"
+	}
+
+	worldDir, err := h.serverWorldSavesDirUploadTarget(s)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "world saves directory not available"})
+		return
+	}
+
+	target := filepath.Join(worldDir, name)
+	if !pathWithin(worldDir, target) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filename"})
+		return
+	}
+	removedSaves := 0
+	if st, statErr := os.Stat(target); statErr == nil && !st.IsDir() {
+		if !overwrite {
+			c.JSON(http.StatusConflict, gin.H{"error": "a save with that name already exists"})
+			return
+		}
+		if removed, purgeErr := purgeWorldSaveFiles(worldDir); purgeErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to clear existing world saves"})
+			return
+		} else {
+			removedSaves = removed
+		}
+	}
+
+	tmp, err := h.saveUploadToTemp(c, fh, "world-upload-*.save")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save upload"})
+		return
+	}
+	defer os.Remove(tmp)
+
+	if err := os.Rename(tmp, target); err != nil {
+		src, openErr := os.Open(tmp)
+		if openErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read upload"})
+			return
+		}
+		defer src.Close()
+
+		openFlags := os.O_CREATE | os.O_WRONLY
+		if overwrite {
+			openFlags |= os.O_TRUNC
+		} else {
+			openFlags |= os.O_EXCL
+		}
+		dst, createErr := os.OpenFile(target, openFlags, 0o644)
+		if createErr != nil {
+			if errors.Is(createErr, os.ErrExist) {
+				c.JSON(http.StatusConflict, gin.H{"error": "a save with that name already exists"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store upload"})
+			return
+		}
+		_, copyErr := io.Copy(dst, src)
+		closeErr := dst.Close()
+		if copyErr != nil || closeErr != nil {
+			_ = os.Remove(target)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store upload"})
+			return
+		}
+	}
+
+	if overwrite {
+		ToastSuccess(c, "World Overwritten", fmt.Sprintf("Replaced %s and removed %d existing save file(s) across all save directories.", name, removedSaves))
+	} else {
+		ToastSuccess(c, "World Uploaded", fmt.Sprintf("Uploaded %s", name))
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "file": name})
+}
+
+// purgeWorldSaveFiles deletes all .save files under worldDir (including known save
+// sub-directories such as autosave/quicksave/manualsave/playersave and root).
+// Directories are preserved.
+func purgeWorldSaveFiles(worldDir string) (int, error) {
+	if strings.TrimSpace(worldDir) == "" {
+		return 0, fmt.Errorf("invalid world save directory")
+	}
+	removed := 0
+	err := filepath.Walk(worldDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info == nil || info.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(info.Name()), ".save") {
+			return nil
+		}
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		removed++
+		return nil
+	})
+	if err != nil {
+		return removed, err
+	}
+	return removed, nil
+}
+
 var (
 	errWorldSaveNotFound = errors.New("world save not found")
 	errNoWorldSaves      = errors.New("no world saves available")
@@ -2997,6 +3949,26 @@ func (h *ManagerHandlers) serverWorldSavesDir(s *models.Server) (string, error) 
 	info, err := os.Stat(worldDir)
 	if err != nil || !info.IsDir() {
 		return "", fmt.Errorf("world saves not found")
+	}
+	return worldDir, nil
+}
+
+func (h *ManagerHandlers) serverWorldSavesDirUploadTarget(s *models.Server) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("Server not found")
+	}
+	var savesRoot string
+	if s.Paths != nil {
+		savesRoot = s.Paths.ServerSavesDir(s.ID)
+	} else if h.manager != nil && h.manager.Paths != nil {
+		savesRoot = h.manager.Paths.ServerSavesDir(s.ID)
+	}
+	if strings.TrimSpace(savesRoot) == "" {
+		return "", fmt.Errorf("world saves directory not available")
+	}
+	worldDir := filepath.Join(savesRoot, s.Name)
+	if err := os.MkdirAll(worldDir, 0o755); err != nil {
+		return "", err
 	}
 	return worldDir, nil
 }

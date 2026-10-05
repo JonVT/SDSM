@@ -357,6 +357,33 @@ func (h *ManagerHandlers) UpdatePOST(c *gin.Context) {
 			h.manager.Language = language
 			h.manager.Save()
 		}
+	} else if component := strings.ToLower(strings.TrimSpace(c.PostForm("update_component"))); component != "" {
+		actionHandled = true
+		switch component {
+		case "release":
+			deployType = manager.DeployTypeRelease
+		case "beta":
+			deployType = manager.DeployTypeBeta
+		case "steamcmd":
+			deployType = manager.DeployTypeSteamCMD
+		case "bepinex":
+			deployType = manager.DeployTypeBepInEx
+		case "launchpad":
+			deployType = manager.DeployTypeLaunchPad
+		case "scon":
+			deployType = manager.DeployTypeSCON
+		case "all":
+			deployType = manager.DeployTypeAll
+		default:
+			if isAsync {
+				ToastError(c, "Invalid Request", "Unknown update component.")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "unknown update component"})
+				return
+			}
+			c.Redirect(http.StatusFound, "/manager")
+			return
+		}
+		deployErr = h.startDeployAsync(deployType)
 	} else if c.PostForm("update_release") != "" {
 		actionHandled = true
 		deployType = manager.DeployTypeRelease

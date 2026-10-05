@@ -46,11 +46,9 @@
                         </div>
                     </div>
                     <div class="card-body flex flex-col gap-6">
-                        <section class="discord-section">
-                            <div class="section-heading">
-                                <h3>Manager Webhook</h3>
-                                <p>Used for deploy + manager alerts. Falls back to the server default when empty.</p>
-                            </div>
+                        <fieldset class="discord-section discord-fieldset">
+                            <legend>Manager Webhook</legend>
+                            <p class="discord-fieldset-hint">Used for deploy + manager alerts. Falls back to the server default when empty.</p>
                             <div class="webhook-grid single">
                                 <div class="form-group">
                                     <label for="discord_manager_webhook" class="form-label">Manager Webhook</label>
@@ -59,13 +57,11 @@
                                     {{with .field_errors}}{{with index . "discord_manager_webhook"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
                                 </div>
                             </div>
-                        </section>
+                        </fieldset>
 
-                        <section class="discord-section">
-                            <div class="section-heading">
-                                <h3>Component Coverage</h3>
-                                <p>Choose which deploy components should emit notifications.</p>
-                            </div>
+                        <fieldset class="discord-section discord-fieldset">
+                            <legend>Component Coverage</legend>
+                            <p class="discord-fieldset-hint">Choose which deploy components should emit notifications.</p>
                             <label class="toggle-field">
                                 <input type="checkbox" id="notify_enable_deploy" name="notify_enable_deploy" form="manager-settings-form" class="form-checkbox" {{ if .notify_enable_deploy }}checked{{ end }}>
                                 <span>Send manager notifications</span>
@@ -100,9 +96,9 @@
                                     <span>Servers</span>
                                 </label>
                             </div>
-                        </section>
+                        </fieldset>
 
-                        <details class="discord-collapse discord-subsection" data-collapse-id="discord-manager-templates" open>
+                        <details class="discord-collapse discord-subsection" data-collapse-id="discord-manager-templates" data-discord-template-editor="manager" open>
                             <summary class="discord-collapse-summary">
                                 <div class="section-heading">
                                     <h3>Notification Templates</h3>
@@ -113,59 +109,131 @@
                                 </span>
                             </summary>
                             <div class="discord-collapse-body">
-                            <div class="notification-grid" aria-label="Manager notification templates">
-                                <div class="notification-row stacked" role="group" aria-labelledby="manager-event-start">
-                                    <span class="notification-label" id="manager-event-start">Deploy Started</span>
-                                    <div class="notification-fields">
-                                        <label class="field-group enabled-field">
-                                            <span class="field-title">Enabled</span>
-                                            <input type="checkbox" id="notify_deploy_on_started" name="notify_deploy_on_started" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_started }}checked{{ end }}>
-                                        </label>
-                                        <label class="field-group message-field">
-                                            <span class="field-title">Message</span>
-                                            <textarea id="notify_msg_deploy_started" name="notify_msg_deploy_started" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment started: {{`{{component}}`}}">{{ .notify_msg_deploy_started }}</textarea>
-                                        </label>
-                                        <label class="field-group color-field">
-                                            <span class="field-title">Color</span>
-                                            <input type="color" id="notify_color_deploy_started" name="notify_color_deploy_started" form="manager-settings-form" value="{{ .notify_color_deploy_started }}" class="color-picker">
-                                        </label>
+                            <div class="discord-template-toolbar" role="group" aria-label="Manager template tools">
+                                <label class="field-group preset-field">
+                                    <span class="field-title">Preview template</span>
+                                    <select class="form-control" data-discord-preview-select>
+                                        <option value="notify_msg_deploy_started">Deploy Started</option>
+                                        <option value="notify_msg_deploy_completed">Deploy Completed</option>
+                                        <option value="notify_msg_deploy_completed_error">Deploy Error</option>
+                                    </select>
+                                </label>
+                                <label class="field-group preset-field">
+                                    <span class="field-title">Preset</span>
+                                    <div class="preset-row">
+                                        <select class="form-control" data-discord-preset>
+                                            <option value="">Choose preset…</option>
+                                            <option value="concise">Concise status</option>
+                                            <option value="detailed">Detailed update</option>
+                                            <option value="alert">Alert / incident</option>
+                                        </select>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-discord-apply-preset>Apply</button>
                                     </div>
-                                </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="manager-event-complete">
-                                    <span class="notification-label" id="manager-event-complete">Deploy Completed</span>
-                                    <div class="notification-fields">
-                                        <label class="field-group enabled-field">
-                                            <span class="field-title">Enabled</span>
-                                            <input type="checkbox" id="notify_deploy_on_completed" name="notify_deploy_on_completed" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_completed }}checked{{ end }}>
-                                        </label>
-                                        <label class="field-group message-field">
-                                            <span class="field-title">Message</span>
-                                            <textarea id="notify_msg_deploy_completed" name="notify_msg_deploy_completed" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment completed: {{`{{component}}`}}">{{ .notify_msg_deploy_completed }}</textarea>
-                                        </label>
-                                        <label class="field-group color-field">
-                                            <span class="field-title">Color</span>
-                                            <input type="color" id="notify_color_deploy_completed" name="notify_color_deploy_completed" form="manager-settings-form" value="{{ .notify_color_deploy_completed }}" class="color-picker">
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="manager-event-error">
-                                    <span class="notification-label" id="manager-event-error">Deploy Error</span>
-                                    <div class="notification-fields">
-                                        <label class="field-group enabled-field">
-                                            <span class="field-title">Enabled</span>
-                                            <input type="checkbox" id="notify_deploy_on_completed_error" name="notify_deploy_on_completed_error" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_completed_error }}checked{{ end }}>
-                                        </label>
-                                        <label class="field-group message-field">
-                                            <span class="field-title">Message</span>
-                                            <textarea id="notify_msg_deploy_completed_error" name="notify_msg_deploy_completed_error" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment completed with errors: {{`{{component}}`}}">{{ .notify_msg_deploy_completed_error }}</textarea>
-                                        </label>
-                                        <label class="field-group color-field">
-                                            <span class="field-title">Color</span>
-                                            <input type="color" id="notify_color_deploy_completed_error" name="notify_color_deploy_completed_error" form="manager-settings-form" value="{{ .notify_color_deploy_completed_error }}" class="color-picker">
-                                        </label>
+                                </label>
+                                <div class="field-group preset-field">
+                                    <span class="field-title">Insert snippet</span>
+                                    <div class="snippet-row" role="group" aria-label="Manager token snippets">
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{component}}`}}">Component</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{duration}}`}}">Duration</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{error}}`}}">Error</button>
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="discord-template-preview" data-discord-preview>
+                                <p class="discord-template-preview-title">Live Preview</p>
+                                <div class="discord-preview-embed">
+                                    <div class="discord-preview-accent" data-discord-preview-color></div>
+                                    <div class="discord-preview-content">
+                                        <p class="discord-preview-event" data-discord-preview-event>Deploy Started</p>
+                                        <p class="discord-preview-message" data-discord-preview-message></p>
+                                        <p class="discord-preview-meta" data-discord-preview-enabled></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <details class="discord-collapse discord-event-group" data-collapse-id="discord-manager-common-events" open>
+                                <summary class="discord-collapse-summary">
+                                    <div class="section-heading">
+                                        <h3>Common Deploy Events</h3>
+                                        <p>Frequent progress notifications. Open by default for quick edits.</p>
+                                    </div>
+                                    <span class="summary-icon" data-collapse-icon>
+                                        <i data-feather="chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </summary>
+                                <div class="discord-collapse-body">
+                                    <div class="notification-grid" aria-label="Manager common notification templates">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="manager-event-start" data-template-key="notify_msg_deploy_started">
+                                            <span class="notification-label" id="manager-event-start">Deploy Started</span>
+                                            <div class="notification-fields">
+                                                <label class="field-group enabled-field">
+                                                    <span class="field-title">Enabled</span>
+                                                    <input type="checkbox" id="notify_deploy_on_started" name="notify_deploy_on_started" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_started }}checked{{ end }}>
+                                                </label>
+                                                <label class="field-group message-field">
+                                                    <span class="field-title">Message</span>
+                                                    <textarea id="notify_msg_deploy_started" name="notify_msg_deploy_started" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment started: {{`{{component}}`}}">{{ .notify_msg_deploy_started }}</textarea>
+                                                </label>
+                                                <label class="field-group color-field">
+                                                    <span class="field-title">Color</span>
+                                                    <input type="color" id="notify_color_deploy_started" name="notify_color_deploy_started" form="manager-settings-form" value="{{ .notify_color_deploy_started }}" class="color-picker">
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="notification-row stacked" role="group" aria-labelledby="manager-event-complete" data-template-key="notify_msg_deploy_completed">
+                                            <span class="notification-label" id="manager-event-complete">Deploy Completed</span>
+                                            <div class="notification-fields">
+                                                <label class="field-group enabled-field">
+                                                    <span class="field-title">Enabled</span>
+                                                    <input type="checkbox" id="notify_deploy_on_completed" name="notify_deploy_on_completed" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_completed }}checked{{ end }}>
+                                                </label>
+                                                <label class="field-group message-field">
+                                                    <span class="field-title">Message</span>
+                                                    <textarea id="notify_msg_deploy_completed" name="notify_msg_deploy_completed" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment completed: {{`{{component}}`}}">{{ .notify_msg_deploy_completed }}</textarea>
+                                                </label>
+                                                <label class="field-group color-field">
+                                                    <span class="field-title">Color</span>
+                                                    <input type="color" id="notify_color_deploy_completed" name="notify_color_deploy_completed" form="manager-settings-form" value="{{ .notify_color_deploy_completed }}" class="color-picker">
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="discord-collapse discord-event-group" data-collapse-id="discord-manager-advanced-events">
+                                <summary class="discord-collapse-summary">
+                                    <div class="section-heading">
+                                        <h3>Advanced / Failure Events</h3>
+                                        <p>Error-focused template. Collapsed by default to reduce visual load.</p>
+                                    </div>
+                                    <span class="summary-icon" data-collapse-icon>
+                                        <i data-feather="chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </summary>
+                                <div class="discord-collapse-body">
+                                    <div class="notification-grid" aria-label="Manager advanced notification templates">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="manager-event-error" data-template-key="notify_msg_deploy_completed_error">
+                                            <span class="notification-label" id="manager-event-error">Deploy Error</span>
+                                            <div class="notification-fields">
+                                                <label class="field-group enabled-field">
+                                                    <span class="field-title">Enabled</span>
+                                                    <input type="checkbox" id="notify_deploy_on_completed_error" name="notify_deploy_on_completed_error" form="manager-settings-form" class="form-checkbox" {{ if .notify_deploy_on_completed_error }}checked{{ end }}>
+                                                </label>
+                                                <label class="field-group message-field">
+                                                    <span class="field-title">Message</span>
+                                                    <textarea id="notify_msg_deploy_completed_error" name="notify_msg_deploy_completed_error" form="manager-settings-form" rows="2" class="form-control" placeholder="Deployment completed with errors: {{`{{component}}`}}">{{ .notify_msg_deploy_completed_error }}</textarea>
+                                                </label>
+                                                <label class="field-group color-field">
+                                                    <span class="field-title">Color</span>
+                                                    <input type="color" id="notify_color_deploy_completed_error" name="notify_color_deploy_completed_error" form="manager-settings-form" value="{{ .notify_color_deploy_completed_error }}" class="color-picker">
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </details>
                             </div>
                         </details>
                     </div>
@@ -179,11 +247,9 @@
                         </div>
                     </div>
                     <div class="card-body flex flex-col gap-6">
-                        <section class="discord-section">
-                            <div class="section-heading">
-                                <h3>Default Server Webhook</h3>
-                                <p>Servers inherit this webhook unless a custom one is set on the server itself.</p>
-                            </div>
+                        <fieldset class="discord-section discord-fieldset">
+                            <legend>Default Server Webhook</legend>
+                            <p class="discord-fieldset-hint">Servers inherit this webhook unless a custom one is set on the server itself.</p>
                             <div class="webhook-grid single">
                                 <div class="form-group">
                                     <label for="discord_default_webhook" class="form-label">Default Server Webhook</label>
@@ -192,20 +258,18 @@
                                     {{with .field_errors}}{{with index . "discord_default_webhook"}}<p class="text-danger text-sm" role="alert">{{.}}</p>{{end}}{{end}}
                                 </div>
                             </div>
-                        </section>
+                        </fieldset>
 
-                        <section class="discord-section">
-                            <div class="section-heading">
-                                <h3>Server Notification Defaults</h3>
-                                <p>Toggle to enable or disable sending default events for every server managed by SDSM.</p>
-                            </div>
+                        <fieldset class="discord-section discord-fieldset">
+                            <legend>Server Notification Defaults</legend>
+                            <p class="discord-fieldset-hint">Toggle to enable or disable sending default events for every server managed by SDSM.</p>
                             <label class="toggle-field">
                                 <input type="checkbox" id="notify_enable_server" name="notify_enable_server" form="manager-settings-form" class="form-checkbox" {{ if .notify_enable_server }}checked{{ end }}>
                                 <span>Enable server defaults</span>
                             </label>
-                        </section>
+                        </fieldset>
 
-                        <details class="discord-collapse discord-subsection" data-collapse-id="discord-server-templates" open>
+                        <details class="discord-collapse discord-subsection" data-collapse-id="discord-server-templates" data-discord-template-editor="server" open>
                             <summary class="discord-collapse-summary">
                                 <div class="section-heading">
                                     <h3>Notification Templates</h3>
@@ -216,8 +280,66 @@
                                 </span>
                             </summary>
                             <div class="discord-collapse-body">
-                            <div class="notification-grid" aria-label="Server notification templates">
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-started">
+                            <div class="discord-template-toolbar" role="group" aria-label="Server template tools">
+                                <label class="field-group preset-field">
+                                    <span class="field-title">Preview template</span>
+                                    <select class="form-control" data-discord-preview-select>
+                                        <option value="notify_msg_start">Server Started</option>
+                                        <option value="notify_msg_stopping">Stopping</option>
+                                        <option value="notify_msg_stopped">Stopped</option>
+                                        <option value="notify_msg_restart">Restart</option>
+                                        <option value="notify_msg_update_started">Update Started</option>
+                                        <option value="notify_msg_update_completed">Update Completed</option>
+                                        <option value="notify_msg_update_failed">Update Failed</option>
+                                    </select>
+                                </label>
+                                <label class="field-group preset-field">
+                                    <span class="field-title">Preset</span>
+                                    <div class="preset-row">
+                                        <select class="form-control" data-discord-preset>
+                                            <option value="">Choose preset…</option>
+                                            <option value="concise">Concise status</option>
+                                            <option value="detailed">Detailed update</option>
+                                            <option value="alert">Alert / incident</option>
+                                        </select>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-discord-apply-preset>Apply</button>
+                                    </div>
+                                </label>
+                                <div class="field-group preset-field">
+                                    <span class="field-title">Insert snippet</span>
+                                    <div class="snippet-row" role="group" aria-label="Server token snippets">
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{server_name}}`}}">Server</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{uptime}}`}}">Uptime</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" data-snippet-token="{{`{{error}}`}}">Error</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="discord-template-preview" data-discord-preview>
+                                <p class="discord-template-preview-title">Live Preview</p>
+                                <div class="discord-preview-embed">
+                                    <div class="discord-preview-accent" data-discord-preview-color></div>
+                                    <div class="discord-preview-content">
+                                        <p class="discord-preview-event" data-discord-preview-event>Server Started</p>
+                                        <p class="discord-preview-message" data-discord-preview-message></p>
+                                        <p class="discord-preview-meta" data-discord-preview-enabled></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <details class="discord-collapse discord-event-group" data-collapse-id="discord-server-lifecycle-events" open>
+                                <summary class="discord-collapse-summary">
+                                    <div class="section-heading">
+                                        <h3>Common Lifecycle Events</h3>
+                                        <p>Most frequently edited server lifecycle notifications.</p>
+                                    </div>
+                                    <span class="summary-icon" data-collapse-icon>
+                                        <i data-feather="chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </summary>
+                                <div class="discord-collapse-body">
+                                    <div class="notification-grid" aria-label="Server lifecycle notification templates">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-started" data-template-key="notify_msg_start">
                                     <span class="notification-label" id="server-event-started">Server Started</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -234,7 +356,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-stopping">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-stopping" data-template-key="notify_msg_stopping">
                                     <span class="notification-label" id="server-event-stopping">Stopping</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -251,7 +373,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-stopped">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-stopped" data-template-key="notify_msg_stopped">
                                     <span class="notification-label" id="server-event-stopped">Stopped</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -268,7 +390,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-restart">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-restart" data-template-key="notify_msg_restart">
                                     <span class="notification-label" id="server-event-restart">Restart</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -285,7 +407,23 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-started">
+                                    </div>
+                                </div>
+                            </details>
+
+                            <details class="discord-collapse discord-event-group" data-collapse-id="discord-server-advanced-events">
+                                <summary class="discord-collapse-summary">
+                                    <div class="section-heading">
+                                        <h3>Advanced Update Events</h3>
+                                        <p>Lower-frequency update notifications. Collapsed by default.</p>
+                                    </div>
+                                    <span class="summary-icon" data-collapse-icon>
+                                        <i data-feather="chevron-down" aria-hidden="true"></i>
+                                    </span>
+                                </summary>
+                                <div class="discord-collapse-body">
+                                    <div class="notification-grid" aria-label="Server update notification templates">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-started" data-template-key="notify_msg_update_started">
                                     <span class="notification-label" id="server-event-update-started">Update Started</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -302,7 +440,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-completed">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-completed" data-template-key="notify_msg_update_completed">
                                     <span class="notification-label" id="server-event-update-completed">Update Completed</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -319,7 +457,7 @@
                                         </label>
                                     </div>
                                 </div>
-                                <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-failed">
+                                        <div class="notification-row stacked" role="group" aria-labelledby="server-event-update-failed" data-template-key="notify_msg_update_failed">
                                     <span class="notification-label" id="server-event-update-failed">Update Failed</span>
                                     <div class="notification-fields">
                                         <label class="field-group enabled-field">
@@ -336,7 +474,9 @@
                                         </label>
                                     </div>
                                 </div>
-                            </div>
+                                    </div>
+                                </div>
+                            </details>
                             </div>
                         </details>
                     </div>

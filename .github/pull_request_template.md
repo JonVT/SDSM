@@ -1,3 +1,6 @@
+<!-- Canonical source: docs/pull_request_template.md -->
+<!-- Keep this file in sync with docs/pull_request_template.md so GitHub auto-loads it on new PRs. -->
+
 ## Summary
 
 Describe the problem and the solution in a few sentences.

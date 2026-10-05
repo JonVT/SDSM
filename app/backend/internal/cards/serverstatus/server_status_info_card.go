@@ -39,6 +39,12 @@ func (serverStatusInfoCard) FetchData(req *cards.Request) (gin.H, error) {
 
 	data := gin.H{
 		"server": req.Server,
+		"role":   "",
+	}
+	if req.Payload != nil {
+		if roleStr, ok := req.Payload["role"].(string); ok {
+			data["role"] = roleStr
+		}
 	}
 	if ds := req.Datasets; ds != nil {
 		if summary := ds.ServerSummary(); summary != nil {

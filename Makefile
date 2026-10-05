@@ -3,7 +3,7 @@
 .PHONY: build lint lint-css test fmt fmt-check
 
 build:
-	go build ./...
+	bash tools/build.sh
 
 # Aggregated lint target (expand as more linters are added)
 lint: lint-css

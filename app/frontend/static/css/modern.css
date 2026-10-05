@@ -238,6 +238,12 @@ h4 { font-size: 1rem; }
 .dropzone.dz-dragover {
     border-color: var(--accent-primary);
     background-color: color-mix(in srgb, var(--accent-primary) 6%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 22%, transparent);
+    transform: translateY(-1px);
+}
+.dropzone.is-drop-active {
+    border-color: var(--accent-primary);
+    background-color: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 .dropzone.dz-started {
     min-height: 120px;
