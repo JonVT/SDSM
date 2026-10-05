@@ -128,6 +128,10 @@
         const groups = Array.from(map.values());
         groups.forEach((group) => {
             group.sessions = sortHistorySessions(group.sessions);
+            const latestNamedSession = group.sessions.find((session) => session && session.name);
+            if (latestNamedSession && latestNamedSession.name) {
+                group.name = latestNamedSession.name;
+            }
             group.latestStart = group.sessions[0]?.connectedAt || '';
             group.oldestStart = group.sessions[group.sessions.length - 1]?.connectedAt || '';
         });

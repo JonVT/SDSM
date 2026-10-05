@@ -229,6 +229,93 @@
             });
         }
 
+        if (els.btnUploadWorld) {
+            on(els.btnUploadWorld, 'click', async () => {
+                const picker = document.createElement('input');
+                picker.type = 'file';
+                picker.accept = '.save';
+                picker.style.position = 'fixed';
+                picker.style.left = '-9999px';
+                document.body.appendChild(picker);
+
+                const cleanupPicker = () => {
+                    if (picker && picker.parentNode) {
+                        picker.parentNode.removeChild(picker);
+                    }
+                };
+
+                picker.addEventListener('change', async () => {
+                    const file = picker.files && picker.files[0] ? picker.files[0] : null;
+                    if (!file) {
+                        cleanupPicker();
+                        return;
+                    }
+
+                    const requestOverwriteConfirmation = async () => {
+                        const fileName = (file && file.name) ? file.name : 'this save file';
+                        if (window.SDSM && SDSM.modal && typeof SDSM.modal.confirm === 'function') {
+                            return SDSM.modal.confirm({
+                                title: 'Overwrite Existing Save?',
+                                body: `A save named "${fileName}" already exists. Overwriting will remove ALL existing save files for this server (autosave, quicksave, manualsave, playersave, and root saves). Continue?`,
+                                confirmText: 'Overwrite',
+                                cancelText: 'Cancel',
+                                danger: true,
+                            });
+                        }
+                        return Promise.resolve(window.confirm(`A save named "${fileName}" already exists. Overwriting will remove ALL existing save files for this server. Continue?`));
+                    };
+
+                    const originalLabel = els.btnUploadWorld.innerHTML;
+                    els.btnUploadWorld.disabled = true;
+                    els.btnUploadWorld.innerHTML = '<i data-feather="loader" class="btn-icon-left"></i> Uploading…';
+                    if (window.feather && typeof window.feather.replace === 'function') {
+                        window.feather.replace();
+                    }
+
+                    try {
+                        const upload = async (overwrite = false) => {
+                            const formData = new FormData();
+                            formData.append('save_file', file);
+                            if (overwrite) {
+                                formData.append('overwrite', 'true');
+                            }
+                            const suffix = overwrite ? '?overwrite=true' : '';
+                            return ctx.serverRequest(`/world/upload${suffix}`, { method: 'POST', body: formData });
+                        };
+
+                        try {
+                            await upload(false);
+                        } catch (error) {
+                            const message = String(error && error.message ? error.message : '').toLowerCase();
+                            const isNameConflict = message.includes('already exists');
+                            if (!isNameConflict) {
+                                throw error;
+                            }
+                            const confirmed = await requestOverwriteConfirmation();
+                            if (!confirmed) {
+                                return;
+                            }
+                            await upload(true);
+                        }
+                        if (typeof ctx.refreshWorldDownloadOptions === 'function') {
+                            await ctx.refreshWorldDownloadOptions();
+                        }
+                    } catch (error) {
+                        ctx.handleActionError('Upload World', error);
+                    } finally {
+                        els.btnUploadWorld.disabled = false;
+                        els.btnUploadWorld.innerHTML = originalLabel;
+                        if (window.feather && typeof window.feather.replace === 'function') {
+                            window.feather.replace();
+                        }
+                        cleanupPicker();
+                    }
+                }, { once: true });
+
+                picker.click();
+            });
+        }
+
         if (els.chatForm) {
             on(els.chatForm, 'submit', async (event) => {
                 event.preventDefault();

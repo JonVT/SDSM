@@ -45,6 +45,9 @@
             <button class="tab" id="tab-history" role="tab" aria-selected="false" aria-controls="players-history-panel">
                 History <span class="badge" id="history-count">{{len $historyClients}}</span>
             </button>
+            <button class="tab" id="tab-timeline" role="tab" aria-selected="false" aria-controls="players-timeline-panel">
+                Timeline
+            </button>
             {{if eq .role "admin"}}
             <button class="tab" id="tab-banned" role="tab" aria-selected="false" aria-controls="players-banned-panel">
                 Banned <span class="badge" id="banned-count">{{len $bannedEntries}}</span>
@@ -179,6 +182,42 @@
                 <h3 class="empty-state-title">No Player History</h3>
                 <p class="empty-state-description">History is populated once the server captures player log data.</p>
             </div>
+        </div>
+
+        <div id="players-timeline-panel" role="tabpanel" aria-labelledby="tab-timeline" class="hidden">
+            {{with .timeline}}
+            <div class="player-timeline" aria-label="Player connections over time" data-timeline-start="{{.StartUnix}}" data-timeline-end="{{.EndUnix}}" data-timeline-custom="{{.Custom}}">
+                <div class="timeline-row timeline-axis-row">
+                    <div class="timeline-name">
+                        <button type="button" class="timeline-range-btn{{if .Custom}} is-custom{{end}}" data-timeline-range-toggle aria-haspopup="dialog" aria-expanded="false" title="Change the time range">
+                            <i data-feather="calendar" aria-hidden="true"></i> Range
+                        </button>
+                    </div>
+                    <div class="timeline-track timeline-axis" role="button" tabindex="0" data-timeline-range-toggle title="Click to change the time range">
+                        {{range .Ticks}}<span class="timeline-tick-label{{if .DayStart}} is-day{{end}}" style="left: {{.Left}}%">{{.Label}}</span>{{end}}
+                    </div>
+                </div>
+                {{$nowLeft := .NowLeft}}
+                {{$ticks := .Ticks}}
+                {{if not .HasData}}
+                <div class="empty-state">
+                    <i data-feather="bar-chart-2"></i>
+                    <h3 class="empty-state-title">No Sessions In Range</h3>
+                    <p class="empty-state-description">{{if .Custom}}No connections in the selected range. Click the header to change it.{{else}}Connections from the last 72 hours will be charted here.{{end}}</p>
+                </div>
+                {{end}}
+                {{range .Rows}}
+                <div class="timeline-row">
+                    <div class="timeline-name{{if .Online}} is-online{{end}}" title="{{if .SteamID}}Steam: {{.SteamID}}{{end}}">{{.Name}}</div>
+                    <div class="timeline-track">
+                        {{range $ticks}}<span class="timeline-grid{{if .DayStart}} is-day{{end}}" style="left: {{.Left}}%"></span>{{end}}
+                        {{range .Bars}}<span class="timeline-bar{{if .Live}} is-live{{end}}{{if .Admin}} is-admin{{end}}" style="left: {{.Left}}%; width: {{.Width}}%" title="{{.Tooltip}}"></span>{{end}}
+                        {{if ge $nowLeft 0.0}}<span class="timeline-now" style="left: {{$nowLeft}}%"></span>{{end}}
+                    </div>
+                </div>
+                {{end}}
+            </div>
+            {{end}}
         </div>
 
         {{if eq .role "admin"}}

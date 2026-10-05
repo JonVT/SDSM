@@ -32,7 +32,11 @@
                     hx-target="this"
                     hx-swap="none"
                     hx-disabled-elt="this"
-                    hx-confirm="Start all stopped servers now?"
+                    data-modal-confirm="true"
+                    data-modal-title="Start All Servers"
+                    data-modal-message="Start all stopped servers now?"
+                    data-modal-confirm-text="Start All"
+                    data-modal-cancel-text="Cancel"
                     title="Start all stopped servers"
                     {{ if eq .startable 0 }}disabled aria-disabled="true"{{ end }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
@@ -44,7 +48,17 @@
                     hx-target="this"
                     hx-swap="none"
                     hx-disabled-elt="this"
-                    hx-confirm="Stop all running servers now?"
+                    data-modal-confirm="true"
+                    data-modal-title="Stop All Servers"
+                    data-modal-message="Stop all running servers now?"
+                    data-modal-confirm-text="Stop All"
+                    data-modal-cancel-text="Cancel"
+                    data-modal-danger="true"
+                    data-modal-require-input="STOP"
+                    data-modal-require-input-title="Type confirmation required"
+                    data-modal-require-input-label="Type STOP to confirm"
+                    data-modal-require-input-hint="This prevents accidental mass shutdowns."
+                    data-modal-require-input-error="Confirmation text did not match."
                     title="Stop all running servers"
                     {{ if eq .active 0 }}disabled aria-disabled="true"{{ end }}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
@@ -76,7 +90,7 @@
                 <span class="filter-count" data-filter-count="paused">{{with $filters}}{{index . "paused"}}{{else}}0{{end}}</span>
             </button>
             <button type="button" class="filter-chip" data-filter-value="stopped" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
-                <span>Offline</span>
+                <span>Stopped</span>
                 <span class="filter-count" data-filter-count="stopped">{{with $filters}}{{index . "stopped"}}{{else}}0{{end}}</span>
             </button>
             <button type="button" class="filter-chip" data-filter-value="errors" role="tab" aria-controls="server-grid" aria-selected="false" tabindex="-1">
@@ -104,33 +118,57 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
             </label>
+            <div class="server-results-meta" data-search-results role="status" aria-live="polite">Showing all servers</div>
             {{ if eq .role "admin" }}
             <div class="selection-controls" data-selection-controls>
                 <button type="button"
                         class="btn btn-ghost btn-sm"
                         data-select-toggle
+                        aria-keyshortcuts="Escape"
+                        aria-controls="server-selection-panel"
+                        aria-describedby="server-selection-shortcuts-hint"
+                        aria-label="Toggle bulk selection mode"
                         aria-pressed="false">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M9 11l3 3L22 4"/></svg>
                     <span data-select-toggle-label>Bulk Actions</span>
                 </button>
-                <div class="selection-panel" data-selection-panel>
+                <div class="selection-panel" data-selection-panel id="server-selection-panel">
                     <div class="selection-summary">
                         <span class="selection-count" data-selected-count>0 selected</span>
                         <div class="selection-shortcuts">
-                            <button type="button" class="btn btn-ghost btn-sm" data-select-all>All</button>
-                            <button type="button" class="btn btn-ghost btn-sm" data-select-clear>Clear</button>
+                            <button type="button" class="btn btn-ghost btn-sm" data-select-all aria-keyshortcuts="Shift+A Control+A Meta+A" aria-label="Select all visible servers">All</button>
+                            <button type="button" class="btn btn-ghost btn-sm" data-select-clear aria-label="Clear selected servers">Clear</button>
                         </div>
                     </div>
                     <div class="selection-actions">
-                        <button type="button" class="btn btn-sm btn-success" data-bulk-start disabled>Start Selected</button>
-                        <button type="button" class="btn btn-sm btn-danger" data-bulk-stop disabled>Stop Selected</button>
+                        <button type="button" class="btn btn-sm btn-success" data-bulk-start aria-label="Start selected servers" disabled>Start Selected</button>
+                        <button type="button" class="btn btn-sm btn-danger" data-bulk-stop aria-label="Stop selected servers" disabled>Stop Selected</button>
                     </div>
+                    <p class="text-tertiary text-xs" data-selection-shortcuts-hint id="server-selection-shortcuts-hint">
+                        Shortcuts: <kbd>Shift</kbd>+<kbd>A</kbd> select all visible, <kbd>Esc</kbd> exits bulk mode, <kbd>Tab</kbd> cycles bulk controls.
+                    </p>
                 </div>
+                <div class="sr-only" data-selection-live role="status" aria-live="polite" aria-atomic="true"></div>
             </div>
             {{ end }}
         </div>
     </div>
     <div class="card-body">
+        {{ if eq .role "admin" }}
+        <div class="selection-sticky-bar" data-selection-sticky role="status" aria-live="polite">
+            <div class="selection-sticky-summary">
+                <span class="selection-count" data-selected-count>0 selected</span>
+                <button type="button" class="btn btn-ghost btn-sm" data-select-clear aria-label="Clear selected servers">Clear</button>
+                <button type="button" class="btn btn-ghost btn-sm" data-select-toggle aria-keyshortcuts="Escape" aria-controls="server-selection-panel" aria-describedby="server-selection-shortcuts-hint" aria-label="Toggle bulk selection mode" aria-pressed="true">
+                    <span data-select-toggle-label>Done Selecting</span>
+                </button>
+            </div>
+            <div class="selection-sticky-actions">
+                <button type="button" class="btn btn-sm btn-success" data-bulk-start aria-label="Start selected servers" disabled>Start Selected</button>
+                <button type="button" class="btn btn-sm btn-danger" data-bulk-stop aria-label="Stop selected servers" disabled>Stop Selected</button>
+            </div>
+        </div>
+        {{ end }}
         <div id="server-grid"
              class="server-card-grid server-card-grid-halves"
              hx-get="/api/servers"

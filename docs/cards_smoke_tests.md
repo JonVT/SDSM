@@ -5,7 +5,7 @@ These checks cover the interactive pieces added during Milestone 4. They intenti
 ## Prerequisites
 
 1. Build the UI assets and server:
-   - `./build.sh`
+   - `./tools/build.sh`
 2. Start SDSM locally (or run the compiled binary) and log in as an admin.
 3. Use a Chromium-based browser with the DevTools console available.
 4. Ensure the dashboard has at least one active server so stats and health values can change.

@@ -42,6 +42,43 @@
             infoStatePill.textContent = text;
         }
 
+        // Surface startup/runtime failures: keep the error banner in sync and toast once per new error.
+        const previousError = state.lastKnownError || '';
+        const currentError = status.lastError || '';
+        state.lastKnownError = currentError;
+        const errorBanner = document.getElementById('server-error-banner');
+        if (errorBanner) {
+            errorBanner.classList.toggle('hidden', !currentError);
+            const errorTextEl = document.getElementById('server-error-text');
+            if (errorTextEl) errorTextEl.textContent = currentError;
+            const errorTimeEl = document.getElementById('server-error-time');
+            if (errorTimeEl) errorTimeEl.textContent = currentError ? new Date().toLocaleString() : '';
+        }
+        if (currentError && currentError !== previousError && window.showToast) {
+            window.showToast('Server Failed to Start', currentError, 'danger');
+        }
+
+        const navItem = document.querySelector(`.nav-server-item[data-server-id="${ctx.serverId}"]`);
+        if (navItem) {
+            let navState = 'stopped';
+            if (status.lastError) {
+                navState = 'error';
+            } else if (status.stopping) {
+                navState = 'stopping';
+            } else if (status.starting) {
+                navState = 'starting';
+            } else if (status.running && status.paused) {
+                navState = 'paused';
+            } else if (status.running) {
+                navState = 'running';
+            }
+            navItem.dataset.serverState = navState;
+            const badge = navItem.querySelector('[data-server-badge]');
+            if (badge) {
+                badge.hidden = !(status.running && !status.paused);
+            }
+        }
+
         if (els.btnStart) els.btnStart.disabled = status.running || status.starting;
         if (els.btnStop) els.btnStop.disabled = !status.running || status.stopping;
         if (els.btnRestart) els.btnRestart.disabled = !status.running || status.stopping;

@@ -1,6 +1,14 @@
 (function() {
     if (window.SDSM && window.SDSM.modal) return;
 
+    function prefersReducedMotion() {
+        try {
+            return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        } catch (_) {
+            return false;
+        }
+    }
+
     function cloneTemplate(id) {
         const tpl = document.getElementById(id);
         return tpl ? tpl.content.cloneNode(true) : null;
@@ -73,12 +81,13 @@
             modal.setAttribute('aria-hidden', 'false');
             const auto = modal.querySelector('input, select, textarea') || modal.querySelector('.btn-primary') || modal.querySelector('.btn');
             if (auto) {
+                const delay = prefersReducedMotion() ? 0 : 100;
                 setTimeout(() => {
                     try {
                         auto.focus();
                         if (typeof auto.select === 'function') auto.select();
                     } catch (_) {}
-                }, 100); // Small delay for transition
+                }, delay);
             }
             resolve();
         });
@@ -88,8 +97,8 @@
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
         if (trapDisposer) trapDisposer();
-        
-        // Let animation finish before removing
+
+        const removeDelay = prefersReducedMotion() ? 0 : 300;
         setTimeout(() => {
             if (modal && modal.parentNode) {
                 modal.parentNode.removeChild(modal);
@@ -99,7 +108,7 @@
                     restoreFocus.focus();
                 } catch (_) {}
             }
-        }, 300);
+        }, removeDelay);
     }
 
     function openConfirm(options) {
@@ -145,7 +154,6 @@
     function openPrompt(options) {
         const opts = {
             title: 'Input Required',
-            body: '',
             label: 'Enter a value',
             placeholder: '',
             defaultValue: '',
@@ -156,7 +164,7 @@
             validate: null,
             ...options
         };
-        if (opts.message && !opts.body) opts.body = opts.message;
+        if (opts.message && typeof opts.body === 'undefined') opts.body = opts.message;
 
         const prev = document.activeElement;
         const modal = buildModal('tpl-modal-prompt', opts);
@@ -170,11 +178,13 @@
         if (input) {
             input.placeholder = opts.placeholder || '';
             input.value = opts.defaultValue || '';
+            input.setAttribute('aria-invalid', 'false');
         }
         if (hintEl) {
             if (opts.hint) {
                 hintEl.textContent = opts.hint;
                 hintEl.classList.remove('hidden');
+                hintEl.style.color = '';
             } else {
                 hintEl.classList.add('hidden');
             }
@@ -203,8 +213,9 @@
                             if (hintEl) {
                                 hintEl.textContent = res || 'Invalid value';
                                 hintEl.classList.remove('hidden');
-                                hintEl.style.color = 'var(--color-danger)';
+                                hintEl.style.color = 'var(--danger-500)';
                             }
+                            if (input) input.setAttribute('aria-invalid', 'true');
                             if (input) input.focus();
                             return;
                         }
@@ -212,11 +223,13 @@
                         if (hintEl) {
                             hintEl.textContent = (err && err.message) || 'Invalid';
                             hintEl.classList.remove('hidden');
-                            hintEl.style.color = 'var(--color-danger)';
+                            hintEl.style.color = 'var(--danger-500)';
                         }
+                        if (input) input.setAttribute('aria-invalid', 'true');
                         return;
                     }
                 }
+                if (input) input.setAttribute('aria-invalid', 'false');
                 finish(raw);
             };
 

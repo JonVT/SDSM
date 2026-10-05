@@ -15,7 +15,8 @@
                 data-default-world="{{ index .form "world" }}"
                 data-default-start-location="{{ index .form "start_location" }}"
                 data-default-start-condition="{{ index .form "start_condition" }}"
-                data-default-beta="{{ index .form "beta" }}">
+                data-default-beta="{{ index .form "beta" }}"
+                data-ui-build-time="{{.buildTime}}">
 
                 <div class="server-form-intro">
                     <div>
@@ -60,6 +61,18 @@
                                 <div class="form-group">
                                     <label class="form-label">World File Name (Server Name)</label>
                                     <div id="detectedName" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Start Location</label>
+                                    <div id="detectedStartLocation" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Start Condition</label>
+                                    <div id="detectedStartCondition" class="form-control-static"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Difficulty</label>
+                                    <div id="detectedDifficulty" class="form-control-static"></div>
                                 </div>
                             </div>
                         </div>
@@ -220,6 +233,11 @@
                                 <input type="text" id="password" name="password" class="form-control" value="{{ index .form "password" }}" placeholder="Leave empty for no password">
                             </div>
                             <div class="form-group">
+                                <label class="form-label" for="auth_secret">Auth Secret</label>
+                                <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
+                                <p class="form-hint">Only required for private/whitelisted setups that enforce Steam auth.</p>
+                            </div>
+                            <div class="form-group">
                                 <div class="toggle-label">
                                     <span>Server Visible in list</span>
                                 </div>
@@ -283,10 +301,6 @@
                                     <input type="number" id="bepinex_init_timeout_seconds" name="bepinex_init_timeout_seconds" class="form-control" value="{{ or (index .form "bepinex_init_timeout_seconds") 10 }}" min="5" max="120">
                                 </div>
                                 <div class="form-group">
-                                    <label class="form-label" for="auth_secret">Auth Secret</label>
-                                    <input type="text" id="auth_secret" name="auth_secret" class="form-control" value="{{ index .form "auth_secret" }}" placeholder="Optional Steam auth secret">
-                                </div>
-                                <div class="form-group">
                                     <label class="form-label" for="max_auto_saves">Max Auto Saves</label>
                                     <input type="number" id="max_auto_saves" name="max_auto_saves" class="form-control" value="{{ or (index .form "max_auto_saves") 5 }}" min="1" max="1000">
                                 </div>
@@ -311,10 +325,12 @@
                                 <div class="form-group form-span-all">
                                     <label class="form-label" for="welcome_message">Welcome Message</label>
                                     <input type="text" id="welcome_message" name="welcome_message" class="form-control" value="{{ index .form "welcome_message" }}" placeholder="e.g. Welcome to [ServerName]!">
+                                    {{template "cards/server_status_token_picker.html" (dict "target" "welcome_message")}}
                                 </div>
                                 <div class="form-group form-span-all">
                                     <label class="form-label" for="welcome_back_message">Welcome Back Message</label>
                                     <input type="text" id="welcome_back_message" name="welcome_back_message" class="form-control" value="{{ index .form "welcome_back_message" }}" placeholder="e.g. Welcome back, [LastPlayer]!">
+                                    {{template "cards/server_status_token_picker.html" (dict "target" "welcome_back_message")}}
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" for="welcome_delay_seconds">Message Delay (sec)</label>
@@ -372,6 +388,7 @@
                     <a href="/dashboard" class="btn btn-link" hx-get="/api/pages/dashboard" hx-push-url="/dashboard">Cancel</a>
                 </div>
                 {{ if .presetJSON }}
+                <script src="/static/js/screens/server_status_tokens.js" defer></script>
                 <script id="server-presets-data" type="application/json">{{ .presetJSON }}</script>
                 {{ end }}
             </form>

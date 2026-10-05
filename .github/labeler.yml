@@ -12,7 +12,7 @@ area/assets:
   - 'app/backend/webassets/**'
   - 'app/frontend/assets.go'
 type/docs:
-  - 'README.md'
+  - 'docs/README.md'
   - 'docs/**'
 type/ci:
   - '.github/**'

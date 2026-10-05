@@ -42,7 +42,6 @@
     {{- if not $cardIDs -}}
         {{- $cardIDs = slice -}}
     {{- end -}}
-    {{- $hasControlCard := and $cardIDs (has $cardIDs "server-status-control") -}}
     {{- $hasPlayersCard := and $cardIDs (has $cardIDs "server-status-players") -}}
     {{- $hasChatCard := and $cardIDs (has $cardIDs "server-status-chat") -}}
     {{- $hasSavesCard := and $cardIDs (has $cardIDs "server-status-saves") -}}
@@ -67,9 +66,6 @@
             {{- end -}}
         {{- end -}}
 
-        {{- if not $hasControlCard -}}
-            {{template "cards/server_status_control.html" $pageData}}
-        {{- end -}}
         {{- if not $hasPlayersCard -}}
             {{template "cards/server_status_players.html" $pageData}}
         {{- end -}}
@@ -105,6 +101,8 @@
 <script src="/static/js/screens/server_status_players.js" defer></script>
 <script src="/static/js/screens/server_status_saves.js" defer></script>
 <script src="/static/js/screens/server_status_config.js" defer></script>
+<script src="/static/js/screens/server_status_tokens.js" defer></script>
+<script src="/static/js/screens/server_status_timeline.js" defer></script>
 <script src="/static/js/screens/server_status_view.js" defer></script>
 <script src="/static/js/screens/server_status_actions.js" defer></script>
 <script src="/static/js/screens/server_status.js" defer></script>

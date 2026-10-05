@@ -229,6 +229,7 @@ type Server struct {
 	Storming            bool          `json:"-"`
 	Paused              bool          `json:"-"`
 	Starting            bool          `json:"-"`
+	Ready               bool          `json:"-"`
 	Stopping            bool          `json:"-"` // set true during shutdown delay window
 	StoppingEnds        time.Time     `json:"-"` // timestamp when shutdown expected to occur
 	StoppingCancel      chan struct{} `json:"-"` // cancellation channel for delayed shutdown
@@ -250,6 +251,7 @@ type Server struct {
 	// does not perform deletion until implemented.
 	PendingSavePurge    bool `json:"pending_save_purge,omitempty"`
 	progressReporter    func(stage string, processed, total int64)
+	lifecycleEventReporter func(*Server, string)
 	restartMu           sync.Mutex
 	restartCancel       chan struct{}
 	stopMu              sync.Mutex
@@ -304,6 +306,7 @@ type Server struct {
 type ServerLifecycleSnapshot struct {
 	Running      bool
 	Starting     bool
+	Ready        bool
 	Stopping     bool
 	StoppingEnds time.Time
 	Paused       bool
@@ -343,6 +346,7 @@ func (s *Server) LifecycleSnapshot() ServerLifecycleSnapshot {
 	return ServerLifecycleSnapshot{
 		Running:       s.Running,
 		Starting:      s.Starting,
+		Ready:         s.Ready,
 		Stopping:      s.Stopping,
 		StoppingEnds:  s.StoppingEnds,
 		Paused:        s.Paused,
@@ -365,12 +369,47 @@ func (s *Server) SetPaused(v bool) {
 	s.lifecycleMu.Unlock()
 }
 
+// SetLifecycleEventReporter registers a callback for lifecycle events inferred by
+// model-level runtime sources (for example, server output log parsing).
+func (s *Server) SetLifecycleEventReporter(fn func(*Server, string)) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.lifecycleEventReporter = fn
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) reportLifecycleEvent(event string) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.RLock()
+	reporter := s.lifecycleEventReporter
+	s.lifecycleMu.RUnlock()
+	if reporter != nil {
+		reporter(s, event)
+	}
+}
+
 func (s *Server) setStarting(v bool) {
 	if s == nil {
 		return
 	}
 	s.lifecycleMu.Lock()
 	s.Starting = v
+	if v {
+		s.Ready = false
+	}
+	s.lifecycleMu.Unlock()
+}
+
+func (s *Server) setReady(v bool) {
+	if s == nil {
+		return
+	}
+	s.lifecycleMu.Lock()
+	s.Ready = v
 	s.lifecycleMu.Unlock()
 }
 
@@ -405,6 +444,7 @@ func (s *Server) markStopped(now time.Time) {
 	s.Running = false
 	s.Stopping = false
 	s.Starting = false
+	s.Ready = false
 	s.StoppingEnds = time.Time{}
 	s.ServerStarted = nil
 	s.LastStoppedAt = &now
@@ -633,6 +673,7 @@ func (s *Server) endClientsScan() {
 	}
 	now := time.Now()
 	seen := s.clientsScanSeen
+	changed := false
 	for _, existing := range s.LiveClients() {
 		if existing == nil {
 			continue
@@ -646,10 +687,14 @@ func (s *Server) endClientsScan() {
 		}
 		if _, ok := seen[k]; !ok {
 			existing.DisconnectDatetime = &now
+			changed = true
 		}
 	}
 	s.rewritePlayersLog()
 	s.clientsScanActive = false
+	if changed {
+		s.reportLifecycleEvent("players")
+	}
 }
 
 // queuePendingPlayerSave enqueues a manual save filename to be moved to playersave once completed.
@@ -1824,7 +1869,6 @@ func (s *Server) IsRunning() bool {
 		if IsPidAlive(s.pid) {
 			// Keep the running flag true for UI and command allowance in attached mode
 			s.Running = true
-			s.Starting = false
 			return true
 		}
 		// PID no longer alive; clear tracked pid
@@ -2220,7 +2264,15 @@ func (s *Server) CancelStop() bool {
 
 // Helper: send formatted timeframe + initial notice
 func (s *Server) sendInitialShutdownNotice(delay time.Duration) {
-	s.sendChat("Server is shutting down in " + s.formatTimeframe(delay))
+	seconds := int(delay / time.Second)
+	if seconds <= 0 {
+		seconds = 1
+	}
+	unit := "seconds"
+	if seconds == 1 {
+		unit = "second"
+	}
+	s.sendChat(fmt.Sprintf("The server is shutting down in %d %s", seconds, unit))
 }
 
 func (s *Server) sendTenSecondNotice() { s.sendChat("Server is shutting down in 10 seconds") }
@@ -2726,6 +2778,18 @@ func (s *Server) Start() {
 	s.Starting = true
 	s.lifecycleMu.Unlock()
 
+	// A fresh startup cannot have connected players yet. If the previous run
+	// crashed while players were online, clear those stale live sessions now.
+	if staleLiveCount := len(s.LiveClients()); staleLiveCount > 0 {
+		now := time.Now()
+		s.markAllClientsDisconnected(now)
+		s.rewritePlayersLog()
+		s.reportLifecycleEvent("players")
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Cleared %d stale live player session(s) at startup", staleLiveCount))
+		}
+	}
+
 	// Stubbed save purge hook: if core parameters changed previously, we would purge saves here.
 	// For now, just log intent and proceed without deleting anything.
 	if s.PendingSavePurge && s.Logger != nil {
@@ -2885,6 +2949,7 @@ func (s *Server) Start() {
 	stopChan := make(chan bool)
 	s.Thrd = stopChan
 	s.Starting = true
+	s.Ready = false
 	s.Running = true
 	s.lifecycleMu.Unlock()
 
@@ -2910,6 +2975,7 @@ func (s *Server) Start() {
 		s.lifecycleMu.Lock()
 		s.Running = false
 		s.Starting = false
+		s.Ready = false
 		s.Stopping = false
 		s.StoppingEnds = time.Time{}
 		s.Proc = nil
@@ -2965,6 +3031,7 @@ func (s *Server) AttachToRunning(pid int) {
 	s.Proc = nil
 	s.pid = pid
 	s.Starting = false
+	s.Ready = true
 	s.Stopping = false
 	s.Running = true
 
@@ -2996,6 +3063,7 @@ func (s *Server) AttachToRunning(pid int) {
 		}
 		srv.Running = false
 		srv.Starting = false
+		srv.Ready = false
 		srv.Stopping = false
 		srv.ServerStarted = nil
 		stopped := time.Now()

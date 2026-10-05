@@ -9,8 +9,7 @@ type ToggleOption struct {
 }
 
 var toggleableCards = []ToggleOption{
-	{Screen: ScreenServerStatus, ID: "server-status-info", Label: "Status Overview", Description: "Server identity, world, and port metadata."},
-	{Screen: ScreenServerStatus, ID: "server-status-control", Label: "Power Controls", Description: "Start, stop, pause, and update actions."},
+	{Screen: ScreenServerStatus, ID: "server-status-info", Label: "Status Overview", Description: "Server identity, world, port metadata, and power/save/update controls."},
 	{Screen: ScreenServerStatus, ID: "server-status-players", Label: "Players", Description: "Connected players and recent history."},
 	{Screen: ScreenServerStatus, ID: "server-status-chat", Label: "Chat", Description: "Live chat stream and command input."},
 	{Screen: ScreenServerStatus, ID: "server-status-saves", Label: "Saves Browser", Description: "Manual, auto, quick, and player saves."},
