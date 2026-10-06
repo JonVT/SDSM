@@ -4437,16 +4437,13 @@ func (h *ManagerHandlers) APIServerLoad(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// Quote the file path to handle spaces/special characters. Prefer single quotes to avoid JSON escape noise.
-	safe := strings.ReplaceAll(full, "'", "\\'")
-	quoted := "'" + safe + "'"
-	if err := s.SendCommand("console", "FILE load "+quoted); err != nil {
-		ToastError(c, "Load Failed", err.Error())
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	ToastSuccess(c, "Loading Save", "Requested loading of selected save.")
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	// Loading into a live world often triggers null exceptions in the game, so
+	// restart the server and load the save at launch instead.
+	go s.RestartWithLoad(full)
+	h.BroadcastStatusAndStats(s)
+	ToastInfo(c, "Loading Save", s.Name+" is restarting to load the selected save.")
+	h.manager.NotifyServerEvent(s, "restarting", "Restarting to load selected save.")
+	c.JSON(http.StatusOK, gin.H{"status": "restarting"})
 }
 
 // APIServerStorm toggles storm. JSON: { "start": true|false }

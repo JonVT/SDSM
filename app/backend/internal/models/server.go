@@ -250,9 +250,12 @@ type Server struct {
 	// have changed and we plan to purge saves before next start. This is currently a stub and
 	// does not perform deletion until implemented.
 	PendingSavePurge    bool `json:"pending_save_purge,omitempty"`
+	// pendingLoadPath is a one-shot absolute save path passed to the next Start via -FILE load.
+	pendingLoadPath     string
 	progressReporter    func(stage string, processed, total int64)
 	lifecycleEventReporter func(*Server, string)
 	restartMu           sync.Mutex
+	restartRunMu        sync.Mutex
 	restartCancel       chan struct{}
 	stopMu              sync.Mutex
 	lifecycleMu         sync.RWMutex
@@ -2460,8 +2463,10 @@ func (s *Server) markAllClientsDisconnected(t time.Time) {
 
 // Restart stops the server, waits for a configured delay, and starts it again.
 func (s *Server) Restart() {
-	s.restartMu.Lock()
-	defer s.restartMu.Unlock()
+	// restartMu is taken by CancelScheduledRestart (called from Stop/Start), so
+	// serialize restarts with a separate mutex to avoid self-deadlock.
+	s.restartRunMu.Lock()
+	defer s.restartRunMu.Unlock()
 
 	if s.Logger != nil {
 		s.Logger.Write("Restart requested; stopping server")
@@ -2485,6 +2490,25 @@ func (s *Server) Restart() {
 	}
 
 	s.Start()
+}
+
+// RestartWithLoad stops the server (if running) and starts it again, loading the
+// given save file at launch. Loading at startup avoids the instability of issuing
+// FILE load against a live world.
+func (s *Server) RestartWithLoad(savePath string) {
+	s.lifecycleMu.Lock()
+	s.pendingLoadPath = savePath
+	s.lifecycleMu.Unlock()
+	s.Restart()
+}
+
+// takePendingLoadPath returns and clears the one-shot save path to load at launch.
+func (s *Server) takePendingLoadPath() string {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	p := s.pendingLoadPath
+	s.pendingLoadPath = ""
+	return p
 }
 
 // ScheduleRestartAfter schedules a restart start attempt after delay.
@@ -2851,8 +2875,14 @@ func (s *Server) Start() {
 	secure := func(v string) string { return strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "") }
 	serverPassword := secure(s.Password)
 	serverAuthSecret := secure(s.AuthSecret)
-	args := []string{
-		"-FILE", "start", s.Name, launchWorld, launchDifficulty, launchStartCond, launchStartLoc,
+	fileArgs := []string{"-FILE", "start", s.Name, launchWorld, launchDifficulty, launchStartCond, launchStartLoc}
+	if loadPath := s.takePendingLoadPath(); loadPath != "" {
+		fileArgs = []string{"-FILE", "load", loadPath}
+		if s.Logger != nil {
+			s.Logger.Write(fmt.Sprintf("Loading save at launch: %s", loadPath))
+		}
+	}
+	args := append(fileArgs,
 		"-logFile", s.Paths.ServerOutputFile(s.ID),
 		"-SETTINGSPATH", s.Paths.ServerSettingsFile(s.ID),
 		"-SETTINGS",
@@ -2879,7 +2909,7 @@ func (s *Server) Start() {
 			}
 			return v
 		}(s.DisconnectTimeout)),
-	}
+	)
 	// If configured, let the game attempt UPnP mapping on its own.
 	if s.UseGameUPnP {
 		args = append(args, "UPNPEnabled", "true")
